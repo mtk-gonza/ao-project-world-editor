@@ -1,0 +1,19 @@
+# Build
+bin/
+obj/
+TestResults/
+
+# IDE
+.vs/
+*.user
+
+# Herramientas locales
+graphify-out/
+.codebase-memory/
+
+# Runtime
+!logs/
+logs/*
+!logs/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
