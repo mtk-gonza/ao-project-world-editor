@@ -2723,11 +2723,7 @@ internal sealed class MainForm : Form
     /// </summary>
     private async void OpenWorldAt(int worldId)
     {
-        var worldDirectory = Path.Combine(_session.ResourceRoot, "world");
-        var directory = File.Exists(Path.Combine(worldDirectory, "world.csm"))
-            ? worldDirectory
-            : SourceMapsDirectory;
-        var world = await Task.Run(() => _session.LoadWorld(directory));
+        var world = await Task.Run(() => _session.LoadWorld(SourceMapsDirectory));
         if (worldId > 0 && _session.CurrentWorld is { } current &&
             current.WorldLayouts.Any(layout => layout.WorldId == worldId))
             _session.SwitchWorldLevel(worldId);

@@ -19,6 +19,15 @@ internal sealed class UnifiedWorldBundleFileService
             throw new InvalidDataException("El bundle no supera la auditoría: " +
                 string.Join(" | ", audit.Issues.Take(5).Select(item => item.Code + ": " + item.Message)));
         Directory.CreateDirectory(directory);
+        // A generated bundle is authoritative for its manifest. Remove stale
+        // floor artifacts from an older compile so client/server cannot discover
+        // an obsolete floor by directory enumeration.
+        foreach (var stale in Directory.EnumerateFiles(directory, "floor-*.gmap"))
+            File.Delete(stale);
+        var imageDirectory = Path.Combine(directory, "worldmap");
+        if (Directory.Exists(imageDirectory))
+            foreach (var stale in Directory.EnumerateFiles(imageDirectory, "floor-*.png"))
+                File.Delete(stale);
         var floors = bundle.Floors.Keys.ToArray();
         using (var writer = new BinaryWriter(File.Create(Path.Combine(directory, "bundle.aog")), Encoding.UTF8))
         {
