@@ -111,12 +111,10 @@ Se auditó `MapInfo.Level` en los 418 mapas del assembly:
 | `6400` | 1 | Mapa 511, “Embarque” |
 | Negativo | 0 | No representa el piso directamente |
 
-Conclusión: `Info.Level` no es un identificador fiable de piso. Por eso no se usa para inferir automáticamente todos los subterráneos.
-
-La regla actual es conservadora:
-
-- metadato explícitamente negativo → `Z=-1`;
-- resto → `Z=0` cuando no hay manifiesto.
+Conclusión: `Info.Level` no es un identificador fiable de piso. La asignación de
+pisos no se infiere desde ese campo ni desde un JSON: se deriva de los layouts
+oficiales durante la importación (`WORLDMAP1=Z0`, `WORLDMAP2=Z-1`,
+`WORLDMAP3=Z-2`).
 
 Los destinos especiales `Map=-1`, `Map=-2` y los destinos raros `3000..` no son placements normales del assembly. Se conservan como salidas externas con `ExternalZ=-1`.
 

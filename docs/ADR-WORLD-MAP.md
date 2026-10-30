@@ -509,18 +509,33 @@ coordenadas externas 1-based con indices globales zero-based.
 
 **Decision:** `reference\\Recursos` es fuente read-only. Los artefactos generados se
 escriben en `ao-project-resources\\world.floors` y no se crea configuracion artificial
-en `reference\\Recursos\\init`.
+en `reference\\Recursos\\init`. La asignacion de pisos se calcula durante la
+importacion; no depende de `world-floors.json`.
 
 La reconstruccion de `world.floors` parte de `reference\\Recursos\\Mapas\\*.csm` y
 del layout oficial `reference\\Recursos\\init\\mapsworlddata.dat`. El antiguo
 `ao-project-resources\\world\\world.csm` no es una entrada del pipeline nuevo.
 
-El bundle productivo actual contiene `bundle.aog` v3 y los floors compilados con
+El bundle productivo actual contiene `bundle.aog` v4 y los floors compilados con
 stitching fisico. Antes de reemplazarlo se conserva una copia en una ruta temporal de
 backup. Las auditorias TSV se distribuyen junto al bundle para hacer reproducible la
 generacion y revisar seams, niveles, salidas y teleports.
 
-## ADR-WM-025: mapas especiales como salidas externas
+## ADR-WM-025: pisos derivados de layouts oficiales
+
+**Decision:** la importacion de `/Mapas` usa los layouts oficiales de
+`mapsworlddata.dat` para construir los floors, sin manifiesto externo:
+
+- `WORLDMAP1` se materializa como `Z=0`.
+- `WORLDMAP2` se materializa como `Z=-1`.
+- `WORLDMAP3` se materializa como `Z=-2`.
+- `WORLDMAP4` se conserva como ignorado porque `TOTALWORLDS=3`.
+
+Cada layout conserva sus coordenadas de chunk, stitching, graficos, bloqueos,
+metadatos y teleports. Los mapas filler repetidos se deduplican solo para la
+compilacion porque el catalogo fuente esta indexado por `MapId`.
+
+## ADR-WM-026: mapas especiales como salidas externas
 
 **Decision:** `TileExit.Map` no positivo no se interpreta automaticamente como un
 placement. `Map=0` significa ausencia de salida; `Map=-1`, `Map=-2` y `Map=3000..3004`
@@ -539,7 +554,7 @@ La auditoria de los 843 CSM originales encontro 1.184 salidas a `-1`, 2 a `-2` y
 a `3000..3004`. La semantica exacta de esos IDs aun debe confirmarse contra el codigo
 VB6 de rutas/teleports antes de inferir que representan un subterraneo real.
 
-## ADR-WM-026: compactacion fisica experimental promovida a runtime
+## ADR-WM-027: compactacion fisica experimental promovida a runtime
 
 **Decision:** el floor generado se materializa fisicamente aplicando los offsets de
 stitching, ajustando dimensiones y normalizando destinos internos. En conflictos de
@@ -548,7 +563,7 @@ seam se conserva el placement existente (`KeepExistingPlacement`) porque todos l
 
 El resultado actual fue validado con:
 
-- WorldEditor: 362/362 tests.
+- WorldEditor: 365/365 tests.
 - Cliente: 784/784 tests.
 - Servidor: 646/646 tests.
 

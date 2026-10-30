@@ -16,7 +16,8 @@ internal sealed class UnifiedWorldImageService
         var files = new List<string>();
         foreach (var floor in bundle.Floors.Values)
         {
-            using var source = Create(floor, resources.Graphics);
+            using var source = Create(floor, resources.Graphics,
+                GraphicAverageColorService.For(resources.Root));
             using var image = new Bitmap(source.Width * RadarScale, source.Height * RadarScale,
                 PixelFormat.Format32bppArgb);
             using (var canvas = Graphics.FromImage(image))
@@ -32,7 +33,8 @@ internal sealed class UnifiedWorldImageService
         return files;
     }
 
-    private static Bitmap Create(UnifiedWorldMap map, IReadOnlyList<GraphicData> graphics)
+    private static Bitmap Create(UnifiedWorldMap map, IReadOnlyList<GraphicData> graphics,
+        GraphicAverageColorService averages)
     {
         var image = new Bitmap(map.Width, map.Height, PixelFormat.Format32bppArgb);
         for (var y = 0; y < map.Height; y++)
@@ -43,17 +45,13 @@ internal sealed class UnifiedWorldImageService
             for (var layer = 0; layer < 4; layer++)
             {
                 var graphic = map.GraphicIndices[map.GraphicOffset(offset, layer)];
-                if (graphic > 0 && graphic < graphics.Count && graphics[graphic].MiniMapColor != 0)
+                if (graphic > 0 && graphic < graphics.Count)
                 {
-                    // minimap.bin stores 0x00RRGGBB. Keep the same channel
-                    // order used by MapMiniMapService.FromColorRef; reversing
-                    // it makes grass/water appear as red or brown in the global
-                    // radar even though the editor preview is correct.
-                    var raw = unchecked((uint)graphics[graphic].MiniMapColor);
-                    color = Color.FromArgb(255,
-                        (int)((raw >> 16) & 0xFF),
-                        (int)((raw >> 8) & 0xFF),
-                        (int)(raw & 0xFF));
+                    var average = averages.Get(graphics[graphic]);
+                    if (average != 0)
+                        color = Color.FromArgb(average);
+                    else if (graphics[graphic].MiniMapColor != 0)
+                        color = MapMiniMapService.FromColorRef(graphics[graphic].MiniMapColor);
                 }
             }
             image.SetPixel(x, y, color);

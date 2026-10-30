@@ -73,6 +73,60 @@ internal static class MapOverlayGeometry
         return overlays;
     }
 
+    public static IReadOnlyList<MapOverlay> Build(UnifiedWorldMap map, WorldRenderOptions options,
+        (int X, int Y)? selected = null,
+        (int MinX, int MaxX, int MinY, int MaxY)? bounds = null)
+    {
+        var overlays = new List<MapOverlay>();
+        if (AffectsTiles(options))
+        {
+            var minX = 0;
+            var maxX = map.Width - 1;
+            var minY = 0;
+            var maxY = map.Height - 1;
+            if (bounds is { } visible)
+            {
+                minX = Math.Max(minX, visible.MinX);
+                maxX = Math.Min(maxX, visible.MaxX);
+                minY = Math.Max(minY, visible.MinY);
+                maxY = Math.Min(maxY, visible.MaxY);
+            }
+            for (var y = minY; y <= maxY; y++)
+            for (var x = minX; x <= maxX; x++)
+            {
+                var offset = map.Offset(x, y);
+                var renderX = x + 1;
+                var renderY = y + 1;
+                if (options.ShowGrid) overlays.Add(new(OverlayKind.Grid, renderX, renderY, 1, 1, GridGraphic));
+                if (options.ShowBlocked && map.Blocked[offset] != 0)
+                {
+                    for (var side = 0; side < 4; side++)
+                        if ((map.Blocked[offset] & (1 << side)) != 0)
+                            overlays.Add(new(OverlayKind.Blocked, renderX, renderY, 1, 1, BlockedBaseGraphic + side + 1));
+                }
+                if (options.ShowTriggers && map.Trigger[offset] != 0)
+                {
+                    var position = 0;
+                    foreach (var character in map.Trigger[offset].ToString())
+                    {
+                        if (!char.IsDigit(character)) continue;
+                        overlays.Add(new(OverlayKind.Trigger, renderX, renderY, 1, 1,
+                            TriggerDigitBase + character - '0', -6 + position, -12));
+                        position += 8;
+                    }
+                }
+                if (options.ShowTransfers && map.ExitIndex[offset] != 0)
+                    overlays.Add(new(OverlayKind.Transfer, renderX, renderY, 1, 1, TransferGraphic));
+                if (options.ShowParticles && map.ParticleIndex[offset] != 0)
+                    overlays.Add(new(OverlayKind.Particle, renderX, renderY, 1, 1));
+                if (options.ShowLights && map.LightRange[offset] != 0)
+                    overlays.Add(new(OverlayKind.Light, renderX, renderY, 1, 1));
+            }
+        }
+        if (selected is { } tile) overlays.Add(new(OverlayKind.Selection, tile.X + 1, tile.Y + 1, 1, 1));
+        return overlays;
+    }
+
     /// <summary>
     /// True when any option can emit a per-tile overlay. Used to skip full-map
     /// sweeps (single map and global world view) when nothing is enabled.

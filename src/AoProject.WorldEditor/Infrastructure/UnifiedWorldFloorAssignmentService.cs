@@ -1,9 +1,23 @@
 using System.Text.Json;
+using AoProject.WorldEditor.Application;
 
 namespace AoProject.WorldEditor.Infrastructure;
 
 internal sealed class UnifiedWorldFloorAssignmentService
 {
+    public IReadOnlyDictionary<short, int> Detect(GlobalWorldDocument world)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        // Floor assignment is deliberately derived from the imported world.
+        // This temporary conservative detector keeps the normal assembly on Z=0;
+        // special disconnected components and extended exits are handled by the
+        // world assembler/compiler, not by an external manifest.
+        return world.Assembly.Placements
+            .Select(item => item.MapId)
+            .Distinct()
+            .ToDictionary(mapId => mapId, _ => 0);
+    }
+
     public IReadOnlyDictionary<short, int> Load(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

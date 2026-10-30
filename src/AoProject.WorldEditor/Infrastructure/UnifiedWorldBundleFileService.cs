@@ -7,7 +7,7 @@ namespace AoProject.WorldEditor.Infrastructure;
 internal sealed class UnifiedWorldBundleFileService
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AOGBND01");
-    private const int Version = 3;
+    private const int Version = 4;
     private readonly UnifiedWorldFileService _floorFiles = new();
 
     public void Save(UnifiedWorldBundle bundle, string directory)
@@ -41,6 +41,9 @@ internal sealed class UnifiedWorldBundleFileService
                 writer.Write(item.Key);
                 writer.Write(item.Value);
             }
+            writer.Write(bundle.MapMetadata.Count);
+            foreach (var metadata in bundle.MapMetadata.OrderBy(item => item.MapId))
+                WriteMetadata(writer, metadata);
         }
         foreach (var z in floors)
             _floorFiles.Save(bundle.Floors[z], Path.Combine(directory, FloorFileName(z)));
@@ -83,6 +86,12 @@ internal sealed class UnifiedWorldBundleFileService
                 mapFloors.Add(new KeyValuePair<short, int>(reader.ReadInt16(), reader.ReadInt32()));
             bundle.SetMapFloors(mapFloors);
         }
+        if (version >= 4 && reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            var metadataCount = reader.ReadInt32();
+            if (metadataCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de metadatos inválida.");
+            for (var i = 0; i < metadataCount; i++) bundle.MapMetadata.Add(ReadMetadata(reader));
+        }
         foreach (var z in floorZs)
         {
             var floor = _floorFiles.Load(Path.Combine(directory, FloorFileName(z)));
@@ -100,4 +109,43 @@ internal sealed class UnifiedWorldBundleFileService
     }
 
     private static string FloorFileName(int z) => $"floor-{z:+#;-#;0}.gmap";
+
+    private static void WriteMetadata(BinaryWriter writer, UnifiedWorldMapMetadata metadata)
+    {
+        var info = metadata.Info;
+        writer.Write(metadata.MapId); writer.Write(metadata.FloorZ);
+        writer.Write(metadata.MapSize.XMax); writer.Write(metadata.MapSize.XMin);
+        writer.Write(metadata.MapSize.YMax); writer.Write(metadata.MapSize.YMin);
+        writer.Write(info.Music); writer.Write(info.MusicNumberHigh); writer.Write(info.MusicNumberLow);
+        writer.Write(info.Name); writer.Write(info.MapVersion); writer.Write(info.PlayerKilling);
+        writer.Write(info.MagicDisabled); writer.Write(info.InvisibilityDisabled);
+        writer.Write(info.ResurrectionDisabled); writer.Write(info.NoEncryptMap);
+        writer.Write(info.Terrain); writer.Write(info.Zone); writer.Write(info.Restriction);
+        writer.Write(info.Backup); writer.Write(info.Safety); writer.Write(info.Ambient);
+        writer.Write(info.LetterGraphic); writer.Write(info.Level); writer.Write(info.Extra2);
+        writer.Write(info.Exit); writer.Write(info.Changed); writer.Write(info.Light);
+        writer.Write(metadata.Environment.BaseLight); writer.Write(metadata.Environment.Rain);
+        writer.Write(metadata.Environment.Snow); writer.Write(metadata.Environment.Fog);
+    }
+
+    private static UnifiedWorldMapMetadata ReadMetadata(BinaryReader reader)
+    {
+        var metadata = new UnifiedWorldMapMetadata
+        {
+            MapId = reader.ReadInt16(), FloorZ = reader.ReadInt32(),
+            MapSize = new CsmMapSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16())
+        };
+        var info = metadata.Info;
+        info.Music = reader.ReadString(); info.MusicNumberHigh = reader.ReadInt32(); info.MusicNumberLow = reader.ReadInt32();
+        info.Name = reader.ReadString(); info.MapVersion = reader.ReadInt16(); info.PlayerKilling = reader.ReadBoolean();
+        info.MagicDisabled = reader.ReadByte(); info.InvisibilityDisabled = reader.ReadByte();
+        info.ResurrectionDisabled = reader.ReadByte(); info.NoEncryptMap = reader.ReadByte();
+        info.Terrain = reader.ReadString(); info.Zone = reader.ReadString(); info.Restriction = reader.ReadString();
+        info.Backup = reader.ReadByte(); info.Safety = reader.ReadByte(); info.Ambient = reader.ReadString();
+        info.LetterGraphic = reader.ReadInt32(); info.Level = reader.ReadInt32(); info.Extra2 = reader.ReadInt32();
+        info.Exit = reader.ReadString(); info.Changed = reader.ReadBoolean(); info.Light = reader.ReadString();
+        metadata.Environment.BaseLight = reader.ReadInt32(); metadata.Environment.Rain = reader.ReadByte();
+        metadata.Environment.Snow = reader.ReadByte(); metadata.Environment.Fog = reader.ReadByte();
+        return metadata;
+    }
 }

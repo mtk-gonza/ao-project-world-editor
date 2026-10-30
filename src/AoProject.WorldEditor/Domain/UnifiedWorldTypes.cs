@@ -97,6 +97,7 @@ internal sealed class UnifiedWorldBundle
         new Dictionary<short, GlobalMapPlacement>();
     public IReadOnlyDictionary<short, int> MapFloors { get; private set; } =
         new Dictionary<short, int>();
+    public List<UnifiedWorldMapMetadata> MapMetadata { get; } = [];
 
     public void SetPlacements(IEnumerable<GlobalMapPlacement> placements)
     {
@@ -123,6 +124,16 @@ internal sealed class UnifiedWorldBundle
         ActiveFloorZ = floorZ;
         return floor;
     }
+}
+
+/// <summary>Complete source-map metadata retained alongside the compact floors.</summary>
+internal sealed class UnifiedWorldMapMetadata
+{
+    public short MapId { get; init; }
+    public int FloorZ { get; init; }
+    public CsmMapSize MapSize { get; init; } = CsmMapSize.Default;
+    public MapInfo Info { get; } = new();
+    public MapEnvironment Environment { get; } = new();
 }
 
 internal enum UnifiedWorldExitKind

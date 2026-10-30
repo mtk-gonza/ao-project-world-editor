@@ -736,6 +736,7 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
         var markers = 0;
         foreach (var overlay in overlays)
         {
+            if (overlay.Kind == OverlayKind.Blocked) continue;
             if (overlay.GraphicIndex <= 0 || !regions.TryGetValue(overlay.GraphicIndex, out var region)) continue;
             if (markers + 6 > _vertices.Length) break;
             var left = (overlay.X - 1) * MapRenderGeometry.TilePixels + overlay.OffsetX;
@@ -764,10 +765,11 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
         var count = 0;
         foreach (var overlay in overlays)
         {
-            if (overlay.GraphicIndex > 0) continue;
+            if (overlay.GraphicIndex > 0 && overlay.Kind != OverlayKind.Blocked) continue;
             var color = overlay.Kind switch
             {
                 OverlayKind.Grid => new[] { 0.35f, 0.35f, 0.35f, 10f / 255f },
+                OverlayKind.Blocked => new[] { 1f, 0.08f, 0.08f, 0.95f },
                 OverlayKind.Particle => new[] { 0.20f, 1f, 0.55f, 0.65f },
                 OverlayKind.Light => new[] { 1f, 1f, 0.55f, 0.35f },
                 OverlayKind.Selection => new[] { 0f, 200f / 255f, 100f / 255f, 75f / 255f },
@@ -780,6 +782,12 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
             var height = overlay.Kind is OverlayKind.Grid or OverlayKind.Selection ? 30 : overlay.Height * tile;
             var right = left + width;
             var bottom = top + height;
+            if (overlay.Kind == OverlayKind.Blocked)
+            {
+                var side = overlay.GraphicIndex - MapOverlayGeometry.BlockedBaseGraphic - 1;
+                AppendBlockedSide(left, top, side, color, ref count);
+                continue;
+            }
             if (overlay.Kind == OverlayKind.Selection)
             {
                 AppendFrame(left, top, right, bottom, color, ref count);
@@ -809,6 +817,19 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
         AppendRect(left, bottom - thickness, right, bottom, color, ref count);
         AppendRect(left, top, left + thickness, bottom, color, ref count);
         AppendRect(right - thickness, top, right, bottom, color, ref count);
+    }
+
+    private void AppendBlockedSide(float left, float top, int side, float[] color, ref int count)
+    {
+        const float tile = MapRenderGeometry.TilePixels;
+        const float thickness = 4f;
+        switch (side)
+        {
+            case 0: AppendRect(left, top, left + tile, top + thickness, color, ref count); break;
+            case 1: AppendRect(left + tile - thickness, top, left + tile, top + tile, color, ref count); break;
+            case 2: AppendRect(left, top + tile - thickness, left + tile, top + tile, color, ref count); break;
+            case 3: AppendRect(left, top, left + thickness, top + tile, color, ref count); break;
+        }
     }
 
     private void AppendRect(float left, float top, float right, float bottom, float[] color, ref int count)

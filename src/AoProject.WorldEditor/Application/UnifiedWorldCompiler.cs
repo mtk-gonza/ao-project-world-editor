@@ -35,28 +35,94 @@ internal sealed class UnifiedWorldCompiler
                 .ToDictionary(item => new GlobalChunkCoordinate(item.ChunkX, item.ChunkY),
                     item => (item.ShiftX, item.ShiftY))
             : new Dictionary<GlobalChunkCoordinate, (int X, int Y)>();
-        foreach (var group in world.Assembly.Placements.GroupBy(item =>
-                     floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : 0))
+        IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> floorAssemblies;
+        if (world.FloorAssemblies.Count > 0)
         {
+            floorAssemblies = world.FloorAssemblies;
+        }
+        else if (floorAssignments is not null)
+        {
+            floorAssemblies = world.Assembly.Placements
+                .GroupBy(item => floorAssignments.GetValueOrDefault(item.MapId))
+                .Select(group => (group.Key, new GlobalWorldAssembly
+                {
+                    Width = world.Assembly.Width,
+                    Height = world.Assembly.Height,
+                    WrapX = world.Assembly.WrapX,
+                    Placements = group.ToArray()
+                }))
+                .ToArray();
+        }
+        else
+        {
+            floorAssemblies = [(0, world.Assembly)];
+        }
+        var exitPlacements = floorAssemblies.SelectMany(item => item.Assembly.Placements)
+            .GroupBy(item => item.MapId).Select(group => group.First()).ToArray();
+        var floorByMap = exitPlacements.ToDictionary(item => item.MapId,
+            item => floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == item.MapId)).FloorZ);
+        foreach (var floorAssembly in floorAssemblies)
+        {
+            var sourceAssembly = floorAssembly.Assembly;
+            var floorZ = floorAssembly.Item1;
+            // A WORLDMAP may use the same filler map more than once. The source
+            // catalog is keyed by MapId, so keep one deterministic placement for
+            // compilation while preserving the official layout dimensions.
+            var placementsForFloor = sourceAssembly.Placements
+                .GroupBy(item => item.MapId)
+                .Select(group => group.First())
+                .ToArray();
             var assembly = new GlobalWorldAssembly
             {
-                Width = world.Assembly.Width,
-                Height = world.Assembly.Height,
-                WrapX = world.Assembly.WrapX,
-                Placements = group.ToArray()
+                Width = sourceAssembly.Width,
+                Height = sourceAssembly.Height,
+                WrapX = sourceAssembly.WrapX,
+                Placements = placementsForFloor
             };
-            var floorWorld = new GlobalWorldDocument(assembly, world.Maps, world.Paths, group.First().MapId);
-            bundle.Add(Compile(floorWorld, resources, world.Assembly.Placements,
-                world.Assembly.Placements, group.Key, floorAssignments, stitchByChunk, applyStitching).Map);
+            var floorWorld = new GlobalWorldDocument(assembly, world.Maps, world.Paths,
+                placementsForFloor.First().MapId);
+            bundle.Add(Compile(floorWorld, resources, exitPlacements,
+                placementsForFloor, floorZ, floorByMap, stitchByChunk, applyStitching).Map);
         }
-        bundle.SetPlacements(world.Assembly.Placements.Select(placement =>
+        var allPlacements = floorAssemblies.SelectMany(item => item.Assembly.Placements)
+            .GroupBy(item => item.MapId).Select(group => group.First()).ToArray();
+        bundle.SetPlacements(allPlacements.Select(placement =>
             applyStitching && stitchByChunk.TryGetValue(placement.Chunk, out var stitch)
                 ? placement with { StitchX = stitch.Item1, StitchY = stitch.Item2 }
                 : placement));
-        bundle.SetMapFloors(world.Assembly.Placements.Select(item =>
+        bundle.SetMapFloors(allPlacements.Select(item =>
             new KeyValuePair<short, int>(item.MapId,
-                floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : 0)));
+                floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == item.MapId)).FloorZ)));
+        foreach (var placement in allPlacements)
+        {
+            if (!world.Maps.TryGetValue(placement.MapId, out var source)) continue;
+            var metadata = new UnifiedWorldMapMetadata
+            {
+                MapId = placement.MapId,
+                FloorZ = floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == placement.MapId)).FloorZ,
+                MapSize = source.CsmMapSize
+            };
+            CopyMapInfo(metadata.Info, source.Info);
+            metadata.Environment.BaseLight = source.Environment.BaseLight;
+            metadata.Environment.Rain = source.Environment.Rain;
+            metadata.Environment.Snow = source.Environment.Snow;
+            metadata.Environment.Fog = source.Environment.Fog;
+            bundle.MapMetadata.Add(metadata);
+        }
         return bundle;
+    }
+
+    private static void CopyMapInfo(MapInfo target, MapInfo source)
+    {
+        target.Music = source.Music; target.MusicNumberHigh = source.MusicNumberHigh;
+        target.MusicNumberLow = source.MusicNumberLow; target.Name = source.Name;
+        target.MapVersion = source.MapVersion; target.PlayerKilling = source.PlayerKilling;
+        target.MagicDisabled = source.MagicDisabled; target.InvisibilityDisabled = source.InvisibilityDisabled;
+        target.ResurrectionDisabled = source.ResurrectionDisabled; target.NoEncryptMap = source.NoEncryptMap;
+        target.Terrain = source.Terrain; target.Zone = source.Zone; target.Restriction = source.Restriction;
+        target.Backup = source.Backup; target.Safety = source.Safety; target.Ambient = source.Ambient;
+        target.LetterGraphic = source.LetterGraphic; target.Level = source.Level; target.Extra2 = source.Extra2;
+        target.Exit = source.Exit; target.Changed = source.Changed; target.Light = source.Light;
     }
 
     public UnifiedWorldCompileResult Compile(GlobalWorldDocument world,
@@ -183,6 +249,8 @@ internal sealed class UnifiedWorldCompiler
                         stitchByChunk, applyStitching);
                     if (duplicateExit == UnifiedWorldExitKind.Internal) internalExits++;
                     if (duplicateExit == UnifiedWorldExitKind.External) externalExits++;
+                    if (applyStitching && IsSeamDuplicate(owner, placement, localX, localY))
+                        MergeSeamTile(map, offset, sourceBlock, source.Environment);
                     if (TilesEquivalent(owner.Block, owner.Environment, sourceBlock, source.Environment) ||
                         (applyStitching && IsSeamDuplicate(owner, placement, localX, localY)))
                         merged++;
@@ -272,6 +340,48 @@ internal sealed class UnifiedWorldCompiler
         {
             target.LightValues[target.CornerOffset(offset, corner)] = source.LightValues[corner];
             target.Colors[target.CornerOffset(offset, corner)] = source.Colors[corner];
+        }
+    }
+
+    /// <summary>
+    /// A stitched border is one playable tile represented by two CSM records.
+    /// Do not discard metadata from the incoming record just because the first
+    /// record already owns the graphics. Preserve missing values and combine
+    /// directional blocking masks so either source cannot erase gameplay data.
+    /// </summary>
+    private static void MergeSeamTile(UnifiedWorldMap target, int offset,
+        MapBlock source, MapEnvironment environment)
+    {
+        target.Blocked[offset] |= source.Blocked;
+        if (target.Trigger[offset] == 0) target.Trigger[offset] = source.Trigger;
+        if (target.CharacterIndex[offset] == 0) target.CharacterIndex[offset] = source.CharacterIndex;
+        if (target.NpcIndex[offset] == 0) target.NpcIndex[offset] = source.NpcIndex;
+        if (target.ParticleGroup[offset] == 0) target.ParticleGroup[offset] = source.ParticleGroup;
+        if (target.ParticleIndex[offset] == 0) target.ParticleIndex[offset] = source.ParticleIndex;
+        target.Marked[offset] |= source.Marked;
+        if (target.ObjectIndex[offset] == 0) target.ObjectIndex[offset] = source.Object.Index;
+        if (target.ObjectAmount[offset] == 0) target.ObjectAmount[offset] = source.Object.Amount;
+        if (target.ObjectGraphicIndex[offset] == 0) target.ObjectGraphicIndex[offset] = source.ObjectGraphic.GraphicIndex;
+        if (target.LightRange[offset] == 0) target.LightRange[offset] = source.Light.Range;
+        if (target.LightColor[offset] == 0) target.LightColor[offset] = source.Light.Color;
+        if (target.Red[offset] == 0) target.Red[offset] = source.Red;
+        if (target.Green[offset] == 0) target.Green[offset] = source.Green;
+        if (target.Blue[offset] == 0) target.Blue[offset] = source.Blue;
+        if (target.AmbientLight[offset] == 0) target.AmbientLight[offset] = environment.BaseLight;
+        if (target.Rain[offset] == 0) target.Rain[offset] = environment.Rain;
+        if (target.Snow[offset] == 0) target.Snow[offset] = environment.Snow;
+        if (target.Fog[offset] == 0) target.Fog[offset] = environment.Fog;
+        for (var layer = 0; layer < 8; layer++)
+        {
+            var graphicOffset = target.GraphicOffset(offset, layer);
+            if (target.GraphicIndices[graphicOffset] == 0)
+                target.GraphicIndices[graphicOffset] = source.Graphics[layer].GraphicIndex;
+        }
+        for (var corner = 0; corner < 4; corner++)
+        {
+            var cornerOffset = target.CornerOffset(offset, corner);
+            if (target.LightValues[cornerOffset] == 0) target.LightValues[cornerOffset] = source.LightValues[corner];
+            if (target.Colors[cornerOffset] == 0) target.Colors[cornerOffset] = source.Colors[corner];
         }
     }
 

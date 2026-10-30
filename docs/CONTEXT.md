@@ -10,6 +10,9 @@ WorldEditor de Argentum Online, escrito originalmente en VB6 con DirectDraw/Dire
 - Backend grafico: Vortice.Direct3D11 (`Rendering/D3D11WorldRenderer.cs`).
 - Recursos fuente: `reference/Recursos` (solo lectura).
 - Artefactos runtime: `ao-project-resources/world.floors` (generados, no fuente).
+- Pisos de importacion: `WORLDMAP1 -> Z=0`, `WORLDMAP2 -> Z=-1` y
+  `WORLDMAP3 -> Z=-2`, derivados automaticamente de `mapsworlddata.dat`; no se usa
+  `world-floors.json`.
 - Ledger de paridad: `../docs/parity/world-editor-coverage.tsv` (617 procedimientos,
   100% `Ported` al 2026-10-28).
 

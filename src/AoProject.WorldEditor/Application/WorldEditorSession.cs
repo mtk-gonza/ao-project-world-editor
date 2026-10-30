@@ -73,22 +73,8 @@ internal sealed class WorldEditorSession
     public UnifiedWorldBundle CompileUnifiedWorldBundle(bool applyStitching = false)
     {
         if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo global cargado.");
-        var assignmentPath = Path.Combine(ReferenceResourceRoot, "init", "world-floors.json");
-        var assignmentService = new UnifiedWorldFloorAssignmentService();
-        var assignments = assignmentService.Load(assignmentPath);
-        if (assignments.Count == 0)
-        {
-            // A missing manifest is valid: the original reference tree is the
-            // source of maps and metadata. Keep the fallback in memory; never
-            // write generated configuration into reference/Recursos. Preserve
-            // an explicit negative level from the original map metadata as the
-            // first underground floor; ordinary maps remain on Z=0.
-            assignments = CurrentWorld.Assembly.Placements
-                .Select(item => item.MapId)
-                .Distinct()
-                .ToDictionary(mapId => mapId,
-                    mapId => CurrentWorld.Maps.TryGetValue(mapId, out var map) && map.Info.Level < 0 ? -1 : 0);
-        }
+        var assignments = new UnifiedWorldFloorAssignmentService()
+            .Detect(CurrentWorld);
         return new UnifiedWorldCompiler().CompileFloors(CurrentWorld, Resources, assignments, applyStitching);
     }
 
@@ -505,7 +491,15 @@ internal sealed class WorldEditorSession
         }
         progress?.Report(new WorldLoadProgress(1, 1, "layout", null));
         CurrentWorld = new GlobalWorldDocument(assembly, paths, selectedRoot,
-            (mapId, path) => _csmMaps.Load(path, mapId));        CurrentWorld.WorldLayouts = layouts;
+            (mapId, path) => _csmMaps.Load(path, mapId));
+        CurrentWorld.WorldLayouts = layouts;
+        CurrentWorld.FloorAssemblies = layouts
+            .Where(layout => layout.WorldId is >= 1 and <= 3)
+            .Select(layout => (FloorZ: layout.WorldId - 1,
+                Assembly: MapsWorldDataService.BuildAssembly(layout, paths.Keys.ToArray())))
+            .Where(item => item.Assembly is not null)
+            .Select(item => (item.FloorZ, item.Assembly!))
+            .ToArray();
         CurrentWorld.IgnoredWorldIds = worldData.IgnoredWorldIds;
         var specialData = new SpecialWorldDataService();
         CurrentWorld.SpecialWorlds = new Dictionary<string, SpecialWorldCatalog>

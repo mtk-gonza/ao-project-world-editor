@@ -8,6 +8,21 @@ namespace AoProject.WorldEditor.Tests;
 public sealed class MapOverlayTests
 {
     [Fact]
+    public void Unified_map_emits_blocking_markers_with_renderer_coordinates()
+    {
+        var map = new UnifiedWorldMap(4, 4);
+        var offset = map.Offset(2, 1);
+        map.Blocked[offset] = BlockedMask.AllSides;
+
+        var overlays = MapOverlayGeometry.Build(map,
+            new WorldRenderOptions { ShowBlocked = true });
+
+        Assert.Equal(4, overlays.Count(item => item.Kind == OverlayKind.Blocked));
+        Assert.All(overlays.Where(item => item.Kind == OverlayKind.Blocked),
+            item => { Assert.Equal(3, item.X); Assert.Equal(2, item.Y); });
+    }
+
+    [Fact]
     public void Overlay_geometry_reports_enabled_tile_annotations()
     {
         var map = new WorldMap();

@@ -76,7 +76,12 @@ internal sealed class MapsWorldDataService
         short rootMap)
     {
         var layout = layouts.FirstOrDefault(item => item.MapIds.Contains(rootMap));
-        if (layout is null) return null;
+        return layout is null ? null : BuildAssembly(layout, availableMaps);
+    }
+
+    public static GlobalWorldAssembly? BuildAssembly(
+        WorldLayout layout, IReadOnlyCollection<short> availableMaps)
+    {
         var placements = new List<GlobalMapPlacement>();
         for (var index = 0; index < layout.MapIds.Count; index++)
         {

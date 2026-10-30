@@ -175,6 +175,10 @@ internal sealed class WorldRenderControl : Control
         _lights = null;
         foreach (var index in _geometry.Tiles.Select(tile => tile.GraphicIndex))
             RegisterGraphic(index, resources);
+        foreach (var marker in MapOverlayGeometry.MarkerGraphics())
+            if (marker > 0 && marker < resources.Graphics.Count && !_regions.ContainsKey(marker) &&
+                _atlas.TryResolve(resources.Graphics[marker], out var markerRegion))
+                _regions[marker] = markerRegion;
         BindRenderer();
         ViewChanged?.Invoke();
         Invalidate();
@@ -1045,7 +1049,7 @@ internal sealed class WorldRenderControl : Control
             if (_atlas is not null && _regions.Count > 0)
                 {
                     overlayWatch.Start();
-                    var overlays = _unifiedMap is null ? BuildOverlays() : Array.Empty<MapOverlay>();
+                    var overlays = BuildOverlays();
                     overlayWatch.Stop();
                     d3d.RenderTextured(BackColor, _geometry, _regions, overlays);
                 }
@@ -1197,24 +1201,30 @@ internal sealed class WorldRenderControl : Control
 
     private IReadOnlyList<MapOverlay> BuildOverlays()
     {
-        if (_world is null || _map is null)
+        if (_unifiedMap is { } unified)
+        {
+            var visible = VisibleGlobalTileBounds();
+            return MapOverlayGeometry.Build(unified, RenderOptions, _selectedGlobalTile, visible);
+        }
+        if (_world is null && _map is { } localMap)
         {
             var clip = VisibleLocalTileBounds();
-            var localOverlays = MapOverlayGeometry.Build(_map!, RenderOptions,
+            var localOverlays = MapOverlayGeometry.Build(localMap, RenderOptions,
                 _selection is null ? _selectedTile : null, clip).ToList();
             if (_selection is { } localSelection)
             {
                 var normalized = localSelection.Normalize();
-                var minX = Math.Max(normalized.StartX, (int)_map!.CsmMapSize.XMin);
-                var maxX = Math.Min(normalized.EndX, (int)_map.CsmMapSize.XMax);
-                var minY = Math.Max(normalized.StartY, (int)_map.CsmMapSize.YMin);
-                var maxY = Math.Min(normalized.EndY, (int)_map.CsmMapSize.YMax);
+                var minX = Math.Max(normalized.StartX, (int)localMap.CsmMapSize.XMin);
+                var maxX = Math.Min(normalized.EndX, (int)localMap.CsmMapSize.XMax);
+                var minY = Math.Max(normalized.StartY, (int)localMap.CsmMapSize.YMin);
+                var maxY = Math.Min(normalized.EndY, (int)localMap.CsmMapSize.YMax);
                 for (var y = minY; y <= maxY; y++)
                 for (var x = minX; x <= maxX; x++)
                     localOverlays.Add(new(OverlayKind.Selection, x, y, 1, 1));
             }
             return localOverlays;
         }
+        var world = _world ?? throw new InvalidOperationException("No hay un mundo global cargado.");
         var overlays = new List<MapOverlay>();
         if (MapOverlayGeometry.AffectsTiles(RenderOptions))
         {
@@ -1222,15 +1232,15 @@ internal sealed class WorldRenderControl : Control
             var visible = VisibleGlobalTileBounds();
             var chunks = _globalChunks.Count > 0
                 ? _globalChunks
-                : _world.Assembly.Placements.Select(item => item.Chunk).ToHashSet();
-            foreach (var placement in _world.Assembly.Placements)
+                : world.Assembly.Placements.Select(item => item.Chunk).ToHashSet();
+            foreach (var placement in world.Assembly.Placements)
             {
                 if (placement.Chunk.X < bounds.MinX || placement.Chunk.X > bounds.MaxX ||
                     placement.Chunk.Y < bounds.MinY || placement.Chunk.Y > bounds.MaxY) continue;
-                if (!_world.Maps.TryGetValue(placement.MapId, out var map)) continue;
+                if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
                 var hasWest = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
                 var hasNorth = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
-                var stitch = _world.StitchShift(placement.Chunk);
+                var stitch = world.StitchShift(placement.Chunk);
                 var dx = placement.Chunk.X * GlobalChunkGeometry.WidthTiles - stitch.X;
                 var dy = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - stitch.Y;
                 // Translate the visible global rect into this map's local tiles.

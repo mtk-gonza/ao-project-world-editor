@@ -44,7 +44,7 @@ internal sealed class MainForm : Form
     private readonly WorldSidebar _sidebar = new();
     private readonly EditorPalettePanel _palette = new();
     private readonly EditorInspectorPanel _inspector = new();
-    private readonly ToolStripLabel _coordinates = new("Global: — | Local: — | Capa: —");
+    private readonly ToolStripLabel _coordinates = new("Global: — | Z: — | Local: — | Capa: —");
     private readonly ToolStripComboBox _layerSelector = new() { Name = "activeLayer", Width = 82, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ToolStripComboBox _toolSelector = new() { Name = "activeTool", Width = 92, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown _toolbarBrushSize = new() { Minimum = 1, Maximum = 20, Value = 1, Width = 48 };
@@ -82,6 +82,7 @@ internal sealed class MainForm : Form
         {
             _miniMap.Invalidate();
             if (_renderControl.SelectedTile is { } selected) UpdateCoordinateBar(selected.X, selected.Y);
+            else UpdateCoordinateBar();
         };
         // Re-crop when a minimap finishes building, so the radar fills in while
         // the world image is composed instead of waiting for the camera to move.
@@ -502,10 +503,10 @@ internal sealed class MainForm : Form
         catch (Exception error) { _status.Text = error.Message; }
     }
 
-    private void UpdateCoordinateBar(int x, int y)
+    private void UpdateCoordinateBar(int? x = null, int? y = null)
     {
         var map = _session.CurrentMap;
-        var local = map is null ? "—" : $"{x},{y}";
+        var local = map is null || x is null || y is null ? "—" : $"{x},{y}";
         var global = _renderControl.SelectedGlobalTile is { } selected ? $"{selected.X},{selected.Y}" : "—";
         var floor = _renderControl.ActiveFloorZ is { } z ? $"Z: {z}" : "Z: —";
         _coordinates.Text = $"Global: {global} | {floor} | Local: {local} | Capa: {_renderControl.SelectedLayer + 1} | Zoom: {_renderControl.Zoom:P0}";
@@ -2112,8 +2113,6 @@ internal sealed class MainForm : Form
             UseWaitCursor = true;
             _status.Text = "Mostrando mundo completo; cargando datos del piso...";
             var overview = Path.Combine(directory, "worldmap", $"floor-{_previewFloorZ.Value:+#;-#;0}.png");
-            if (File.Exists(overview))
-                _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), _previewFloorZ.Value);
             _radarEnabled = true;
             _sidebar.SetRadarVisible(true);
             _radarTimer.Start();
@@ -2121,9 +2120,12 @@ internal sealed class MainForm : Form
             _compiledUnifiedBundle = null;
             _compiledUnifiedWorld = map;
             _renderControl.SetUnifiedWorld(map, _session.Resources);
-            if (File.Exists(overview))
-                _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), _previewFloorZ.Value);
-            _miniMap.SetWorld(null, null, () => _renderControl.GlobalViewport, _renderControl.CenterOnGlobalTile);
+            _renderControl.SetZoom(1f);
+            var overviewImage = File.Exists(overview)
+                ? await Task.Run(() => LoadBitmapCopy(overview))
+                : null;
+            _miniMap.SetUnifiedOverview(overviewImage,
+                () => _renderControl.GlobalViewport, _renderControl.CenterOnGlobalTile);
             _radarDirty = true;
             _status.Text = $"Bundle de pisos: Z={_previewFloorZ.Value} | {images.Count} pisos | diseño real";
         }
@@ -2227,10 +2229,14 @@ internal sealed class MainForm : Form
                 _previewFloorZ = nextZ;
                 _compiledUnifiedWorld = floorMap;
                 _renderControl.SetUnifiedWorld(floorMap, _session.Resources);
+                _renderControl.SetZoom(1f);
                 var overview = Path.Combine(Path.GetDirectoryName(_previewFloorImages[nextZ])!, "worldmap",
                     $"floor-{nextZ:+#;-#;0}.png");
-                if (File.Exists(overview))
-                    _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), nextZ);
+                var overviewImage = File.Exists(overview)
+                    ? await Task.Run(() => LoadBitmapCopy(overview))
+                    : null;
+                _miniMap.SetUnifiedOverview(overviewImage,
+                    () => _renderControl.GlobalViewport, _renderControl.CenterOnGlobalTile);
                 _radarEnabled = true;
                 _sidebar.SetRadarVisible(true);
                 _radarDirty = true;
@@ -2762,7 +2768,9 @@ internal sealed class MainForm : Form
                 var crop = radar.CreateCentered(unified,
                     Math.Clamp(x, 0, unified.Width - 1),
                     Math.Clamp(y, 0, unified.Height - 1),
-                    WorldRadarService.DefaultSize, WorldRadarService.DefaultSize);
+                    WorldRadarService.DefaultSize, WorldRadarService.DefaultSize,
+                    _session.Resources.Graphics,
+                    GraphicAverageColorService.For(_session.Resources.Root));
                 _radarView.SetImage(crop.Image, crop.MarkerX, crop.MarkerY);
             }
             catch (Exception error) { LogRadarError(error); }

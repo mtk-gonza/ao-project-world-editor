@@ -37,6 +37,20 @@ internal sealed class WorldMiniMapControl : Control
                 _detailCenter(Math.Clamp(tileX, 1, WorldMap.Width), Math.Clamp(tileY, 1, WorldMap.Height));
                 return;
             }
+            if (_unifiedOverview is not null && _unifiedCenter is not null)
+            {
+                var fit = Math.Min((float)(ClientSize.Width - 12) / _unifiedOverview.Width,
+                    (float)(ClientSize.Height - 12) / _unifiedOverview.Height);
+                fit = Math.Max(.01f, fit);
+                var left = (ClientSize.Width - _unifiedOverview.Width * fit) / 2f;
+                var top = (ClientSize.Height - _unifiedOverview.Height * fit) / 2f;
+                var tileX = (int)MathF.Floor((e.X - left) / (4f * fit));
+                var tileY = (int)MathF.Floor((e.Y - top) / (4f * fit));
+                if (tileX >= 0 && tileY >= 0 &&
+                    tileX < _unifiedOverview.Width / 4 && tileY < _unifiedOverview.Height / 4)
+                    _unifiedCenter(tileX, tileY);
+                return;
+            }
             if (_world is null || _center is null || _maps.Count == 0) return;
             var scale = ScaleFactor;
             _center((int)MathF.Floor(_bounds.MinX + (e.X - 6) / scale),
@@ -60,6 +74,9 @@ internal sealed class WorldMiniMapControl : Control
 
     private Bitmap? _worldImage;
     private Bitmap? _radarImage;
+    private Bitmap? _unifiedOverview;
+    private Func<(float X, float Y, float Width, float Height)>? _unifiedViewport;
+    private Action<int, int>? _unifiedCenter;
     private WorldBorderStitcher? _stitcher;
 
     /// <summary>
@@ -132,6 +149,8 @@ internal sealed class WorldMiniMapControl : Control
     public void SetLocalMap(WorldMap? map, WorldEditorResourceCatalog? resources,
         Func<(int X, int Y)?> selected, Action<int, int> center)
     {
+        _unifiedOverview?.Dispose(); _unifiedOverview = null;
+        _unifiedViewport = null; _unifiedCenter = null;
         foreach (var image in _maps.Values) image.Dispose();
         _maps.Clear();
         _pending.Clear();
@@ -266,6 +285,8 @@ internal sealed class WorldMiniMapControl : Control
         Func<(float X, float Y, float Width, float Height)> viewport, Action<int, int> center,
         string? resourceRoot = null)
     {
+        _unifiedOverview?.Dispose(); _unifiedOverview = null;
+        _unifiedViewport = null; _unifiedCenter = null;
         foreach (var image in _maps.Values) image.Dispose();
         _maps.Clear(); _pending.Clear(); _world = world; _graphics = graphics; _resources = resourceRoot; _viewport = viewport; _center = center;
         // Drop the composed images: keeping them would let the radar crop a world
@@ -302,6 +323,30 @@ internal sealed class WorldMiniMapControl : Control
                 _buildTimer.Start();
             }
         }
+        Invalidate();
+    }
+
+    /// <summary>
+    /// Shows the generated floor overview in MAPA. The editable and
+    /// game-authoritative tiles remain the UnifiedWorldMap rendered by the main
+    /// canvas; this bitmap is only the small navigation overview.
+    /// </summary>
+    public void SetUnifiedOverview(Bitmap? image,
+        Func<(float X, float Y, float Width, float Height)>? viewport = null,
+        Action<int, int>? center = null)
+    {
+        _unifiedOverview?.Dispose();
+        _unifiedOverview = image;
+        _unifiedViewport = viewport;
+        _unifiedCenter = center;
+        _world = null;
+        foreach (var mapImage in _maps.Values) mapImage.Dispose();
+        _maps.Clear();
+        _pending.Clear();
+        _detail?.Dispose(); _detail = null;
+        _worldImage?.Dispose(); _worldImage = null;
+        _radarImage?.Dispose(); _radarImage = null;
+        _buildTimer.Stop();
         Invalidate();
     }
 
@@ -476,6 +521,29 @@ internal sealed class WorldMiniMapControl : Control
             }
             return;
         }
+        if (_unifiedOverview is not null)
+        {
+            var overviewFit = Math.Min((float)(ClientSize.Width - 12) / _unifiedOverview.Width,
+                (float)(ClientSize.Height - 12) / _unifiedOverview.Height);
+            overviewFit = Math.Max(.01f, overviewFit);
+            e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            var drawWidth = _unifiedOverview.Width * overviewFit;
+            var drawHeight = _unifiedOverview.Height * overviewFit;
+            var left = (ClientSize.Width - drawWidth) / 2f;
+            var top = (ClientSize.Height - drawHeight) / 2f;
+            e.Graphics.DrawImage(_unifiedOverview, left, top, drawWidth, drawHeight);
+            if (_unifiedViewport is { } overviewViewport)
+            {
+                var view = overviewViewport();
+                const float overviewScale = 4f;
+                using var pen = new Pen(Color.Yellow, 2);
+                e.Graphics.DrawRectangle(pen, left + view.X * overviewScale * overviewFit,
+                    top + view.Y * overviewScale * overviewFit,
+                    view.Width * overviewScale * overviewFit, view.Height * overviewScale * overviewFit);
+            }
+            return;
+        }
         if (_world is null || _maps.Count == 0) return;
         var scale = ScaleFactor;
         // The exported world.png is _worldImage. Draw that exact bitmap here too;
@@ -507,6 +575,7 @@ internal sealed class WorldMiniMapControl : Control
         {
             _buildTimer.Stop();
             _buildTimer.Dispose();
+            _unifiedOverview?.Dispose();
             _detail?.Dispose();
             foreach (var image in _maps.Values) image.Dispose();
         }

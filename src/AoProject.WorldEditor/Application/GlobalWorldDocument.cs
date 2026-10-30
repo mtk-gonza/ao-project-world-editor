@@ -41,6 +41,7 @@ internal sealed class GlobalWorldDocument
     public IReadOnlyDictionary<short, string> Paths { get; }
     public short RootMap { get; private set; }
     public IReadOnlyList<MapsWorldDataService.WorldLayout> WorldLayouts { get; set; } = [];
+    public IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> FloorAssemblies { get; set; } = [];
     public IReadOnlyList<int> IgnoredWorldIds { get; set; } = [];
     public IReadOnlyList<string> LoadErrors { get; set; } = [];
     public bool KeepAllLoaded { get; set; }

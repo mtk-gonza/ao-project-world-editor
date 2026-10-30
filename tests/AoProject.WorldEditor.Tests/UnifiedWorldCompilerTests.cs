@@ -78,6 +78,31 @@ public sealed class UnifiedWorldCompilerTests
     }
 
     [Fact]
+    public void Stitched_border_preserves_blocking_from_both_source_maps()
+    {
+        var west = new WorldMap();
+        var east = new WorldMap();
+        for (var y = 1; y <= WorldMap.Height; y++)
+        {
+            west.Blocks[88, y].Graphics[0].GraphicIndex = 10;
+            east.Blocks[14, y].Graphics[0].GraphicIndex = 10;
+        }
+        east.Blocks[14, 20].Blocked = BlockedMask.AllSides;
+        var world = new GlobalWorldDocument(
+            new GlobalWorldAssembly
+            {
+                Width = 2, Height = 1,
+                Placements = [new(1, new(0, 0), "world"), new(2, new(1, 0), "world")]
+            },
+            new Dictionary<short, WorldMap> { [1] = west, [2] = east },
+            new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
+
+        var result = new UnifiedWorldCompiler().CompileFloors(world, applyStitching: true);
+
+        Assert.Contains((byte)BlockedMask.AllSides, result.Floors[0].Blocked);
+    }
+
+    [Fact]
     public void Keeps_negative_special_exit_on_underground_external_floor()
     {
         var map = new WorldMap();
@@ -226,6 +251,42 @@ public sealed class UnifiedWorldCompilerTests
             var placement = Assert.Single(loaded.Placements.Values);
             Assert.Equal(7, placement.StitchX);
             Assert.Equal(9, placement.StitchY);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void Unified_world_bundle_roundtrips_complete_source_metadata()
+    {
+        var bundle = new UnifiedWorldBundle();
+        bundle.Add(new UnifiedWorldMap(2, 2, 0));
+        var metadata = new UnifiedWorldMapMetadata { MapId = 842, FloorZ = 0,
+            MapSize = new CsmMapSize(88, 13, 91, 10) };
+        metadata.Info.Name = "Mapa de prueba";
+        metadata.Info.MapVersion = 7;
+        metadata.Info.PlayerKilling = true;
+        metadata.Info.MagicDisabled = 1;
+        metadata.Info.Terrain = "bosque";
+        metadata.Info.LetterGraphic = 1234;
+        metadata.Info.Extra2 = 5678;
+        metadata.Info.Exit = "salida";
+        metadata.Environment.BaseLight = 0x112233;
+        metadata.Environment.Rain = 1;
+        bundle.MapMetadata.Add(metadata);
+        var directory = Path.Combine(Path.GetTempPath(), "aogbundle-meta-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new UnifiedWorldBundleFileService();
+            service.Save(bundle, directory);
+            var loaded = service.Load(directory);
+            var actual = Assert.Single(loaded.MapMetadata);
+            Assert.Equal((short)842, actual.MapId);
+            Assert.Equal("Mapa de prueba", actual.Info.Name);
+            Assert.Equal((short)7, actual.Info.MapVersion);
+            Assert.True(actual.Info.PlayerKilling);
+            Assert.Equal((byte)1, actual.Info.MagicDisabled);
+            Assert.Equal(1234, actual.Info.LetterGraphic);
+            Assert.Equal(0x112233, actual.Environment.BaseLight);
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
