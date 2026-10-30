@@ -511,6 +511,10 @@ coordenadas externas 1-based con indices globales zero-based.
 escriben en `ao-project-resources\\world.floors` y no se crea configuracion artificial
 en `reference\\Recursos\\init`.
 
+La reconstruccion de `world.floors` parte de `reference\\Recursos\\Mapas\\*.csm` y
+del layout oficial `reference\\Recursos\\init\\mapsworlddata.dat`. El antiguo
+`ao-project-resources\\world\\world.csm` no es una entrada del pipeline nuevo.
+
 El bundle productivo actual contiene `bundle.aog` v3 y los floors compilados con
 stitching fisico. Antes de reemplazarlo se conserva una copia en una ruta temporal de
 backup. Las auditorias TSV se distribuyen junto al bundle para hacer reproducible la

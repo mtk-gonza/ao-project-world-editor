@@ -195,18 +195,22 @@ internal sealed class MainForm : Form
                 (_, _) => _renderControl.SelectedLayer = selectedLayer));
         }
          file.DropDownItems.Add(open);
-          file.DropDownItems.Add(openOriginalMaps);
-          file.DropDownItems.Add(openWorld);
+         file.DropDownItems.Add(openOriginalMaps);
+         file.DropDownItems.Add(openWorld);
+         file.DropDownItems.Add(new ToolStripSeparator());
          file.DropDownItems.Add(openUnified);
          file.DropDownItems.Add(openBundle);
          file.DropDownItems.Add(new ToolStripMenuItem("Piso anterior", null, (_, _) => ChangeUnifiedFloor(-1)));
          file.DropDownItems.Add(new ToolStripMenuItem("Piso siguiente", null, (_, _) => ChangeUnifiedFloor(1)));
-        file.DropDownItems.Add(switchWorld);
+         file.DropDownItems.Add(new ToolStripSeparator());
+         file.DropDownItems.Add(switchWorld);
+         file.DropDownItems.Add(new ToolStripSeparator());
          file.DropDownItems.Add(save);
-         file.DropDownItems.Add(new ToolStripMenuItem("Guardar WORLD como world.csm...", null, SaveGlobalWorldAs));
-         file.DropDownItems.Add(new ToolStripMenuItem("Compilar mapa único global (*.gmap)...", null, SaveUnifiedWorldAs));
-         file.DropDownItems.Add(new ToolStripMenuItem("Compilar pisos globales...", null, SaveUnifiedWorldBundleAs));
          file.DropDownItems.Add(saveAs);
+         file.DropDownItems.Add(new ToolStripSeparator());
+         file.DropDownItems.Add(new ToolStripMenuItem("Guardar WORLD legacy como world.csm...", null, SaveGlobalWorldAs));
+         file.DropDownItems.Add(new ToolStripMenuItem("Compilar mapa único legacy (*.gmap)...", null, SaveUnifiedWorldAs));
+         file.DropDownItems.Add(new ToolStripMenuItem("Compilar pisos globales...", null, SaveUnifiedWorldBundleAs));
         file.DropDownItems.Add(reopen);
         menu.Items.Add(file);
         menu.Items.Add(edit);
@@ -1934,7 +1938,7 @@ internal sealed class MainForm : Form
         {
             UseWaitCursor = true;
             _status.Text = "Compilando pisos globales...";
-            var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory));
+            var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory, applyStitching: true));
             _status.Text = $"Pisos globales generados: {bundle.Floors.Count}";
             MessageBox.Show(this,
                 $"Bundle de pisos generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
@@ -2136,11 +2140,11 @@ internal sealed class MainForm : Form
         _status.Text = "Regenerando world.floors con stitching...";
         try
         {
-            var source = Path.Combine(ClientResourceRoot, "world");
+            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
-                _session.SaveUnifiedWorldBundle(directory);
+                _session.SaveUnifiedWorldBundle(directory, applyStitching: true);
             });
             _status.Text = "world.floors regenerado con stitching.";
         }
@@ -2153,7 +2157,7 @@ internal sealed class MainForm : Form
         _status.Text = "Analizando stitching sin regenerar world.floors...";
         try
         {
-            var source = Path.Combine(ClientResourceRoot, "world");
+            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
@@ -2187,7 +2191,10 @@ internal sealed class MainForm : Form
         _status.Text = "Generando bundle experimental compacto...";
         try
         {
-            var source = Path.Combine(ClientResourceRoot, "world");
+            // The canonical source is the original loose CSM collection. The
+            // old generated `world` archive is not part of the new runtime
+            // pipeline and must not be used to rebuild world.floors.
+            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
@@ -2262,7 +2269,11 @@ internal sealed class MainForm : Form
             Description = "Seleccione la carpeta que contiene los mapas .csm del mundo",
             SelectedPath = SourceMapsDirectory
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            _compileFloorsAfterWorldLoad = false;
+            return;
+        }
         using var loading = new Form
         {
             Text = "Cargando mundo",
@@ -2295,12 +2306,17 @@ internal sealed class MainForm : Form
                 bar.Style = ProgressBarStyle.Marquee;
                 bar.MarqueeAnimationSpeed = 24;
                 label.Text = "Compilando world.floors con metadatos de reference\\Recursos...";
-                await Task.Run(() => _session.SaveUnifiedWorldBundle(Path.Combine(ClientResourceRoot, "world.floors")));
+                var bundleDirectory = Path.Combine(ClientResourceRoot, "world.floors");
+                await Task.Run(() => _session.SaveUnifiedWorldBundle(bundleDirectory, applyStitching: true));
                 bar.Style = ProgressBarStyle.Continuous;
                 bar.MarqueeAnimationSpeed = 0;
                 bar.Value = 100;
                 label.Text = "world.floors generado correctamente.";
                 _compileFloorsAfterWorldLoad = false;
+                await OpenBundlePreviewDirectory(bundleDirectory);
+                _settings.LastMap = _session.CurrentMapPath ?? string.Empty;
+                UpdateTitle();
+                return;
             }
             _settings.LastMap = _session.CurrentMapPath ?? string.Empty;
             _renderControl.SetGlobalWorld(world, _session.Resources);

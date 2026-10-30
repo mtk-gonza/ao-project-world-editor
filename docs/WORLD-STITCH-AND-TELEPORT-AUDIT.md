@@ -1,7 +1,7 @@
 # Auditoría de stitching, pisos y teleports
 
 **Fecha:** 2026-10-29  
-**Estado:** investigación integrada; el bundle compacto experimental todavía no es producción  
+**Estado:** pipeline runtime implementado desde los mapas originales; pendiente únicamente la validación visual final
 **Alcance:** WorldEditor, mapas originales VB6, bundle `world.floors`, cliente y servidor
 
 ## 1. Fuentes originales y artefactos generados
@@ -30,17 +30,21 @@ D:\projects\PERSONAL\ao-project\ao-project-resources\world.floors
 
 La asignación de pisos se mantiene en memoria cuando no existe un manifiesto. La asignación efectiva se serializa en `bundle.aog`.
 
+La fuente canonica para regenerar el runtime es `reference\\Recursos\\Mapas`. El
+directorio `ao-project-resources\\world` pertenece al flujo legacy/intermedio y no se
+usa para reconstruir `world.floors`.
+
 ## 2. Mapas disponibles
 
 Se identificaron dos conjuntos diferentes:
 
 | Conjunto | Cantidad | Uso |
 |---|---:|---|
-| Mundo ensamblado normal | 418 mapas | Layout oficial utilizado por el WorldEditor y el bundle global |
-| `reference\Recursos\Mapas` | 843 archivos `.csm` | Fuente original completa para auditar teleports VB6 |
+| Mundo ensamblado normal | 418 placements | Layout oficial derivado de `mapsworlddata.dat` |
+| `reference\Recursos\Mapas` | 843 archivos `.csm` | Fuente original para generar y auditar el runtime |
 | `mapa844.csm` | 1 archivo | Archivo vacío, tamaño `0 bytes` |
 
-El audit inicial revisaba solo los 418 mapas del assembly. Esto era insuficiente para encontrar mapas especiales fuera del rango normal. Se agregó una auditoría independiente sobre los 843 archivos originales.
+El audit inicial revisaba solo los 418 placements del assembly. Esto era insuficiente para encontrar mapas especiales fuera del rango normal. Se agregó una auditoría independiente sobre los 843 archivos originales. La compilación definitiva parte de esos CSM y usa `mapsworlddata.dat` para seleccionar los placements del mundo principal.
 
 ## 3. Formato y contrato de teleports VB6
 
@@ -303,9 +307,27 @@ Compatibilidad implementada:
 - El servidor usa offsets en `GlobalCoordinateAdapter`.
 - El cliente usa offsets en `TryToGlobal`, `TryToLegacy` y `ProjectMap`.
 
-## 9. Compilación física experimental
+## 9. Compilación física desde los mapas originales
 
-Se agregó un modo separado:
+El pipeline nuevo carga directamente:
+
+```text
+reference\\Recursos\\Mapas\\*.csm
+reference\\Recursos\\init\\mapsworlddata.dat
+```
+
+No utiliza `ao-project-resources\\world\\world.csm`.
+
+El comando de carga `Cargar mapas originales (/Mapas)...` usa este mismo pipeline:
+
+1. carga todos los CSM originales;
+2. aplica `mapsworlddata.dat` para construir los placements oficiales;
+3. calcula acoples y offsets acumulados;
+4. separa por pisos;
+5. genera `world.floors` en v3;
+6. abre por defecto el piso `Z=0` en el render del editor.
+
+Se agregó un modo separado para automatización:
 
 ```text
 CompileStitchedWorldBundle()
@@ -318,7 +340,8 @@ Este modo:
 - ajusta destinos internos;
 - conserva el tile existente en conflictos de seam;
 - conserva teleports especiales como salidas externas;
-- no se usa por defecto para reemplazar `world.floors`.
+- genera directamente `ao-project-resources\\world.floors`.
+- el editor muestra inicialmente `Z=0` y permite cambiar con Piso anterior/siguiente.
 
 El bundle experimental más reciente se generó correctamente en:
 
