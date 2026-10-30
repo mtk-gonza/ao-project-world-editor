@@ -208,9 +208,8 @@ internal sealed class MainForm : Form
          file.DropDownItems.Add(save);
          file.DropDownItems.Add(saveAs);
          file.DropDownItems.Add(new ToolStripSeparator());
-         file.DropDownItems.Add(new ToolStripMenuItem("Guardar WORLD legacy como world.csm...", null, SaveGlobalWorldAs));
+         file.DropDownItems.Add(new ToolStripMenuItem("Guardar como world.floors...", null, SaveUnifiedWorldBundleAs));
          file.DropDownItems.Add(new ToolStripMenuItem("Compilar mapa único legacy (*.gmap)...", null, SaveUnifiedWorldAs));
-         file.DropDownItems.Add(new ToolStripMenuItem("Compilar pisos globales...", null, SaveUnifiedWorldBundleAs));
         file.DropDownItems.Add(reopen);
         menu.Items.Add(file);
         menu.Items.Add(edit);
@@ -1929,21 +1928,22 @@ internal sealed class MainForm : Form
         }
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Seleccione la carpeta de salida del bundle de pisos",
-            SelectedPath = Path.Combine(ClientResourceRoot, "world")
+            Description = "Seleccione la carpeta donde se guardará world.floors",
+            SelectedPath = ClientResourceRoot
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         var directory = Path.Combine(dialog.SelectedPath, "world.floors");
         try
         {
             UseWaitCursor = true;
-            _status.Text = "Compilando pisos globales...";
+            _status.Text = "Generando world.floors desde los mapas originales...";
             var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory, applyStitching: true));
-            _status.Text = $"Pisos globales generados: {bundle.Floors.Count}";
+            await OpenBundlePreviewDirectory(directory);
+            _status.Text = $"world.floors guardado: {bundle.Floors.Count} pisos | Z=0 activo";
             MessageBox.Show(this,
-                $"Bundle de pisos generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
+                $"world.floors generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
                 $"Pisos: {string.Join(", ", bundle.Floors.Keys.Select(z => $"Z={z}"))}",
-                "Pisos globales generados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "world.floors guardado", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception error)
         {
