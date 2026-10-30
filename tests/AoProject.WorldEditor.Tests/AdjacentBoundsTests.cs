@@ -9,7 +9,7 @@ public sealed class AdjacentBoundsTests
     [Fact]
     public void Existing_maps_are_detected_from_the_four_reference_border_ranges()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[20, 10].TileExit.Map = 101;
         map.Blocks[88, 20].TileExit.Map = 102;
         map.Blocks[30, 91].TileExit.Map = 103;

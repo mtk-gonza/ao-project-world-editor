@@ -10,44 +10,44 @@ namespace AoProject.WorldEditor.Application;
 /// </summary>
 internal sealed class WorldOutputAuditService
 {
-    private readonly CsmMapFileService _maps = new();
+    private readonly SectorCsmFileService _maps = new();
 
-    public IReadOnlyList<MapAuditIssue> Audit(
+    public IReadOnlyList<SectorAuditIssue> Audit(
         string mapsDirectory,
         string outputDirectory,
         bool checkMinimaps = true,
         string? resourceRoot = null)
     {
-        var issues = new List<MapAuditIssue>();
+        var issues = new List<SectorAuditIssue>();
         var namePath = Path.Combine(outputDirectory, "NameMapa.dat");
         var transferPath = Path.Combine(outputDirectory, "translados.ini");
         if (!File.Exists(namePath))
-            issues.Add(new MapAuditIssue(0, "OUT-MISSING", AuditSeverity.Error, "Falta NameMapa.dat."));
+            issues.Add(new SectorAuditIssue(0, "OUT-MISSING", AuditSeverity.Error, "Falta NameMapa.dat."));
         if (!File.Exists(transferPath))
-            issues.Add(new MapAuditIssue(0, "OUT-MISSING", AuditSeverity.Error, "Falta translados.ini."));
+            issues.Add(new SectorAuditIssue(0, "OUT-MISSING", AuditSeverity.Error, "Falta translados.ini."));
         if (!File.Exists(namePath) || !File.Exists(transferPath)) return issues;
 
         var names = IniDocument.Load(namePath, Encoding.Latin1);
         var transfers = IniDocument.Load(transferPath, Encoding.Latin1);
         var files = Directory.EnumerateFiles(mapsDirectory, "*.csm", SearchOption.TopDirectoryOnly)
-            .Select(path => (Path: path, Id: ParseMapId(path)))
+            .Select(path => (Path: path, Id: ParseSectorId(path)))
             .Where(item => item.Id > 0 && new FileInfo(item.Path).Length > 0)
             .GroupBy(item => item.Id).Select(group => group.First())
             .OrderBy(item => item.Id);
         foreach (var (path, mapId) in files)
         {
-            WorldMap map;
+            WorldSector map;
             try { map = _maps.Load(path); }
             catch (Exception error)
             {
-                issues.Add(new MapAuditIssue(mapId, "OUT-READ", AuditSeverity.Error,
+                issues.Add(new SectorAuditIssue(mapId, "OUT-READ", AuditSeverity.Error,
                     $"No se pudo cargar el mapa: {error.Message}"));
                 continue;
             }
             var expectedName = (map.Info.Name ?? string.Empty).Trim();
             var actualName = names.Get("NameMapa", $"mapa{mapId}").Trim();
             if (!string.Equals(expectedName, actualName, StringComparison.Ordinal))
-                issues.Add(new MapAuditIssue(mapId, "OUT-NAME", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(mapId, "OUT-NAME", AuditSeverity.Warning,
                     $"NameMapa 'mapa{mapId}={actualName}' != nombre del CSM '{expectedName}'."));
 
             var section = $"mapa{mapId}";
@@ -59,14 +59,14 @@ internal sealed class WorldOutputAuditService
             if (!checkMinimaps) continue;
             var minimap = Path.Combine(outputDirectory, "minimapas", $"mapa{mapId}.png");
             if (!File.Exists(minimap) || new FileInfo(minimap).Length == 0)
-                issues.Add(new MapAuditIssue(mapId, "OUT-MINIMAP", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(mapId, "OUT-MINIMAP", AuditSeverity.Warning,
                     "Falta el minimapa PNG."));
             var clientMinimap = Path.Combine(outputDirectory, "minimapas-bmp", $"mapa{mapId}.bmp");
             if (!File.Exists(clientMinimap))
-                issues.Add(new MapAuditIssue(mapId, "OUT-MINIMAP-BMP", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(mapId, "OUT-MINIMAP-BMP", AuditSeverity.Warning,
                     "Falta el minimapa BMP del cliente."));
             else if (!IsClientMinimap(clientMinimap))
-                issues.Add(new MapAuditIssue(mapId, "OUT-MINIMAP-BMP", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(mapId, "OUT-MINIMAP-BMP", AuditSeverity.Warning,
                     "El minimapa BMP no es 100x100 16bpp BI_RGB."));
         }
 
@@ -76,7 +76,7 @@ internal sealed class WorldOutputAuditService
     }
 
     /// <summary>Each WORLDMAP must have its composed minimap at grid scale.</summary>
-    private static void CheckWorldMinimaps(List<MapAuditIssue> issues, string outputDirectory,
+    private static void CheckWorldMinimaps(List<SectorAuditIssue> issues, string outputDirectory,
         string resourceRoot)
     {
         var init = Path.Combine(resourceRoot, "init");
@@ -90,28 +90,28 @@ internal sealed class WorldOutputAuditService
             var file = Path.Combine(outputDirectory, "worldmap", $"worldmap{layout.WorldId}.png");
             if (!File.Exists(file))
             {
-                issues.Add(new MapAuditIssue(0, "OUT-WORLDMAP-MINIMAP", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(0, "OUT-WORLDMAP-MINIMAP", AuditSeverity.Warning,
                     $"Falta el minimapa del WORLDMAP{layout.WorldId}."));
                 continue;
             }
-            var expectedWidth = layout.Width * Domain.WorldMap.Width;
-            var expectedHeight = layout.Height * Domain.WorldMap.Height;
+            var expectedWidth = layout.Width * Domain.WorldSector.Width;
+            var expectedHeight = layout.Height * Domain.WorldSector.Height;
             try
             {
                 using var image = System.Drawing.Image.FromFile(file);
                 if (image.Width != expectedWidth || image.Height != expectedHeight)
-                    issues.Add(new MapAuditIssue(0, "OUT-WORLDMAP-SIZE", AuditSeverity.Warning,
+                    issues.Add(new SectorAuditIssue(0, "OUT-WORLDMAP-SIZE", AuditSeverity.Warning,
                         $"WORLDMAP{layout.WorldId}: {image.Width}x{image.Height} != " +
                         $"{expectedWidth}x{expectedHeight}."));
             }
             catch (Exception error) when (error is IOException or OutOfMemoryException)
             {
-                issues.Add(new MapAuditIssue(0, "OUT-WORLDMAP-SIZE", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(0, "OUT-WORLDMAP-SIZE", AuditSeverity.Warning,
                     $"WORLDMAP{layout.WorldId}: no se pudo leer el PNG ({error.Message})."));
             }
             if (!File.Exists(Path.Combine(outputDirectory, "worldmap",
                     $"worldmap{layout.WorldId}-preview.png")))
-                issues.Add(new MapAuditIssue(0, "OUT-WORLDMAP-MINIMAP", AuditSeverity.Warning,
+                issues.Add(new SectorAuditIssue(0, "OUT-WORLDMAP-MINIMAP", AuditSeverity.Warning,
                     $"Falta el preview del WORLDMAP{layout.WorldId}."));
         }
     }
@@ -133,8 +133,8 @@ internal sealed class WorldOutputAuditService
             var planes = reader.ReadInt16();
             var bits = reader.ReadInt16();
             var compression = reader.ReadInt32();
-            return offset == 54 && headerSize == 40 && width == WorldMap.Width &&
-                height == WorldMap.Height && planes == 1 && bits == 16 && compression == 0;
+            return offset == 54 && headerSize == 40 && width == WorldSector.Width &&
+                height == WorldSector.Height && planes == 1 && bits == 16 && compression == 0;
         }
         catch (IOException)
         {
@@ -146,15 +146,15 @@ internal sealed class WorldOutputAuditService
     /// Writes the findings next to the generated files as output-audit.tsv and
     /// returns the report path.
     /// </summary>
-    public string WriteReport(IReadOnlyList<MapAuditIssue> issues, string outputDirectory)
+    public string WriteReport(IReadOnlyList<SectorAuditIssue> issues, string outputDirectory)
     {
         ArgumentNullException.ThrowIfNull(issues);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
         Directory.CreateDirectory(outputDirectory);
         var path = Path.Combine(outputDirectory, "output-audit.tsv");
-        var text = new StringBuilder("MapId\tCode\tSeverity\tX\tY\tLayer\tMessage\r\n");
+        var text = new StringBuilder("SectorId\tCode\tSeverity\tX\tY\tLayer\tMessage\r\n");
         foreach (var issue in issues)
-            text.Append(issue.MapId).Append('\t')
+            text.Append(issue.SectorId).Append('\t')
                 .Append(issue.Code).Append('\t')
                 .Append(issue.Severity).Append('\t')
                 .Append(issue.X).Append('\t')
@@ -165,22 +165,22 @@ internal sealed class WorldOutputAuditService
         return path;
     }
 
-    private static void CheckTransfer(List<MapAuditIssue> issues, short mapId, IniDocument transfers,
+    private static void CheckTransfer(List<SectorAuditIssue> issues, short mapId, IniDocument transfers,
         string section, string key, short expected)
     {
         var value = transfers.Get(section, key);
         if (!short.TryParse(value, out var actual))
         {
-            issues.Add(new MapAuditIssue(mapId, "OUT-TRANSFER", AuditSeverity.Warning,
+            issues.Add(new SectorAuditIssue(mapId, "OUT-TRANSFER", AuditSeverity.Warning,
                 $"{key}: valor ausente o invalido '{value}'."));
             return;
         }
         if (actual != expected)
-            issues.Add(new MapAuditIssue(mapId, "OUT-TRANSFER", AuditSeverity.Warning,
+            issues.Add(new SectorAuditIssue(mapId, "OUT-TRANSFER", AuditSeverity.Warning,
                 $"{key}: {actual} != {expected} (TileExit del mapa)."));
     }
 
-    private static short ParseMapId(string path)
+    private static short ParseSectorId(string path)
     {
         var digits = new string(Path.GetFileNameWithoutExtension(path).Where(char.IsDigit).ToArray());
         return short.TryParse(digits, out var id) ? id : (short)0;

@@ -44,12 +44,12 @@ public sealed class ResourceParityTests
     public void CsmMapFileService_reads_map_one_without_writing_resources()
     {
         var mapPath = Path.Combine(ResourceRoot, "Mapas", "mapa1.csm");
-        var map = new CsmMapFileService().Load(mapPath);
+        var map = new SectorCsmFileService().Load(mapPath);
 
         Assert.Equal("Ciudad de Ullathorpe", map.Info.Name);
-        Assert.Equal(100, WorldMap.Width);
-        Assert.Equal(100, WorldMap.Height);
-        Assert.Contains(map.Blocks.Cast<MapBlock>().Where(block => block is not null), block => block.Graphics[0].GraphicIndex > 0);
+        Assert.Equal(100, WorldSector.Width);
+        Assert.Equal(100, WorldSector.Height);
+        Assert.Contains(map.Blocks.Cast<SectorTile>().Where(block => block is not null), block => block.Graphics[0].GraphicIndex > 0);
         var geometry = MapRenderGeometry.Build(map);
         Assert.NotEmpty(geometry.Tiles);
         Assert.All(geometry.Tiles, tile => Assert.InRange(tile.Layer, 0, 3));
@@ -84,7 +84,7 @@ public sealed class ResourceParityTests
     [Fact]
     public void MapEditingService_sets_and_undoes_a_graphic()
     {
-        var map = new CsmMapFileService().Load(Path.Combine(ResourceRoot, "Mapas", "mapa1.csm"));
+        var map = new SectorCsmFileService().Load(Path.Combine(ResourceRoot, "Mapas", "mapa1.csm"));
         var editing = new MapEditingService();
         var old = map.Blocks[1, 1].Graphics[0].GraphicIndex;
 
@@ -98,7 +98,7 @@ public sealed class ResourceParityTests
     [Fact]
     public void CsmMapFileService_roundtrips_to_a_temp_file()
     {
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var source = service.Load(Path.Combine(ResourceRoot, "Mapas", "mapa1.csm"));
         var target = Path.Combine(Path.GetTempPath(), $"world-editor-{Guid.NewGuid():N}.csm");
         try
@@ -118,8 +118,8 @@ public sealed class ResourceParityTests
     [InlineData(1)] [InlineData(2)] [InlineData(4)] [InlineData(8)] [InlineData(15)]
     public void CsmMapFileService_roundtrips_each_vb6_directional_mask(byte mask)
     {
-        var service = new CsmMapFileService();
-        var source = new WorldMap();
+        var service = new SectorCsmFileService();
+        var source = new WorldSector();
         source.Blocks[12, 13].Blocked = mask;
         var target = Path.Combine(Path.GetTempPath(), $"world-editor-blocked-{Guid.NewGuid():N}.csm");
         try
@@ -133,7 +133,7 @@ public sealed class ResourceParityTests
     [Fact]
     public void CsmMapFileService_preserves_environment_metadata()
     {
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var source = service.Load(Path.Combine(ResourceRoot, "Mapas", "mapa1.csm"));
         source.Environment.BaseLight = 321;
         source.Environment.Rain = 4;
@@ -157,7 +157,7 @@ public sealed class ResourceParityTests
     {
         var sourcePath = Path.Combine(ResourceRoot, "Mapas", "mapa1.map");
         if (!File.Exists(sourcePath)) return;
-        var service = new MapFileService();
+        var service = new LegacySectorFileService();
         var source = service.LoadV3(sourcePath);
         source.Info.MapVersion = 123;
         var target = Path.Combine(Path.GetTempPath(), $"world-editor-{Guid.NewGuid():N}.map");

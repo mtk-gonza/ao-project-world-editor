@@ -30,19 +30,19 @@ internal readonly record struct MapMiniMapOptions(
 /// <summary>Small minimap export equivalent to frmMain minimapSave/SaveAllMiniMap.</summary>
 internal sealed class MapMiniMapService
 {
-    public Bitmap Create(WorldMap map, IReadOnlyList<GraphicData> graphics, bool showBlocked)
+    public Bitmap Create(WorldSector map, IReadOnlyList<GraphicData> graphics, bool showBlocked)
         => Create(map, graphics, MapMiniMapOptions.Vb6Default with { ShowBlocked = showBlocked });
 
-    public Bitmap Create(WorldMap map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
+    public Bitmap Create(WorldSector map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
         IReadOnlyList<ObjectData>? objects = null)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(graphics);
-        var image = new Bitmap(WorldMap.Width, WorldMap.Height, PixelFormat.Format32bppArgb);
+        var image = new Bitmap(WorldSector.Width, WorldSector.Height, PixelFormat.Format32bppArgb);
         using (var canvas = Graphics.FromImage(image)) canvas.Clear(Color.Black);
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {
@@ -95,7 +95,7 @@ internal sealed class MapMiniMapService
         return Color.FromArgb(255, (int)((raw >> 16) & 0xFF), (int)((raw >> 8) & 0xFF), (int)(raw & 0xFF));
     }
 
-    public void SavePng(WorldMap map, IReadOnlyList<GraphicData> graphics, bool showBlocked, string path)
+    public void SavePng(WorldSector map, IReadOnlyList<GraphicData> graphics, bool showBlocked, string path)
         => SavePng(map, graphics, MapMiniMapOptions.Vb6Default with { ShowBlocked = showBlocked }, null, path);
 
     /// <summary>
@@ -103,20 +103,20 @@ internal sealed class MapMiniMapService
     /// At 2 px/tile (the editor panel) this reads as terrain without the aliasing
     /// (stripes) that compressing the raw art produces.
     /// </summary>
-    public Bitmap CreateSmooth(WorldMap map, IReadOnlyList<GraphicData> graphics,
+    public Bitmap CreateSmooth(WorldSector map, IReadOnlyList<GraphicData> graphics,
         GraphicAverageColorService averages, MapMiniMapOptions? options = null,
         IReadOnlyList<ObjectData>? objects = null)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(graphics);
         ArgumentNullException.ThrowIfNull(averages);
         var chosen = options ?? new MapMiniMapOptions(ShowNpcs: true);
-        var image = new Bitmap(WorldMap.Width, WorldMap.Height, PixelFormat.Format32bppArgb);
+        var image = new Bitmap(WorldSector.Width, WorldSector.Height, PixelFormat.Format32bppArgb);
         using var canvas = Graphics.FromImage(image);
         canvas.Clear(Color.Black);
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {
@@ -189,14 +189,14 @@ internal sealed class MapMiniMapService
     /// at world scale the panel is sub-pixel per tile, so the flat colour map is
     /// still the right representation.
     /// </summary>
-    public Bitmap CreateDetailed(WorldMap map, IReadOnlyList<GraphicData> graphics, string resourceRoot,
+    public Bitmap CreateDetailed(WorldSector map, IReadOnlyList<GraphicData> graphics, string resourceRoot,
         int scale = 2, MapMiniMapOptions? options = null, IReadOnlyList<ObjectData>? objects = null)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(graphics);
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceRoot);
         scale = Math.Clamp(scale, 1, 8);
         var chosen = options ?? MapMiniMapOptions.Vb6Default;
-        var image = new Bitmap(WorldMap.Width * scale, WorldMap.Height * scale, PixelFormat.Format32bppArgb);
+        var image = new Bitmap(WorldSector.Width * scale, WorldSector.Height * scale, PixelFormat.Format32bppArgb);
         using var canvas = Graphics.FromImage(image);
         canvas.Clear(Color.Black);
         // Shrinking 32 px of tile art to 2-8 px with NearestNeighbor aliases waves
@@ -219,10 +219,10 @@ internal sealed class MapMiniMapService
         {
             // No sprites available: fall back to the flat palette below.
         }
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         try
         {
             for (var x = minX; x <= maxX; x++)
@@ -295,7 +295,7 @@ internal sealed class MapMiniMapService
         return image;
     }
 
-    public void SaveDetailedPng(WorldMap map, IReadOnlyList<GraphicData> graphics, string resourceRoot,
+    public void SaveDetailedPng(WorldSector map, IReadOnlyList<GraphicData> graphics, string resourceRoot,
         string path, int scale = 2, MapMiniMapOptions? options = null)
     {
         using var image = CreateDetailed(map, graphics, resourceRoot, scale, options);
@@ -303,7 +303,7 @@ internal sealed class MapMiniMapService
         image.Save(path, ImageFormat.Png);
     }
 
-    public void SavePng(WorldMap map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
+    public void SavePng(WorldSector map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
         IReadOnlyList<ObjectData>? objects, string path)
     {
         using var image = Create(map, graphics, options, objects);
@@ -317,7 +317,7 @@ internal sealed class MapMiniMapService
     /// replicates VB6 <c>SavePicture</c>, including its two extra bytes in
     /// biSizeImage and the 2834 pixels-per-meter fields.
     /// </summary>
-    public void SaveBmp(WorldMap map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
+    public void SaveBmp(WorldSector map, IReadOnlyList<GraphicData> graphics, MapMiniMapOptions options,
         IReadOnlyList<ObjectData>? objects, string path)
     {
         using var image = Create(map, graphics, options, objects);

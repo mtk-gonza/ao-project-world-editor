@@ -37,17 +37,17 @@ internal sealed class MapRenderGeometry
     public const int TilePixels = 32;
     public IReadOnlyList<MapTileQuad> Tiles { get; private init; } = [];
 
-    public static MapRenderGeometry Build(WorldMap map)
+    public static MapRenderGeometry Build(WorldSector map)
         => Build(map, new WorldRenderOptions());
 
-    public static MapRenderGeometry Build(WorldMap map, WorldRenderOptions options)
+    public static MapRenderGeometry Build(WorldSector map, WorldRenderOptions options)
     {
         ArgumentNullException.ThrowIfNull(map);
         var tiles = new List<MapTileQuad>();
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var y = minY; y <= maxY; y++)
         for (var x = minX; x <= maxX; x++)
         for (var layer = 0; layer < map.Blocks[x, y].Graphics.Length; layer++)
@@ -99,7 +99,7 @@ internal sealed class MapRenderGeometry
     }
 
     public static MapRenderGeometry Combine(
-        IEnumerable<(WorldMap Map, GlobalChunkCoordinate Chunk)> maps,
+        IEnumerable<(WorldSector Map, GlobalChunkCoordinate Chunk)> maps,
         WorldRenderOptions options)
         => Combine(maps.Select(item => (Build(item.Map, options), item.Chunk)));
 
@@ -147,10 +147,10 @@ internal sealed class MapRenderGeometry
     public static bool IsRoofTrigger(int trigger) =>
         trigger >= 60 || trigger is 1 or 4 or 16;
 
-    private static int NearRoof(WorldMap map, int centerX, int centerY)
+    private static int NearRoof(WorldSector map, int centerX, int centerY)
     {
-        for (var y = Math.Max(1, centerY - 1); y <= Math.Min(WorldMap.Height, centerY + 1); y++)
-        for (var x = Math.Max(1, centerX - 1); x <= Math.Min(WorldMap.Width, centerX + 1); x++)
+        for (var y = Math.Max(1, centerY - 1); y <= Math.Min(WorldSector.Height, centerY + 1); y++)
+        for (var x = Math.Max(1, centerX - 1); x <= Math.Min(WorldSector.Width, centerX + 1); x++)
         {
             var trigger = map.Blocks[x, y].Trigger;
             if (IsRoofTrigger(trigger)) return trigger;

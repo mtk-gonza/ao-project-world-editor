@@ -27,11 +27,11 @@ public sealed class WorldSaveTests
         Assert.EndsWith("mapa1.csm", saved);
         Assert.False(session.CurrentMap.Info.Changed);
         Assert.Equal(1, session.CurrentWorld!.LoadedMapCount);
-        Assert.Equal("edited", new CsmMapFileService().Load(saved).Info.Name);
+        Assert.Equal("edited", new SectorCsmFileService().Load(saved).Info.Name);
         Assert.True(Directory.EnumerateFiles(backupRoot, "mapa1.csm", SearchOption.AllDirectories).Any());
 
         // map2 was never loaded, so it must not be touched or saved.
-        var untouched = new CsmMapFileService().Load(Path.Combine(world.MapsDirectory, "mapa2.csm"));
+        var untouched = new SectorCsmFileService().Load(Path.Combine(world.MapsDirectory, "mapa2.csm"));
         Assert.Equal("two", untouched.Info.Name);
     }
 
@@ -62,10 +62,10 @@ public sealed class WorldSaveTests
             var initDirectory = Path.Combine(Root, "init");
             Directory.CreateDirectory(MapsDirectory);
             Directory.CreateDirectory(initDirectory);
-            var csm = new CsmMapFileService();
-            var first = new WorldMap();
+            var csm = new SectorCsmFileService();
+            var first = new WorldSector();
             first.Info.Name = "one";
-            var second = new WorldMap();
+            var second = new WorldSector();
             second.Info.Name = "two";
             csm.Save(first, Path.Combine(MapsDirectory, "mapa1.csm"));
             csm.Save(second, Path.Combine(MapsDirectory, "mapa2.csm"));

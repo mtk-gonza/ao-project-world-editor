@@ -18,18 +18,18 @@ internal sealed class MapClipboardService
     public (int Width, int Height)? ClipboardSize =>
         _clipboard is null ? null : (_clipboard.Width, _clipboard.Height);
 
-    public void Copy(WorldMap map, TileSelection selection)
+    public void Copy(WorldSector map, TileSelection selection)
     {
         var normalized = selection.Normalize();
         Validate(map, normalized);
-        var blocks = new MapBlock[normalized.Width, normalized.Height];
+        var blocks = new SectorTile[normalized.Width, normalized.Height];
         for (var x = 0; x < normalized.Width; x++)
         for (var y = 0; y < normalized.Height; y++)
             blocks[x, y] = Clone(map.Blocks[normalized.StartX + x, normalized.StartY + y]);
         _clipboard = new ClipboardData(blocks);
     }
 
-    public void Paste(WorldMap map, int targetX, int targetY)
+    public void Paste(WorldSector map, int targetX, int targetY)
     {
         if (_clipboard is null) throw new InvalidOperationException("No hay un bloque copiado.");
         for (var x = 0; x < _clipboard.Width; x++)
@@ -45,26 +45,26 @@ internal sealed class MapClipboardService
         map.Info.Changed = true;
     }
 
-    public void Cut(WorldMap map, TileSelection selection)
+    public void Cut(WorldSector map, TileSelection selection)
     {
         var normalized = selection.Normalize();
         Validate(map, normalized);
         Copy(map, normalized);
         for (var x = normalized.StartX; x <= normalized.EndX; x++)
-        for (var y = normalized.StartY; y <= normalized.EndY; y++) map.Blocks[x, y] = new MapBlock();
+        for (var y = normalized.StartY; y <= normalized.EndY; y++) map.Blocks[x, y] = new SectorTile();
         map.Info.Changed = true;
     }
 
     public void CopyGlobal(GlobalWorldDocument world, GlobalTileSelection selection)
     {
         var normalized = selection.Normalize();
-        var blocks = new MapBlock[normalized.EndX - normalized.StartX + 1, normalized.EndY - normalized.StartY + 1];
+        var blocks = new SectorTile[normalized.EndX - normalized.StartX + 1, normalized.EndY - normalized.StartY + 1];
         for (var x = normalized.StartX; x <= normalized.EndX; x++)
         for (var y = normalized.StartY; y <= normalized.EndY; y++)
         {
-            var block = new MapBlock();
+            var block = new SectorTile();
             if (world.TryResolve(x, y, out var location))
-                Copy(world.Maps[location.MapId].Blocks[location.LocalX, location.LocalY], block);
+                Copy(world.Maps[location.SectorId].Blocks[location.LocalX, location.LocalY], block);
             blocks[x - normalized.StartX, y - normalized.StartY] = block;
         }
         _clipboard = new ClipboardData(blocks);
@@ -78,10 +78,10 @@ internal sealed class MapClipboardService
         for (var y = 0; y < _clipboard.Height; y++)
         {
             if (!world.TryResolve(targetX + x, targetY + y, out var location)) continue;
-            Copy(_clipboard.Blocks[x, y], world.Maps[location.MapId].Blocks[location.LocalX, location.LocalY]);
-            var block = world.Maps[location.MapId].Blocks[location.LocalX, location.LocalY];
+            Copy(_clipboard.Blocks[x, y], world.Maps[location.SectorId].Blocks[location.LocalX, location.LocalY]);
+            var block = world.Maps[location.SectorId].Blocks[location.LocalX, location.LocalY];
             block.NpcIndex = 0; block.CharacterIndex = 0;
-            world.Maps[location.MapId].Info.Changed = true;
+            world.Maps[location.SectorId].Info.Changed = true;
             changed++;
         }
         return changed;
@@ -96,31 +96,31 @@ internal sealed class MapClipboardService
         for (var y = normalized.StartY; y <= normalized.EndY; y++)
         {
             if (!world.TryResolve(x, y, out var location)) continue;
-            world.Maps[location.MapId].Blocks[location.LocalX, location.LocalY] = new MapBlock();
-            world.Maps[location.MapId].Info.Changed = true;
+            world.Maps[location.SectorId].Blocks[location.LocalX, location.LocalY] = new SectorTile();
+            world.Maps[location.SectorId].Info.Changed = true;
             changed++;
         }
         return changed;
     }
 
-    private static void Validate(WorldMap map, TileSelection selection)
+    private static void Validate(WorldSector map, TileSelection selection)
     {
         if (!InDomain(map, selection.StartX, selection.StartY) ||
             !InDomain(map, selection.EndX, selection.EndY))
             throw new ArgumentOutOfRangeException(nameof(selection));
     }
 
-    private static bool InDomain(WorldMap map, int x, int y) =>
-        x >= map.CsmMapSize.XMin && x <= map.CsmMapSize.XMax &&
-        y >= map.CsmMapSize.YMin && y <= map.CsmMapSize.YMax &&
-        x is >= 1 and <= WorldMap.Width && y is >= 1 and <= WorldMap.Height;
+    private static bool InDomain(WorldSector map, int x, int y) =>
+        x >= map.CsmSectorSize.XMin && x <= map.CsmSectorSize.XMax &&
+        y >= map.CsmSectorSize.YMin && y <= map.CsmSectorSize.YMax &&
+        x is >= 1 and <= WorldSector.Width && y is >= 1 and <= WorldSector.Height;
 
-    private static MapBlock Clone(MapBlock source)
+    private static SectorTile Clone(SectorTile source)
     {
-        var destination = new MapBlock(); Copy(source, destination); return destination;
+        var destination = new SectorTile(); Copy(source, destination); return destination;
     }
 
-    private static void Copy(MapBlock source, MapBlock destination)
+    private static void Copy(SectorTile source, SectorTile destination)
     {
         Array.Copy(source.Graphics, destination.Graphics, source.Graphics.Length);
         destination.ObjectGraphic = source.ObjectGraphic;
@@ -133,9 +133,9 @@ internal sealed class MapClipboardService
         destination.NpcIndex = source.NpcIndex; destination.CharacterIndex = source.CharacterIndex;
     }
 
-    private sealed class ClipboardData(MapBlock[,] blocks)
+    private sealed class ClipboardData(SectorTile[,] blocks)
     {
-        public MapBlock[,] Blocks { get; } = blocks;
+        public SectorTile[,] Blocks { get; } = blocks;
         public int Width => Blocks.GetLength(0);
         public int Height => Blocks.GetLength(1);
     }

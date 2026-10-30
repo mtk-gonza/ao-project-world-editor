@@ -17,14 +17,14 @@ public sealed class WorldOutputTests
         Directory.CreateDirectory(maps);
         try
         {
-            var service = new CsmMapFileService();
-            var first = new WorldMap();
+            var service = new SectorCsmFileService();
+            var first = new WorldSector();
             first.Info.Name = "Uno";
             first.Blocks[50, 91].TileExit.Map = 2;
             first.Blocks[50, 10].TileExit.Map = 3;
             first.Blocks[13, 50].TileExit.Map = 4;
             first.Blocks[88, 50].TileExit.Map = 5;
-            var second = new WorldMap();
+            var second = new WorldSector();
             second.Info.Name = "Dos";
             service.Save(first, Path.Combine(maps, "mapa1.csm"));
             service.Save(second, Path.Combine(maps, "mapa2.csm"));
@@ -76,8 +76,8 @@ public sealed class WorldOutputTests
                 "Nota=legacy"
             ], Encoding.Latin1);
 
-            var service = new CsmMapFileService();
-            var map = new WorldMap();
+            var service = new SectorCsmFileService();
+            var map = new WorldSector();
             map.Info.Name = "Ullathorpe";
             map.Blocks[50, 91].TileExit.Map = 7;
             service.Save(map, Path.Combine(maps, "mapa1.csm"));

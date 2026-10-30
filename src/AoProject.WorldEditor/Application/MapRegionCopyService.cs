@@ -10,12 +10,12 @@ internal readonly record struct MapRegion(int StartX, int StartY, int EndX, int 
 }
 
 /// <summary>
-/// Copies the complete MapBlock payload used by Form2/Form3 border stitching.
+/// Copies the complete SectorTile payload used by Form2/Form3 border stitching.
 /// NPCs are intentionally omitted exactly as modDirectDraw.PegarSeleccion does.
 /// </summary>
 internal sealed class MapRegionCopyService
 {
-    public int Copy(WorldMap source, MapRegion region, WorldMap destination, int destinationX, int destinationY)
+    public int Copy(WorldSector source, MapRegion region, WorldSector destination, int destinationX, int destinationY)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
@@ -39,7 +39,7 @@ internal sealed class MapRegionCopyService
         return copied;
     }
 
-    private static void CopyBlock(MapBlock source, MapBlock destination)
+    private static void CopyBlock(SectorTile source, SectorTile destination)
     {
         Array.Copy(source.Graphics, destination.Graphics, source.Graphics.Length);
         destination.ObjectGraphic = source.ObjectGraphic;
@@ -53,14 +53,14 @@ internal sealed class MapRegionCopyService
         destination.TileExit.Map = source.TileExit.Map; destination.TileExit.X = source.TileExit.X; destination.TileExit.Y = source.TileExit.Y;
     }
 
-    private static void Validate(WorldMap map, MapRegion region)
+    private static void Validate(WorldSector map, MapRegion region)
     {
         if (!InDomain(map, region.StartX, region.StartY) || !InDomain(map, region.EndX, region.EndY))
             throw new ArgumentOutOfRangeException(nameof(region));
     }
 
-    private static bool InDomain(WorldMap map, int x, int y) =>
-        x >= map.CsmMapSize.XMin && x <= map.CsmMapSize.XMax &&
-        y >= map.CsmMapSize.YMin && y <= map.CsmMapSize.YMax &&
-        x is >= 1 and <= WorldMap.Width && y is >= 1 and <= WorldMap.Height;
+    private static bool InDomain(WorldSector map, int x, int y) =>
+        x >= map.CsmSectorSize.XMin && x <= map.CsmSectorSize.XMax &&
+        y >= map.CsmSectorSize.YMin && y <= map.CsmSectorSize.YMax &&
+        x is >= 1 and <= WorldSector.Width && y is >= 1 and <= WorldSector.Height;
 }

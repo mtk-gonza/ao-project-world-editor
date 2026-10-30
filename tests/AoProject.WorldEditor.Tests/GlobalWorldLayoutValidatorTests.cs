@@ -9,31 +9,31 @@ public sealed class GlobalWorldLayoutValidatorTests
     [Fact]
     public void Reports_official_maps_without_reachable_tile_exits()
     {
-        var maps = new Dictionary<short, WorldMap> { [1] = new(), [2] = new() };
+        var maps = new Dictionary<short, WorldSector> { [1] = new(), [2] = new() };
         var official = new GlobalWorldAssembly
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "world-1")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "world-1")
             ]
         };
 
         var issues = new GlobalWorldLayoutValidator().Validate(official, maps, 1);
 
-        Assert.Contains(issues, issue => issue.MapId == 2);
+        Assert.Contains(issues, issue => issue.SectorId == 2);
     }
 
     [Fact]
     public void Does_not_throw_when_official_layout_repeats_a_map_id()
     {
-        var maps = new Dictionary<short, WorldMap> { [1] = new() };
+        var maps = new Dictionary<short, WorldSector> { [1] = new() };
         var official = new GlobalWorldAssembly
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(1, 0), "world-1")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(1, 0), "world-1")
             ]
         };
 
@@ -45,8 +45,8 @@ public sealed class GlobalWorldLayoutValidatorTests
     [Fact]
     public void Accepts_a_pair_with_canonical_exits_in_both_directions()
     {
-        var first = new WorldMap();
-        var second = new WorldMap();
+        var first = new WorldSector();
+        var second = new WorldSector();
         first.Blocks[88, 50].TileExit.Map = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
@@ -58,13 +58,13 @@ public sealed class GlobalWorldLayoutValidatorTests
             Width = 2,
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "world-1")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "world-1")
             ]
         };
 
         var issues = new GlobalWorldLayoutValidator().Validate(official,
-            new Dictionary<short, WorldMap> { [1] = first, [2] = second }, 1);
+            new Dictionary<short, WorldSector> { [1] = first, [2] = second }, 1);
 
         Assert.Empty(issues);
     }
@@ -72,8 +72,8 @@ public sealed class GlobalWorldLayoutValidatorTests
     [Fact]
     public void Accepts_the_horizontal_seam_when_the_world_wraps()
     {
-        var first = new WorldMap();
-        var last = new WorldMap();
+        var first = new WorldSector();
+        var last = new WorldSector();
         first.Blocks[13, 50].TileExit.Map = 3;
         first.Blocks[13, 50].TileExit.X = 87;
         first.Blocks[13, 50].TileExit.Y = 50;
@@ -86,13 +86,13 @@ public sealed class GlobalWorldLayoutValidatorTests
             WrapX = true,
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
-                new GlobalMapPlacement(3, new GlobalChunkCoordinate(2, 0), "world-1")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world-1"),
+                new GlobalSectorPlacement(3, new GlobalChunkCoordinate(2, 0), "world-1")
             ]
         };
 
         var issues = new GlobalWorldLayoutValidator().Validate(official,
-            new Dictionary<short, WorldMap> { [1] = first, [3] = last }, 1);
+            new Dictionary<short, WorldSector> { [1] = first, [3] = last }, 1);
 
         Assert.Empty(issues);
     }
@@ -105,13 +105,13 @@ public sealed class GlobalWorldLayoutValidatorTests
             Width = 2,
             Placements =
             [
-                new GlobalMapPlacement(300, new GlobalChunkCoordinate(0, 0), "world-1"),
-                new GlobalMapPlacement(300, new GlobalChunkCoordinate(1, 0), "world-1")
+                new GlobalSectorPlacement(300, new GlobalChunkCoordinate(0, 0), "world-1"),
+                new GlobalSectorPlacement(300, new GlobalChunkCoordinate(1, 0), "world-1")
             ]
         };
 
         var issues = new GlobalWorldLayoutValidator().Validate(official,
-            new Dictionary<short, WorldMap> { [300] = new() }, 300);
+            new Dictionary<short, WorldSector> { [300] = new() }, 300);
 
         Assert.Empty(issues);
     }

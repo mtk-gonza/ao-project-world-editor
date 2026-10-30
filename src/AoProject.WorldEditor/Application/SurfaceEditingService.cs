@@ -5,18 +5,18 @@ namespace AoProject.WorldEditor.Application;
 /// <summary>Surface and border operations from modEdicion.bas.</summary>
 internal sealed class SurfaceEditingService
 {
-    public void Fill(WorldMap map, int layer, int graphic, int mosaicWidth = 0, int mosaicHeight = 0)
+    public void Fill(WorldSector map, int layer, int graphic, int mosaicWidth = 0, int mosaicHeight = 0)
     {
         ValidateLayer(layer);
         ForEach(map, (x, y, block) => block.Graphics[layer].GraphicIndex = Mosaic(graphic, x, y, mosaicWidth, mosaicHeight));
         map.Info.Changed = true;
     }
 
-    public void FillBorders(WorldMap map, int layer, int graphic, int minX = 13, int maxX = 88, int minY = 10, int maxY = 91)
+    public void FillBorders(WorldSector map, int layer, int graphic, int minX = 13, int maxX = 88, int minY = 10, int maxY = 91)
     {
         ValidateLayer(layer);
-        minX = Math.Max(minX, map.CsmMapSize.XMin); maxX = Math.Min(maxX, map.CsmMapSize.XMax);
-        minY = Math.Max(minY, map.CsmMapSize.YMin); maxY = Math.Min(maxY, map.CsmMapSize.YMax);
+        minX = Math.Max(minX, map.CsmSectorSize.XMin); maxX = Math.Min(maxX, map.CsmSectorSize.XMax);
+        minY = Math.Max(minY, map.CsmSectorSize.YMin); maxY = Math.Min(maxY, map.CsmSectorSize.YMax);
         ForEach(map, (x, y, block) =>
         {
             if (x < minX || x > maxX || y < minY || y > maxY)
@@ -25,12 +25,12 @@ internal sealed class SurfaceEditingService
         map.Info.Changed = true;
     }
 
-    public void LockBorders(WorldMap map)
+    public void LockBorders(WorldSector map)
     {
-        var domainMinX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var domainMaxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var domainMinY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var domainMaxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var domainMinX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var domainMaxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var domainMinY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var domainMaxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         var innerMinX = Math.Clamp(13, domainMinX, domainMaxX);
         var innerMaxX = Math.Clamp(88, domainMinX, domainMaxX);
         var innerMinY = Math.Clamp(10, domainMinY, domainMaxY);
@@ -50,12 +50,12 @@ internal sealed class SurfaceEditingService
     private static int Mosaic(int graphic, int x, int y, int width, int height) =>
         width > 0 && height > 0 ? graphic + ((y % height) * width) + (x % width) : graphic;
 
-    private static void ForEach(WorldMap map, Action<int, int, MapBlock> action)
+    private static void ForEach(WorldSector map, Action<int, int, SectorTile> action)
     {
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++) action(x, y, map.Blocks[x, y]);
     }
@@ -65,8 +65,8 @@ internal sealed class SurfaceEditingService
         if (layer is < 0 or >= 4) throw new ArgumentOutOfRangeException(nameof(layer));
     }
 
-    private static bool InMapDomain(WorldMap map, int x, int y) =>
-        x >= map.CsmMapSize.XMin && x <= map.CsmMapSize.XMax &&
-        y >= map.CsmMapSize.YMin && y <= map.CsmMapSize.YMax &&
-        x is >= 1 and <= WorldMap.Width && y is >= 1 and <= WorldMap.Height;
+    private static bool InMapDomain(WorldSector map, int x, int y) =>
+        x >= map.CsmSectorSize.XMin && x <= map.CsmSectorSize.XMax &&
+        y >= map.CsmSectorSize.YMin && y <= map.CsmSectorSize.YMax &&
+        x is >= 1 and <= WorldSector.Width && y is >= 1 and <= WorldSector.Height;
 }

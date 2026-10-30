@@ -5,22 +5,22 @@ using AoProject.WorldEditor.Infrastructure;
 namespace AoProject.WorldEditor.Application;
 
 internal sealed record LooseMapTeleportAuditEntry(
-    short SourceMapId,
+    short SourceSectorId,
     int SourceX,
     int SourceY,
-    short TargetMapId,
+    short TargetSectorId,
     short TargetX,
     short TargetY,
     string Classification);
 
 internal sealed class LooseMapTeleportAuditService
 {
-    private static readonly Regex MapIdPattern = new(@"(?<!\d)\d+", RegexOptions.Compiled);
+    private static readonly Regex SectorIdPattern = new(@"(?<!\d)\d+", RegexOptions.Compiled);
     public IReadOnlyList<LooseMapTeleportAuditEntry> Audit(string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         var files = Directory.EnumerateFiles(directory, "*.csm", SearchOption.TopDirectoryOnly)
-            .Select(path => (Path: path, Id: ParseMapId(path)))
+            .Select(path => (Path: path, Id: ParseSectorId(path)))
             .Where(item => item.Id > 0)
             .GroupBy(item => item.Id)
             .Select(group => group.First())
@@ -34,7 +34,7 @@ internal sealed class LooseMapTeleportAuditService
             .SelectMany(file => AuditMap(file.Path, file.Id, available))
             .ToList();
         return result.OrderBy(item => item.Classification)
-            .ThenBy(item => item.SourceMapId)
+            .ThenBy(item => item.SourceSectorId)
             .ThenBy(item => item.SourceY)
             .ThenBy(item => item.SourceX)
             .ToArray();
@@ -48,7 +48,7 @@ internal sealed class LooseMapTeleportAuditService
         {
         using var reader = new BinaryReader(File.OpenRead(path), Encoding.Latin1);
         var counts = Enumerable.Range(0, 11).Select(_ => reader.ReadInt32()).ToArray();
-        _ = reader.ReadBytes(8); // CsmMapSize
+        _ = reader.ReadBytes(8); // CsmSectorSize
         SkipString(reader); _ = reader.ReadByte(); SkipString(reader);
         _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadByte();
         SkipString(reader); SkipString(reader); SkipString(reader);
@@ -108,18 +108,18 @@ internal sealed class LooseMapTeleportAuditService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var builder = new StringBuilder().AppendLine(
-            "SourceMapId\tSourceX\tSourceY\tTargetMapId\tTargetX\tTargetY\tClassification");
+            "SourceSectorId\tSourceX\tSourceY\tTargetMapId\tTargetX\tTargetY\tClassification");
         foreach (var entry in entries)
-            builder.Append(entry.SourceMapId).Append('\t').Append(entry.SourceX).Append('\t')
-                .Append(entry.SourceY).Append('\t').Append(entry.TargetMapId).Append('\t')
+            builder.Append(entry.SourceSectorId).Append('\t').Append(entry.SourceX).Append('\t')
+                .Append(entry.SourceY).Append('\t').Append(entry.TargetSectorId).Append('\t')
                 .Append(entry.TargetX).Append('\t').Append(entry.TargetY).Append('\t')
                 .Append(entry.Classification).AppendLine();
         File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
     }
 
-    private static short ParseMapId(string path)
+    private static short ParseSectorId(string path)
     {
-        var match = MapIdPattern.Match(Path.GetFileNameWithoutExtension(path));
+        var match = SectorIdPattern.Match(Path.GetFileNameWithoutExtension(path));
         return match.Success && short.TryParse(match.Value, out var id) ? id : (short)0;
     }
 }

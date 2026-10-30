@@ -8,7 +8,7 @@ namespace AoProject.WorldEditor.Application;
 /// <summary>Full-map image export equivalent to FrmRender/MapCapture.</summary>
 internal sealed class MapImageCaptureService
 {
-    public Bitmap Capture(WorldMap map, IReadOnlyList<GraphicData> graphics, string resourceRoot, double elapsedSeconds = 0d,
+    public Bitmap Capture(WorldSector map, IReadOnlyList<GraphicData> graphics, string resourceRoot, double elapsedSeconds = 0d,
         IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<ParticleData>? particles = null,
         IReadOnlyList<NpcData>? npcs = null, IReadOnlyList<DirectionalAnimation>? bodies = null,
         IReadOnlyList<HeadIndexData>? heads = null,
@@ -18,13 +18,13 @@ internal sealed class MapImageCaptureService
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(graphics);
         var resolver = new PreviewResolver(resourceRoot);
-        var image = new Bitmap(WorldMap.Width * 32, WorldMap.Height * 32, PixelFormat.Format32bppArgb);
+        var image = new Bitmap(WorldSector.Width * 32, WorldSector.Height * 32, PixelFormat.Format32bppArgb);
         using var canvas = Graphics.FromImage(image);
         canvas.Clear(Color.Black);
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         DrawLayer(0);
         DrawLayer(1);
         DrawObjects();
@@ -140,7 +140,7 @@ internal sealed class MapImageCaptureService
         return current;
     }
 
-    public void SavePng(WorldMap map, IReadOnlyList<GraphicData> graphics, string resourceRoot, string path,
+    public void SavePng(WorldSector map, IReadOnlyList<GraphicData> graphics, string resourceRoot, string path,
         double elapsedSeconds = 0d, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<ParticleData>? particles = null,
         IReadOnlyList<NpcData>? npcs = null, IReadOnlyList<DirectionalAnimation>? bodies = null,
         IReadOnlyList<HeadIndexData>? heads = null,
@@ -154,7 +154,7 @@ internal sealed class MapImageCaptureService
         image.Save(path, ImageFormat.Png);
     }
 
-    public void Save(WorldMap map, IReadOnlyList<GraphicData> graphics, string resourceRoot, string path,
+    public void Save(WorldSector map, IReadOnlyList<GraphicData> graphics, string resourceRoot, string path,
         double elapsedSeconds = 0d, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<ParticleData>? particles = null,
         IReadOnlyList<NpcData>? npcs = null, IReadOnlyList<DirectionalAnimation>? bodies = null,
         IReadOnlyList<HeadIndexData>? heads = null)

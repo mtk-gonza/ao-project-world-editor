@@ -27,7 +27,7 @@ public sealed class DetailedMiniMapTests
                 texture.Save(Path.Combine(graphicsDir, "1.png"), ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Graphics[0].GraphicIndex = 1;
             var graphics = new[]
             {
@@ -68,7 +68,7 @@ public sealed class DetailedMiniMapTests
         Directory.CreateDirectory(Path.Combine(root, "Graficos"));
         try
         {
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[2, 2].Graphics[0].GraphicIndex = 1;
             var graphics = new[]
             {
@@ -102,7 +102,7 @@ public sealed class DetailedMiniMapTests
         Directory.CreateDirectory(Path.Combine(root, "Graficos"));
         try
         {
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[3, 4].NpcIndex = 7;
 
             using var withNpcs = new MapMiniMapService().CreateDetailed(map, [], root, scale: 2,
@@ -128,10 +128,10 @@ public sealed class DetailedMiniMapTests
         Directory.CreateDirectory(Path.Combine(root, "Graficos"));
         try
         {
-            using var huge = new MapMiniMapService().CreateDetailed(new WorldMap(), [], root, scale: 99);
-            Assert.Equal(WorldMap.Width * 8, huge.Width);
-            using var tiny = new MapMiniMapService().CreateDetailed(new WorldMap(), [], root, scale: 0);
-            Assert.Equal(WorldMap.Width, tiny.Width);
+            using var huge = new MapMiniMapService().CreateDetailed(new WorldSector(), [], root, scale: 99);
+            Assert.Equal(WorldSector.Width * 8, huge.Width);
+            using var tiny = new MapMiniMapService().CreateDetailed(new WorldSector(), [], root, scale: 0);
+            Assert.Equal(WorldSector.Width, tiny.Width);
         }
         finally
         {

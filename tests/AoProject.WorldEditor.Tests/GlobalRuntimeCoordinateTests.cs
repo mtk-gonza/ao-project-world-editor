@@ -9,15 +9,15 @@ public sealed class GlobalRuntimeCoordinateTests
     [Fact]
     public void Runtime_resolver_returns_global_coordinate_without_map_id()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var world = new GlobalWorldDocument(
             new GlobalWorldAssembly
             {
                 Width = 1,
                 Height = 1,
-                Placements = [new GlobalMapPlacement(842, new GlobalChunkCoordinate(0, 0), "world")]
+                Placements = [new GlobalSectorPlacement(842, new GlobalChunkCoordinate(0, 0), "world")]
             },
-            new Dictionary<short, WorldMap> { [842] = map },
+            new Dictionary<short, WorldSector> { [842] = map },
             new Dictionary<short, string> { [842] = "mapa842.csm" }, 842);
 
         Assert.True(world.TryResolveGlobal(12, 9, out var coordinate));
@@ -34,11 +34,11 @@ public sealed class GlobalRuntimeCoordinateTests
                 Height = 1,
                 Placements =
                 [
-                    new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world"),
-                    new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "world")
+                    new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world"),
+                    new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "world")
                 ]
             },
-            new Dictionary<short, WorldMap> { [1] = new(), [2] = new() },
+            new Dictionary<short, WorldSector> { [1] = new(), [2] = new() },
             new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
 
         Assert.True(world.TryResolveLegacyExit(2, 14, 50, out var target));
@@ -48,16 +48,16 @@ public sealed class GlobalRuntimeCoordinateTests
     [Fact]
     public void Compacted_stitch_audit_does_not_mutate_source_maps()
     {
-        var source = new WorldMap();
+        var source = new WorldSector();
         source.Blocks[13, 10].Graphics[0].GraphicIndex = 123;
         var world = new GlobalWorldDocument(
             new GlobalWorldAssembly
             {
                 Width = 1,
                 Height = 1,
-                Placements = [new GlobalMapPlacement(7, new GlobalChunkCoordinate(0, 0), "world")]
+                Placements = [new GlobalSectorPlacement(7, new GlobalChunkCoordinate(0, 0), "world")]
             },
-            new Dictionary<short, WorldMap> { [7] = source },
+            new Dictionary<short, WorldSector> { [7] = source },
             new Dictionary<short, string> { [7] = "mapa7.csm" }, 7);
 
         var result = new GlobalStitchAuditService().AuditCompactedMaterialization(world);

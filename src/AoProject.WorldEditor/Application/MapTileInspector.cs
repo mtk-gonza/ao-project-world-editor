@@ -5,11 +5,11 @@ namespace AoProject.WorldEditor.Application;
 
 internal sealed class MapTileInspector
 {
-    public string Describe(WorldMap map, int x, int y, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<NpcData>? npcs = null)
+    public string Describe(WorldSector map, int x, int y, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<NpcData>? npcs = null)
     {
-        if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-            y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-            x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height) throw new ArgumentOutOfRangeException(nameof(x));
+        if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+            y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+            x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) throw new ArgumentOutOfRangeException(nameof(x));
         var block = map.Blocks[x, y]; var text = new StringBuilder($"Posición {x},{y}");
         if (block.Blocked != 0) text.Append(" (BLOQ)");
         if (block.TileExit.Map != 0) text.Append($" (Trans.: {block.TileExit.Map},{block.TileExit.X},{block.TileExit.Y})");

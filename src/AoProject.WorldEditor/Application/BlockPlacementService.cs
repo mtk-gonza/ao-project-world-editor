@@ -5,7 +5,7 @@ namespace AoProject.WorldEditor.Application;
 /// <summary>Places a rectangular block using the same sequential GRH rule as PonerGrh.</summary>
 internal sealed class BlockPlacementService
 {
-    public int Place(WorldMap map, BlockPresetType preset, BlockPreset item, int startX, int startY)
+    public int Place(WorldSector map, BlockPresetType preset, BlockPreset item, int startX, int startY)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(preset);
@@ -19,7 +19,7 @@ internal sealed class BlockPlacementService
         {
             var targetX = startX + x;
             var targetY = startY + y;
-            if (targetX is < 1 or > WorldMap.Width || targetY is < 1 or > WorldMap.Height)
+            if (targetX is < 1 or > WorldSector.Width || targetY is < 1 or > WorldSector.Height)
                 continue;
             map.Blocks[targetX, targetY].Graphics[preset.Layer - 1].GraphicIndex = item.GraphicIndex + placed;
             map.Blocks[targetX, targetY].Blocked = item.DefaultBlockedMask;

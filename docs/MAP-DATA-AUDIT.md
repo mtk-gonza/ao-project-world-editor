@@ -58,11 +58,11 @@ caption (`frmMain.frm:7174-7178`) y el minimapa se guarda como
 | Area | Comprobacion |
 | --- | --- |
 | Lectura | El archivo parsea completo; counts 0..1.000.000 |
-| Size | `CsmMapSize` valido; `0,0,0,0` se interpreta como 100x100 (default VB6) |
+| Size | `CsmSectorSize` valido; `0,0,0,0` se interpreta como 100x100 (default VB6) |
 | Counts | Count del header == registros unicos de cada categoria |
 | Duplicados | Dos registros para el mismo tile/categoria |
 | Rangos | Registros fuera de 1..100 |
-| Bounds | Contenido fuera de `CsmMapSize` |
+| Bounds | Contenido fuera de `CsmSectorSize` |
 | Trailing | Bytes sobrantes (restos de un guardado VB6 mas largo) |
 | Metadata | Nombre, musica, safety, clima, restriccion, `Level`, `Exit` |
 | GRH | Indice dentro de `graficos.ind` y PNG existente |
@@ -79,7 +79,7 @@ caption (`frmMain.frm:7174-7178`) y el minimapa se guarda como
 | --- | --- |
 | Chunk | Dentro de `Width x Height`; sin chunks duplicados |
 | Core | `13..88 / 10..91`; `14/11` en mapas con vecino oeste/norte |
-| CsmMapSize | El core intersecta y, si no lo cubre completo, se avisa |
+| CsmSectorSize | El core intersecta y, si no lo cubre completo, se avisa |
 | Round-trip | 9 puntos por mapa: `TryGetGlobalTile` -> `TryResolve` |
 | Cobertura | Sin huecos ni solapamientos entre cores visibles |
 | Contiguidad | Filas y columnas contiguas (`right+1 == next.left`) |
@@ -273,7 +273,7 @@ El `output-summary.txt` informa `Nombres nuevos`, `Secciones nuevas` y si se uso
    round-trip: 547 -> 0.
 2. **Strings CSM leidos/escritos como UTF-8** en lugar de ANSI/Latin1. Los nombres
    con acentos se corrompian (`Cercanias`, `Montana`, etc.). Corregido a Latin1.
-3. **`CsmMapSize` 0,0,0,0** es el default VB6 para 100x100; la auditoria lo
+3. **`CsmSectorSize` 0,0,0,0** es el default VB6 para 100x100; la auditoria lo
    interpreta como default y no como error.
 4. **Bytes sobrantes** al final de 790 mapas: son restos de un guardado VB6 mas
    largo (`Open For Binary` no trunca). El C# trunca al guardar; se reporta como

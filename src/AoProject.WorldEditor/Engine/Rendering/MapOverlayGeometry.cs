@@ -21,16 +21,16 @@ internal static class MapOverlayGeometry
     public const int TransferGraphic = 3;
     public const int TriggerDigitBase = 21452;
 
-    public static IReadOnlyList<MapOverlay> Build(WorldMap map, WorldRenderOptions options, (int X, int Y)? selected = null,
+    public static IReadOnlyList<MapOverlay> Build(WorldSector map, WorldRenderOptions options, (int X, int Y)? selected = null,
         (int MinX, int MaxX, int MinY, int MaxY)? bounds = null)
     {
         var overlays = new List<MapOverlay>();
         if (AffectsTiles(options))
         {
-            var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-            var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-            var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-            var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+            var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+            var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+            var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+            var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
             // Only the visible tile rect matters: building the whole map per
             // frame costs ~16 ms in the world view and produces overlays that
             // the renderer then truncates.

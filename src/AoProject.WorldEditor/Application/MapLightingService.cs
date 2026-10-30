@@ -55,14 +55,14 @@ internal sealed class MapLightingService
     /// map load only runs the round-light pass (`LightA.Create_Light_To_Map`).
     /// Keep this false to reproduce the load-time appearance.
     /// </param>
-    public int[,,] Compute(WorldMap map, int ambientColor, bool includeFlatLights = false)
+    public int[,,] Compute(WorldSector map, int ambientColor, bool includeFlatLights = false)
     {
         ArgumentNullException.ThrowIfNull(map);
-        var lights = new int[WorldMap.Width + 1, WorldMap.Height + 1, 4];
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var lights = new int[WorldSector.Width + 1, WorldSector.Height + 1, 4];
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {
@@ -115,7 +115,7 @@ internal sealed class MapLightingService
 
         void SetCorners(int x, int y, params int[] corners)
         {
-            if (x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height) return;
+            if (x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) return;
             foreach (var corner in corners) lights[x, y, corner] = color;
         }
     }
@@ -129,9 +129,9 @@ internal sealed class MapLightingService
         var lightColor = ToColorValue(color);
         var ambient = ToColorValue(AmbientFromColor(ambientColor));
         var minX = Math.Max(1, centerX - range);
-        var maxX = Math.Min(WorldMap.Width, centerX + range);
+        var maxX = Math.Min(WorldSector.Width, centerX + range);
         var minY = Math.Max(1, centerY - range);
-        var maxY = Math.Min(WorldMap.Height, centerY + range);
+        var maxY = Math.Min(WorldSector.Height, centerY + range);
 
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)

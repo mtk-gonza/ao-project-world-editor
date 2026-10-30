@@ -29,14 +29,14 @@ public sealed class RealMapLightingTests
         var mapPath = Path.Combine(root, "Mapas", "mapa1.csm");
         if (!File.Exists(mapPath)) return;
 
-        var map = new CsmMapFileService().Load(mapPath);
+        var map = new SectorCsmFileService().Load(mapPath);
         var lights = new MapLightingService().Compute(map, MapLightingService.NightLight);
         _output.WriteLine($"NightLight=0x{MapLightingService.NightLight:X8} t10=0x{lights[10, 10, 0]:X8} t50=0x{lights[50, 50, 0]:X8} t90=0x{lights[90, 90, 0]:X8}");
 
-        var lightCount = map.Blocks.Cast<Domain.MapBlock>().Count(block => block is not null && block.Light.Range != 0);
+        var lightCount = map.Blocks.Cast<Domain.SectorTile>().Count(block => block is not null && block.Light.Range != 0);
         _output.WriteLine($"tiles with light = {lightCount}");
-        for (var x = 1; x <= Domain.WorldMap.Width; x++)
-        for (var y = 1; y <= Domain.WorldMap.Height; y++)
+        for (var x = 1; x <= Domain.WorldSector.Width; x++)
+        for (var y = 1; y <= Domain.WorldSector.Height; y++)
         {
             var block = map.Blocks[x, y];
             if (block.Light.Range == 0) continue;

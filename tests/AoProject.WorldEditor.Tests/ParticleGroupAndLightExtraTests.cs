@@ -22,7 +22,7 @@ public sealed class ParticleGroupAndLightExtraTests
     [Fact]
     public void Particle_groups_sync_from_map_blocks()
     {
-        var map = new WorldMap(); map.Blocks[8, 9].ParticleIndex = 5;
+        var map = new WorldSector(); map.Blocks[8, 9].ParticleIndex = 5;
         var groups = new ParticleGroupService();
         Assert.Equal(1, groups.SyncFromMap(map));
         Assert.Equal(1, groups.Find(8, 9));
@@ -31,7 +31,7 @@ public sealed class ParticleGroupAndLightExtraTests
     [Fact]
     public void Particle_group_id_is_preserved_and_shared_tiles_are_not_duplicated()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[8, 9].ParticleGroup = 7;
         map.Blocks[8, 9].ParticleIndex = 5;
         map.Blocks[9, 9].ParticleGroup = 7;
@@ -47,7 +47,7 @@ public sealed class ParticleGroupAndLightExtraTests
     [Fact]
     public void Sync_from_map_preserves_the_runtime_group_instance()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[8, 9].ParticleGroup = 4;
         map.Blocks[8, 9].ParticleIndex = 5;
         var groups = new ParticleGroupService();

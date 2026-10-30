@@ -15,7 +15,7 @@ public sealed class BatchMapExportTests
         Directory.CreateDirectory(maps); Directory.CreateDirectory(Path.Combine(root, "Graficos"));
         try
         {
-            var io = new CsmMapFileService(); io.Save(new WorldMap(), Path.Combine(maps, "mapa1.csm")); io.Save(new WorldMap(), Path.Combine(maps, "mapa2.csm"));
+            var io = new SectorCsmFileService(); io.Save(new WorldSector(), Path.Combine(maps, "mapa1.csm")); io.Save(new WorldSector(), Path.Combine(maps, "mapa2.csm"));
             var results = new BatchMapExportService().ExportDirectory(maps, output, [new GraphicData()], root);
             Assert.Equal(2, results.Count); Assert.All(results, result => Assert.True(result.Exported));
             Assert.True(File.Exists(Path.Combine(output, "mapa1.png"))); Assert.True(File.Exists(Path.Combine(output, "mapa2.png")));

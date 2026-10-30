@@ -9,7 +9,7 @@ public sealed class SurfaceWholeMapTests
     [Fact]
     public void Whole_map_surface_applies_mosaic_without_changing_other_payloads()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].NpcIndex = 3;
         var placed = new SurfaceWholeMapService().Place(map, 0, 1000, true, 2, 2);
 

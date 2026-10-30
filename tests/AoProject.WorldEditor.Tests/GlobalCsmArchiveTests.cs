@@ -16,8 +16,8 @@ public sealed class GlobalCsmArchiveTests
         {
             var first = Path.Combine(root, "mapa1.csm");
             var second = Path.Combine(root, "mapa2.csm");
-            new CsmMapFileService().Save(new WorldMap(), first);
-            new CsmMapFileService().Save(new WorldMap(), second);
+            new SectorCsmFileService().Save(new WorldSector(), first);
+            new SectorCsmFileService().Save(new WorldSector(), second);
             File.WriteAllText(Path.Combine(root, "Mapa1.dat"), "NAME=Primer mapa\r\nPK=1\r\n");
             File.WriteAllBytes(Path.Combine(root, "Mapa1.inf"), [1, 2, 3, 4]);
 
@@ -25,10 +25,10 @@ public sealed class GlobalCsmArchiveTests
             {
                 Width = 2,
                 Height = 1,
-                Placements = [new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
+                Placements = [new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
             },
                 new Dictionary<short, string> { [1] = first, [2] = second }, 1,
-                (_, path) => new CsmMapFileService().Load(path));
+                (_, path) => new SectorCsmFileService().Load(path));
             var archive = Path.Combine(root, "mapaGlobal.csm");
             new GlobalCsmArchiveService().Save(document, archive);
 
@@ -38,7 +38,7 @@ public sealed class GlobalCsmArchiveTests
             Assert.Contains("[AssemblyPlacements]", globalDat);
             Assert.Contains("Mapa1=0,0,world", globalDat);
             Assert.Contains("[Mapa1]", globalDat);
-            Assert.Equal(new short[] { 1, 2 }, GlobalCsmArchiveService.ReadMapIds(archive));
+            Assert.Equal(new short[] { 1, 2 }, GlobalCsmArchiveService.ReadSectorIds(archive));
             Assert.True(GlobalCsmArchiveService.TryRead(archive, 2, out var payload));
             Assert.Equal(File.ReadAllBytes(second), payload);
             Assert.True(GlobalCsmArchiveService.TryReadSidecar(archive, 1, "Mapa1.dat", out var dat));
@@ -63,15 +63,15 @@ public sealed class GlobalCsmArchiveTests
         try
         {
             var source = Path.Combine(root, "mapa1.csm");
-            new CsmMapFileService().Save(new WorldMap(), source);
+            new SectorCsmFileService().Save(new WorldSector(), source);
             var document = new GlobalWorldDocument(
                 new GlobalWorldAssembly
                 {
                     Width = 1,
                     Height = 1,
-                    Placements = [new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
+                    Placements = [new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
                 },
-                new Dictionary<short, WorldMap> { [1] = new CsmMapFileService().Load(source) },
+                new Dictionary<short, WorldSector> { [1] = new SectorCsmFileService().Load(source) },
                 new Dictionary<short, string> { [1] = source }, 1);
             var csm = Path.Combine(root, "world", "world.csm");
             var mapFile = Path.Combine(root, "world", "world.map");
@@ -101,9 +101,9 @@ public sealed class GlobalCsmArchiveTests
             {
                 Width = 1,
                 Height = 1,
-                Placements = [new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
+                Placements = [new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world")]
             },
-            new Dictionary<short, WorldMap>(), new Dictionary<short, string>(), 1);
+            new Dictionary<short, WorldSector>(), new Dictionary<short, string>(), 1);
         var image = new GlobalResolvedWorldSnapshot.EmbeddedImage("worldmap/world.png", [1, 2, 3]);
 
         var data = GlobalResolvedWorldSnapshot.Serialize(document, [image]);

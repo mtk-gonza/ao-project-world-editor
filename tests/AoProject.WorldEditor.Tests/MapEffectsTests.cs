@@ -9,7 +9,7 @@ public sealed class MapEffectsTests
     [Fact]
     public void Lights_and_particles_are_mutable_and_clearable()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var effects = new MapEffectsEditingService();
         effects.SetLight(map, 4, 5, 20, 0x112233);
         effects.SetParticle(map, 6, 7, 1234);

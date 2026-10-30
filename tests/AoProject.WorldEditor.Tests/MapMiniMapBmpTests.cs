@@ -15,7 +15,7 @@ public sealed class MapMiniMapBmpTests
         Directory.CreateDirectory(root);
         try
         {
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[3, 4].Graphics[0].GraphicIndex = 1;
             var graphics = new[]
             {

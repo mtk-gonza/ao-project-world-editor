@@ -24,7 +24,7 @@ internal sealed record FullAuditResult(
 
 /// <summary>
 /// Runs the complete audit: every CSM file (format, references, round-trip)
-/// and every official WORLDMAP (coordinates, coverage, exits, CsmMapSize).
+/// and every official WORLDMAP (coordinates, coverage, exits, CsmSectorSize).
 /// Writes TSV/TXT evidence under artifacts/audit/&lt;timestamp&gt;.
 /// </summary>
 internal sealed class WorldAuditService
@@ -40,14 +40,14 @@ internal sealed class WorldAuditService
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceRoot);
         catalog ??= WorldEditorResourceCatalog.Load(resourceRoot);
         var files = Directory.EnumerateFiles(mapsDirectory, "*.csm", SearchOption.TopDirectoryOnly)
-            .Select(path => (Path: path, Id: ParseMapId(path)))
+            .Select(path => (Path: path, Id: ParseSectorId(path)))
             .Where(item => item.Id > 0)
             .GroupBy(item => item.Id).Select(group => group.First())
             .OrderBy(item => item.Id)
             .ToArray();
         var available = files.Select(item => item.Id).ToHashSet();
         var mapAudit = new MapDataAuditService(catalog);
-        var summaries = new List<MapAuditSummary>();
+        var summaries = new List<SectorAuditSummary>();
         var coordinates = new Dictionary<short, MapCoordinateInfo>();
         for (var index = 0; index < files.Length; index++)
         {
@@ -114,12 +114,12 @@ internal sealed class WorldAuditService
         File.WriteAllText(Path.Combine(directory, "index-stats.tsv"), stats.ToString(), Encoding.UTF8);
     }
 
-    private static void WriteMapReports(string directory, IReadOnlyList<MapAuditSummary> summaries)
+    private static void WriteMapReports(string directory, IReadOnlyList<SectorAuditSummary> summaries)
     {
-        var issues = new StringBuilder("MapId\tFile\tCode\tSeverity\tX\tY\tLayer\tMessage\r\n");
+        var issues = new StringBuilder("SectorId\tFile\tCode\tSeverity\tX\tY\tLayer\tMessage\r\n");
         foreach (var summary in summaries)
         foreach (var issue in summary.Issues)
-            issues.Append(summary.MapId).Append('\t')
+            issues.Append(summary.SectorId).Append('\t')
                 .Append(Escape(summary.File)).Append('\t')
                 .Append(issue.Code).Append('\t')
                 .Append(issue.Severity).Append('\t')
@@ -130,9 +130,9 @@ internal sealed class WorldAuditService
         File.WriteAllText(Path.Combine(directory, "map-data-issues.tsv"), issues.ToString(), Encoding.UTF8);
 
         var summaryText = new StringBuilder(
-            "MapId\tFile\tSize\tName\tErrors\tWarnings\tInfos\tXMin\tXMax\tYMin\tYMax\tBlocked\tTriggers\tLights\tParticles\tNpcs\tObjects\tExits\r\n");
+            "SectorId\tFile\tSize\tName\tErrors\tWarnings\tInfos\tXMin\tXMax\tYMin\tYMax\tBlocked\tTriggers\tLights\tParticles\tNpcs\tObjects\tExits\r\n");
         foreach (var summary in summaries)
-            summaryText.Append(summary.MapId).Append('\t')
+            summaryText.Append(summary.SectorId).Append('\t')
                 .Append(Escape(summary.File)).Append('\t')
                 .Append(summary.FileSize).Append('\t')
                 .Append(Escape(summary.Name)).Append('\t')
@@ -154,7 +154,7 @@ internal sealed class WorldAuditService
         foreach (var summary in summaries)
         foreach (var issue in summary.Issues)
             issues.Append(issue.WorldId).Append('\t')
-                .Append(issue.MapId).Append('\t')
+                .Append(issue.SectorId).Append('\t')
                 .Append(issue.Code).Append('\t')
                 .Append(issue.Severity).Append('\t')
                 .Append(issue.ChunkX).Append('\t')
@@ -174,7 +174,7 @@ internal sealed class WorldAuditService
         File.WriteAllText(Path.Combine(directory, "world-coordinate-summary.tsv"), summaryText.ToString(), Encoding.UTF8);
     }
 
-    private static short ParseMapId(string path)
+    private static short ParseSectorId(string path)
     {
         var digits = new string(Path.GetFileNameWithoutExtension(path).Where(char.IsDigit).ToArray());
         return short.TryParse(digits, out var id) ? id : (short)0;

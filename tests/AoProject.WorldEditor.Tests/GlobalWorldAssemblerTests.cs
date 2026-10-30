@@ -9,8 +9,8 @@ public sealed class GlobalWorldAssemblerTests
     [Fact]
     public void Border_exits_place_maps_on_a_continuous_global_grid()
     {
-        var first = new WorldMap();
-        var second = new WorldMap();
+        var first = new WorldSector();
+        var second = new WorldSector();
         first.Blocks[88, 50].TileExit.Map = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
@@ -18,23 +18,23 @@ public sealed class GlobalWorldAssemblerTests
         second.Blocks[13, 50].TileExit.X = 87;
         second.Blocks[13, 50].TileExit.Y = 50;
 
-        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldMap>
+        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldSector>
         {
             [1] = first,
             [2] = second
         }, 1);
 
-        Assert.Equal(new GlobalChunkCoordinate(0, 0), assembly.Placements.Single(item => item.MapId == 1).Chunk);
-        Assert.Equal(new GlobalChunkCoordinate(1, 0), assembly.Placements.Single(item => item.MapId == 2).Chunk);
+        Assert.Equal(new GlobalChunkCoordinate(0, 0), assembly.Placements.Single(item => item.SectorId == 1).Chunk);
+        Assert.Equal(new GlobalChunkCoordinate(1, 0), assembly.Placements.Single(item => item.SectorId == 2).Chunk);
         Assert.Empty(assembly.Conflicts);
     }
 
     [Fact]
     public void Conflicting_links_are_reported_instead_of_overwriting_placement()
     {
-        var root = new WorldMap();
-        var east = new WorldMap();
-        var north = new WorldMap();
+        var root = new WorldSector();
+        var east = new WorldSector();
+        var north = new WorldSector();
         root.Blocks[88, 50].TileExit.Map = 2;
         root.Blocks[88, 50].TileExit.X = 14;
         root.Blocks[88, 50].TileExit.Y = 50;
@@ -51,7 +51,7 @@ public sealed class GlobalWorldAssemblerTests
         north.Blocks[50, 91].TileExit.X = 50;
         north.Blocks[50, 91].TileExit.Y = 11;
 
-        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldMap>
+        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldSector>
         {
             [1] = root,
             [2] = east,
@@ -64,9 +64,9 @@ public sealed class GlobalWorldAssemblerTests
     [Fact]
     public void Horizontal_wrap_is_normalized_instead_of_reported_as_a_conflict()
     {
-        var first = new WorldMap();
-        var second = new WorldMap();
-        var third = new WorldMap();
+        var first = new WorldSector();
+        var second = new WorldSector();
+        var third = new WorldSector();
         first.Blocks[88, 50].TileExit.Map = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
@@ -86,7 +86,7 @@ public sealed class GlobalWorldAssemblerTests
         third.Blocks[13, 50].TileExit.X = 87;
         third.Blocks[13, 50].TileExit.Y = 50;
 
-        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldMap>
+        var assembly = new GlobalWorldAssembler().Assemble(new Dictionary<short, WorldSector>
         {
             [1] = first,
             [2] = second,

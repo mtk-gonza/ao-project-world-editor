@@ -13,7 +13,7 @@ internal sealed class MapDataAuditService
     private const int MaxRecords = 1_000_000;
     private const int MaxIssuesPerCode = 25;
 
-    private readonly CsmMapFileService _maps = new();
+    private readonly SectorCsmFileService _maps = new();
     private readonly WorldEditorResourceCatalog? _catalog;
     private readonly GraphicSourceResolver? _resolver;
     private readonly HashSet<int>? _triggerIndexes;
@@ -28,7 +28,7 @@ internal sealed class MapDataAuditService
         }
     }
 
-    public MapAuditSummary Audit(
+    public SectorAuditSummary Audit(
         short mapId,
         string path,
         IReadOnlyCollection<short>? availableMaps = null,
@@ -46,7 +46,7 @@ internal sealed class MapDataAuditService
             issues.Add("CSM-READ", AuditSeverity.Error, $"No se pudo parsear el archivo: {error.Message}");
         }
 
-        WorldMap? map = null;
+        WorldSector? map = null;
         try { map = _maps.Load(path); }
         catch (Exception error)
         {
@@ -55,7 +55,7 @@ internal sealed class MapDataAuditService
         if (map is null)
         {
             issues.Flush();
-            return new MapAuditSummary(mapId, fileName, fileSize, string.Empty,
+            return new SectorAuditSummary(mapId, fileName, fileSize, string.Empty,
                 issues.List.Count(issue => issue.Severity == AuditSeverity.Error),
                 issues.List.Count(issue => issue.Severity == AuditSeverity.Warning),
                 issues.List.Count(issue => issue.Severity == AuditSeverity.Info),
@@ -71,8 +71,8 @@ internal sealed class MapDataAuditService
         issues.Flush();
 
         var counts = CountPersisted(map);
-        var size = raw is { SizeValid: true } ? raw.Size : map.CsmMapSize;
-        return new MapAuditSummary(
+        var size = raw is { SizeValid: true } ? raw.Size : map.CsmSectorSize;
+        return new SectorAuditSummary(
             mapId, fileName, fileSize, map.Info.Name,
             issues.List.Count(issue => issue.Severity == AuditSeverity.Error),
             issues.List.Count(issue => issue.Severity == AuditSeverity.Warning),
@@ -97,7 +97,7 @@ internal sealed class MapDataAuditService
         }
     }
 
-    private static void CheckMetadata(WorldMap map, Issues issues)
+    private static void CheckMetadata(WorldSector map, Issues issues)
     {
         var info = map.Info;
         if (string.IsNullOrWhiteSpace(info.Name))
@@ -128,12 +128,12 @@ internal sealed class MapDataAuditService
             issues.Add("CSM-META", AuditSeverity.Info, $"Nivel minimo {minLevel} sin maximo explicito (0).");
     }
 
-    private static void CheckContentBounds(WorldMap map, RawAudit? raw, Issues issues)
+    private static void CheckContentBounds(WorldSector map, RawAudit? raw, Issues issues)
     {
         if (raw is not { SizeValid: true }) return;
         var minX = 101; var maxX = 0; var minY = 101; var maxY = 0;
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var block = map.Blocks[x, y];
             if (!HasContent(block)) continue;
@@ -143,11 +143,11 @@ internal sealed class MapDataAuditService
         if (maxX == 0) return;
         if (minX < raw.Size.XMin || maxX > raw.Size.XMax || minY < raw.Size.YMin || maxY > raw.Size.YMax)
             issues.Add("CSM-BOUNDS", AuditSeverity.Warning,
-                $"Contenido en {minX}..{maxX},{minY}..{maxY} fuera de CsmMapSize " +
+                $"Contenido en {minX}..{maxX},{minY}..{maxY} fuera de CsmSectorSize " +
                 $"{raw.Size.XMin}..{raw.Size.XMax},{raw.Size.YMin}..{raw.Size.YMax}.");
     }
 
-    private void CheckReferences(WorldMap map, Issues issues)
+    private void CheckReferences(WorldSector map, Issues issues)
     {
         if (_catalog is null) return;
         var graphics = new HashSet<int>();
@@ -155,8 +155,8 @@ internal sealed class MapDataAuditService
         var npcs = new HashSet<int>();
         var triggers = new HashSet<int>();
         var particles = new HashSet<int>();
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var block = map.Blocks[x, y];
             for (var layer = 0; layer < 4; layer++)
@@ -210,13 +210,13 @@ internal sealed class MapDataAuditService
         AddAggregate(issues, "CSM-PARTICLE", AuditSeverity.Warning, "Particula fuera de particles.ind", missingParticles);
     }
 
-    private static void CheckExits(WorldMap map, IReadOnlyCollection<short>? availableMaps, Issues issues)
+    private static void CheckExits(WorldSector map, IReadOnlyCollection<short>? availableMaps, Issues issues)
     {
         var available = availableMaps is null ? null : availableMaps as IReadOnlySet<short> ?? availableMaps.ToHashSet();
         var missingDestinations = new HashSet<short>();
         var specialDestinations = new HashSet<short>();
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var exit = map.Blocks[x, y].TileExit;
             if (exit.Map == 0)
@@ -225,7 +225,7 @@ internal sealed class MapDataAuditService
                     issues.Add("CSM-EXIT", AuditSeverity.Warning, "TileExit sin mapa pero con coordenadas.", x, y);
                 continue;
             }
-            if (exit.X is < 1 or > WorldMap.Width || exit.Y is < 1 or > WorldMap.Height)
+            if (exit.X is < 1 or > WorldSector.Width || exit.Y is < 1 or > WorldSector.Height)
                 issues.Add("CSM-EXIT", AuditSeverity.Warning,
                     $"TileExit a mapa {exit.Map} con destino fuera de 1..100: {exit.X},{exit.Y}.", x, y);
             if (exit.Map < 0)
@@ -239,7 +239,7 @@ internal sealed class MapDataAuditService
             "TileExit a mapa sin archivo en la carpeta", missingDestinations);
     }
 
-    private void CheckRoundTrip(WorldMap map, Issues issues)
+    private void CheckRoundTrip(WorldSector map, Issues issues)
     {
         var path = Path.Combine(Path.GetTempPath(), $"ao-audit-{Guid.NewGuid():N}.csm");
         try
@@ -260,10 +260,10 @@ internal sealed class MapDataAuditService
         }
     }
 
-    private static string? FirstRoundTripMismatch(WorldMap expected, WorldMap actual)
+    private static string? FirstRoundTripMismatch(WorldSector expected, WorldSector actual)
     {
-        if (expected.CsmMapSize != actual.CsmMapSize)
-            return $"CsmMapSize {expected.CsmMapSize} != {actual.CsmMapSize}.";
+        if (expected.CsmSectorSize != actual.CsmSectorSize)
+            return $"CsmSectorSize {expected.CsmSectorSize} != {actual.CsmSectorSize}.";
         if (expected.Info.Name != actual.Info.Name) return "Name distinto.";
         if (expected.Info.Backup != actual.Info.Backup) return "Backup distinto.";
         if (expected.Info.Restriction != actual.Info.Restriction) return "Restriction distinta.";
@@ -281,8 +281,8 @@ internal sealed class MapDataAuditService
         if (expected.Environment.Rain != actual.Environment.Rain) return "Rain distinto.";
         if (expected.Environment.Snow != actual.Environment.Snow) return "Snow distinto.";
         if (expected.Environment.Fog != actual.Environment.Fog) return "Fog distinto.";
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var a = expected.Blocks[x, y];
             var b = actual.Blocks[x, y];
@@ -301,10 +301,10 @@ internal sealed class MapDataAuditService
         return null;
     }
 
-    private static IReadOnlyList<MapBorderExit> CollectBorderExits(WorldMap map)
+    private static IReadOnlyList<MapBorderExit> CollectBorderExits(WorldSector map)
     {
         var exits = new List<MapBorderExit>();
-        for (var index = 1; index <= WorldMap.Width; index++)
+        for (var index = 1; index <= WorldSector.Width; index++)
         {
             var west = map.Blocks[13, index].TileExit;
             if (west.Map != 0 && west.X == 87)
@@ -322,7 +322,7 @@ internal sealed class MapDataAuditService
         return exits;
     }
 
-    private static bool HasContent(MapBlock block)
+    private static bool HasContent(SectorTile block)
     {
         if (block.Blocked != 0 || block.Trigger != 0 || block.Light.Range != 0 ||
             block.ParticleIndex != 0 || block.NpcIndex != 0 || block.Object.Index != 0 ||
@@ -332,12 +332,12 @@ internal sealed class MapDataAuditService
         return false;
     }
 
-    private static (int Blocked, int Triggers, int Lights, int Particles, int Npcs, int Objects, int Exits) CountPersisted(WorldMap map)
+    private static (int Blocked, int Triggers, int Lights, int Particles, int Npcs, int Objects, int Exits) CountPersisted(WorldSector map)
     {
         var blocked = 0; var triggers = 0; var lights = 0; var particles = 0;
         var npcs = 0; var objects = 0; var exits = 0;
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var block = map.Blocks[x, y];
             if (block.Blocked != 0) blocked++;
@@ -376,15 +376,15 @@ internal sealed class MapDataAuditService
             if (counts[index] is < 0 or > MaxRecords)
                 throw new InvalidDataException($"Count {index} invalido: {counts[index]}.");
         }
-        var size = new CsmMapSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16());
+        var size = new CsmSectorSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16());
         // The VB6 CSM writer puts MapSize 0,0,0,0 for a full 100x100 map; the
         // loader normalizes it to the default. Treat it as valid.
         var zeroSize = size.XMin == 0 && size.XMax == 0 && size.YMin == 0 && size.YMax == 0;
-        var effectiveSize = size.IsValid ? size : zeroSize ? CsmMapSize.Default : size;
+        var effectiveSize = size.IsValid ? size : zeroSize ? CsmSectorSize.Default : size;
         var sizeValid = size.IsValid || zeroSize;
         if (!sizeValid)
             issues.Add("CSM-SIZE", AuditSeverity.Error,
-                $"CsmMapSize invalido: {size.XMin}..{size.XMax},{size.YMin}..{size.YMax}.");
+                $"CsmSectorSize invalido: {size.XMin}..{size.XMax},{size.YMin}..{size.YMax}.");
 
         SkipString(reader); reader.ReadByte();
         SkipString(reader); reader.ReadInt32(); reader.ReadInt32(); reader.ReadByte();
@@ -458,7 +458,7 @@ internal sealed class MapDataAuditService
             if (exitSeen.Add((x, y))) unique[10]++; else Duplicate("exit", x, y, issues);
             if (map == 0 && (destX != 0 || destY != 0))
                 issues.Add("CSM-EXIT", AuditSeverity.Warning, "TileExit sin mapa pero con coordenadas.", x, y);
-            if (map != 0 && (destX is < 1 or > WorldMap.Width || destY is < 1 or > WorldMap.Height))
+            if (map != 0 && (destX is < 1 or > WorldSector.Width || destY is < 1 or > WorldSector.Height))
                 issues.Add("CSM-EXIT", AuditSeverity.Warning,
                     $"TileExit a mapa {map} con destino fuera de 1..100: {destX},{destY}.", x, y);
         });
@@ -476,16 +476,16 @@ internal sealed class MapDataAuditService
         for (var index = 0; index < count; index++) read();
     }
 
-    private static void CheckPosition(short x, short y, CsmMapSize size, string kind, Issues issues)
+    private static void CheckPosition(short x, short y, CsmSectorSize size, string kind, Issues issues)
     {
-        if (x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height)
+        if (x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height)
         {
             issues.Add("CSM-RANGE", AuditSeverity.Warning, $"{kind} fuera de 1..100 en {x},{y}.", x, y);
             return;
         }
         if (size.IsValid && (x < size.XMin || x > size.XMax || y < size.YMin || y > size.YMax))
             issues.Add("CSM-BOUNDS", AuditSeverity.Warning,
-                $"{kind} en {x},{y} fuera de CsmMapSize {size.XMin}..{size.XMax},{size.YMin}..{size.YMax}.", x, y);
+                $"{kind} en {x},{y} fuera de CsmSectorSize {size.XMin}..{size.XMax},{size.YMin}..{size.YMax}.", x, y);
     }
 
     private static void Duplicate(string kind, int x, int y, Issues issues) =>
@@ -498,14 +498,14 @@ internal sealed class MapDataAuditService
         if (bytes.Length != length) throw new EndOfStreamException("String CSM incompleta.");
     }
 
-    private sealed record RawAudit(int[] Counts, CsmMapSize Size, bool SizeValid, int[] Unique);
+    private sealed record RawAudit(int[] Counts, CsmSectorSize Size, bool SizeValid, int[] Unique);
 
     private sealed class Issues
     {
         private readonly short _mapId;
         private readonly Dictionary<string, int> _counts = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _suppressed = new(StringComparer.Ordinal);
-        public List<MapAuditIssue> List { get; } = [];
+        public List<SectorAuditIssue> List { get; } = [];
 
         public Issues(short mapId) => _mapId = mapId;
 
@@ -517,13 +517,13 @@ internal sealed class MapDataAuditService
                 _suppressed[code] = _suppressed.GetValueOrDefault(code) + 1;
                 return;
             }
-            List.Add(new MapAuditIssue(_mapId, code, severity, message, x, y, layer));
+            List.Add(new SectorAuditIssue(_mapId, code, severity, message, x, y, layer));
         }
 
         public void Flush()
         {
             foreach (var (code, count) in _suppressed)
-                List.Add(new MapAuditIssue(_mapId, code, AuditSeverity.Info,
+                List.Add(new SectorAuditIssue(_mapId, code, AuditSeverity.Info,
                     $"{count} caso(s) adicionales del mismo codigo omitidos."));
         }
     }

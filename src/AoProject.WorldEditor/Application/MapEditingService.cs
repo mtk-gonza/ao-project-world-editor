@@ -10,7 +10,7 @@ internal sealed class MapEditingService
 
     public bool CanUndo => _undo.Count > 0;
 
-    public void SetGraphic(WorldMap map, int x, int y, int layer, int graphicIndex)
+    public void SetGraphic(WorldSector map, int x, int y, int layer, int graphicIndex)
     {
         Validate(map, x, y, layer);
         var block = map.Blocks[x, y];
@@ -24,9 +24,9 @@ internal sealed class MapEditingService
         map.Info.Changed = true;
     }
 
-    public void ClearGraphic(WorldMap map, int x, int y, int layer) => SetGraphic(map, x, y, layer, 0);
+    public void ClearGraphic(WorldSector map, int x, int y, int layer) => SetGraphic(map, x, y, layer, 0);
 
-    public bool Undo(WorldMap map)
+    public bool Undo(WorldSector map)
     {
         if (_undo.First is null)
             return false;
@@ -39,12 +39,12 @@ internal sealed class MapEditingService
 
     public void ClearHistory() => _undo.Clear();
 
-    private static void Validate(WorldMap map, int x, int y, int layer)
+    private static void Validate(WorldSector map, int x, int y, int layer)
     {
         ArgumentNullException.ThrowIfNull(map);
-        if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-            y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-            x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height)
+        if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+            y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+            x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height)
             throw new ArgumentOutOfRangeException(nameof(x), "La coordenada esta fuera del mapa.");
         if (layer is < 0 or >= 4)
             throw new ArgumentOutOfRangeException(nameof(layer), "La capa debe estar entre 0 y 3.");

@@ -9,8 +9,8 @@ public sealed class MapInfoEditingTests
     [Fact]
     public void Map_info_updates_all_reference_fields_and_marks_map_changed()
     {
-        var map = new WorldMap();
-        var values = new MapInfoValues("  Nuevo mapa ", "12", 7, true, 1, 0, 1, 1, "bosque", "zona", "nivel", 1, "&H010203");
+        var map = new WorldSector();
+        var values = new SectorInfoValues("  Nuevo mapa ", "12", 7, true, 1, 0, 1, 1, "bosque", "zona", "nivel", 1, "&H010203");
         new MapInfoEditingService().Apply(map, values);
 
         Assert.Equal("Nuevo mapa", map.Info.Name);

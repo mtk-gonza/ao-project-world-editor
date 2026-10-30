@@ -4,15 +4,15 @@ using AoProject.WorldEditor.Infrastructure;
 namespace AoProject.WorldEditor.Application;
 
 internal sealed record GlobalBlockingAuditIssue(
-    short MapId, int X, int Y, string Code, string Message, byte Mask);
+    short SectorId, int X, int Y, string Code, string Message, byte Mask);
 
 internal sealed record GlobalBlockingAuditReport(
     IReadOnlyList<GlobalBlockingAuditIssue> Issues,
     int MapsVisited,
     int CellsVisited)
 {
-    public string ToTsv() => "MapId\tX\tY\tCode\tMask\tMessage\r\n" +
-        string.Join("\r\n", Issues.Select(i => $"{i.MapId}\t{i.X}\t{i.Y}\t{i.Code}\t{i.Mask}\t{i.Message}"));
+    public string ToTsv() => "SectorId\tX\tY\tCode\tMask\tMessage\r\n" +
+        string.Join("\r\n", Issues.Select(i => $"{i.SectorId}\t{i.X}\t{i.Y}\t{i.Code}\t{i.Mask}\t{i.Message}"));
 }
 
 /// <summary>Read-only audit of materialized global CSM maps.</summary>
@@ -35,8 +35,8 @@ internal sealed class GlobalBlockingAuditService
             var mapId = entry.Key;
             var map = entry.Value;
             maps++;
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 cells++;
                 var block = map.Blocks[x, y];
@@ -82,7 +82,7 @@ internal sealed class GlobalBlockingAuditService
             destination, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("La auditoría correctiva requiere una carpeta distinta de los CSM originales.");
         Directory.CreateDirectory(destination);
-        var csm = new CsmMapFileService();
+        var csm = new SectorCsmFileService();
         foreach (var mapId in world.Paths.Keys.OrderBy(id => id))
         {
             var copy = Path.Combine(destination, $"mapa{mapId}.csm");

@@ -6,11 +6,11 @@ internal readonly record struct TileCapture(int Layer, int GraphicIndex, WorldPo
 
 internal sealed class MapTileCaptureService
 {
-    public TileCapture Capture(WorldMap map, int x, int y, bool captureSurface, bool captureTransfer)
+    public TileCapture Capture(WorldSector map, int x, int y, bool captureSurface, bool captureTransfer)
     {
-        if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-            y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-            x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height) throw new ArgumentOutOfRangeException(nameof(x));
+        if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+            y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+            x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) throw new ArgumentOutOfRangeException(nameof(x));
         var block = map.Blocks[x, y];
         var layer = -1; var graphic = 0;
         if (captureSurface)

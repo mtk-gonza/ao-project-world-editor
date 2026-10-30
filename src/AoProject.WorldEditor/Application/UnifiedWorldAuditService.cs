@@ -66,7 +66,7 @@ internal sealed class UnifiedWorldAuditService
                 (exit.TargetX < 0 || exit.TargetX >= map.Width || exit.TargetY < 0 || exit.TargetY >= map.Height))
                 issues.Add(new("EXIT-TARGET",
                     $"Destino ({exit.TargetX},{exit.TargetY}) fuera de {map.Width}x{map.Height}.", x, y));
-            if (exit.Kind == UnifiedWorldExitKind.External && exit.ExternalMapId == 0)
+            if (exit.Kind == UnifiedWorldExitKind.External && exit.ExternalSectorId == 0)
                 issues.Add(new("EXIT-EXTERNAL", "Salida externa sin identificador de destino.", x, y));
         }
 

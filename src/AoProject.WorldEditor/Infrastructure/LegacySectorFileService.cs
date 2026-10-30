@@ -6,11 +6,11 @@ namespace AoProject.WorldEditor.Infrastructure;
 /// Binary map I/O for the legacy V3 map layout used by modMapIO.bas.
 /// VB6 Integer/Long values are explicitly decoded as little-endian values.
 /// </summary>
-internal sealed class MapFileService
+internal sealed class LegacySectorFileService
 {
     private const int HeaderDescriptionLength = 255;
-    private readonly MapMetadataService _metadata = new();
-    public WorldMap LoadV3(string mapPath)
+    private readonly SectorMetadataService _metadata = new();
+    public WorldSector LoadV3(string mapPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapPath);
         if (!File.Exists(mapPath))
@@ -22,7 +22,7 @@ internal sealed class MapFileService
 
         using var map = new BinaryReader(File.OpenRead(mapPath));
         using var inf = new BinaryReader(File.OpenRead(infPath));
-        var world = new WorldMap();
+        var world = new WorldSector();
 
         var mapVersion = map.ReadInt16();
         var header = ReadHeader(map);
@@ -39,8 +39,8 @@ internal sealed class MapFileService
             mapReserved,
             infReserved);
 
-        for (var y = 1; y <= WorldMap.Height; y++)
-        for (var x = 1; x <= WorldMap.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
         {
             var block = world.Blocks[x, y];
             var flags = map.ReadByte();
@@ -72,7 +72,7 @@ internal sealed class MapFileService
         return world;
     }
 
-    public void SaveV3(WorldMap world, string mapPath)
+    public void SaveV3(WorldSector world, string mapPath)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentException.ThrowIfNullOrWhiteSpace(mapPath);
@@ -91,8 +91,8 @@ internal sealed class MapFileService
         foreach (var value in FixedValues(header.InfReserved, 5))
             inf.Write(value);
 
-        for (var y = 1; y <= WorldMap.Height; y++)
-        for (var x = 1; x <= WorldMap.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
         {
             var block = world.Blocks[x, y];
             byte flags = 0;

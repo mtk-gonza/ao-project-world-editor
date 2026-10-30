@@ -7,7 +7,7 @@ internal enum MapReportKind { Objects, Npcs, Transfers, Layer1, Layer2, Layer3, 
 
 internal sealed class MapReportService
 {
-    public string Generate(WorldMap map, MapReportKind kind, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<NpcData>? npcs = null)
+    public string Generate(WorldSector map, MapReportKind kind, IReadOnlyList<ObjectData>? objects = null, IReadOnlyList<NpcData>? npcs = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         var output = new StringBuilder();
@@ -16,10 +16,10 @@ internal sealed class MapReportService
             MapReportKind.Objects => "Informe de Objetos (X,Y)", MapReportKind.Npcs => "Informe de NPCs/Hostiles (X,Y)",
             MapReportKind.Transfers => "Informe de Translados (X,Y)", _ => $"Informe de capa {(int)kind - (int)MapReportKind.Layer1 + 1}"
         });
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var y = minY; y <= maxY; y++)
         for (var x = minX; x <= maxX; x++)
         {

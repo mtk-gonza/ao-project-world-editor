@@ -9,7 +9,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Unlit_tiles_fall_back_to_the_ambient_colour()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
         for (var corner = 0; corner < 4; corner++)
             Assert.Equal(unchecked((int)0xFFFFFFFF), lights[50, 50, corner]);
@@ -18,7 +18,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Night_ambient_tints_every_corner()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var lights = new MapLightingService().Compute(map, MapLightingService.NightLight);
         Assert.Equal(unchecked((int)0xFF8080AA), lights[10, 10, 0]);
     }
@@ -26,7 +26,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Flat_light_fills_the_whole_square()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 2;
         map.Blocks[50, 50].Light.Color = 0xFF0000; // CSM stores 0xRRGGBB
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight, includeFlatLights: true);
@@ -41,7 +41,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Flat_light_keeps_raw_border_corner_ownership_at_map_edge()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].Light.Range = 2;
         map.Blocks[1, 1].Light.Color = 0xFF0000;
 
@@ -54,7 +54,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Round_light_fades_towards_the_ambient_colour()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 105; // effective range 6
         map.Blocks[50, 50].Light.Color = 0xFF0000; // CSM stores 0xRRGGBB
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
@@ -69,7 +69,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Round_light_applies_the_same_distance_to_symmetric_corners()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 103; // effective range 4
         map.Blocks[50, 50].Light.Color = 0xFF0000;
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
@@ -81,7 +81,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Round_light_at_map_edge_does_not_write_outside_the_map()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].Light.Range = 104;
         map.Blocks[1, 1].Light.Color = 0xFF0000;
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
@@ -94,7 +94,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Round_light_corner_table_is_initialized_inside_and_outside_the_radius()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 104; // effective range 5
         map.Blocks[50, 50].Light.Color = 0xFF0000;
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
@@ -112,7 +112,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Flat_lights_are_skipped_on_load_like_the_reference()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 2;
         map.Blocks[50, 50].Light.Color = 0xFF0000;
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);
@@ -122,7 +122,7 @@ public sealed class MapLightingTests
     [Fact]
     public void Zero_range_lights_are_ignored()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 0;
         map.Blocks[50, 50].Light.Color = 0xFF0000; // CSM stores 0xRRGGBB
         var lights = new MapLightingService().Compute(map, MapLightingService.DayLight);

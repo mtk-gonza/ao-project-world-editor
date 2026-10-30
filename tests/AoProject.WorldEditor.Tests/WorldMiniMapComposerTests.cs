@@ -26,9 +26,9 @@ public sealed class WorldMiniMapComposerTests
                 new GraphicData { MiniMapColor = 0x000000FF },
                 new GraphicData { MiniMapColor = 0x0000FF00 }
             };
-            var first = new WorldMap();
+            var first = new WorldSector();
             first.Blocks[1, 1].Graphics[0].GraphicIndex = 1;
-            var second = new WorldMap();
+            var second = new WorldSector();
             second.Blocks[1, 1].Graphics[0].GraphicIndex = 2;
 
             using var composer = new WorldMiniMapComposer(layouts, MapMiniMapOptions.Vb6Default);
@@ -77,7 +77,7 @@ public sealed class WorldMiniMapComposerTests
                 new GraphicData(),
                 new GraphicData { MiniMapColor = 0x0000FF00 }
             };
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Graphics[0].GraphicIndex = 1;
 
             using var composer = new WorldMiniMapComposer(layouts, MapMiniMapOptions.Vb6Default);

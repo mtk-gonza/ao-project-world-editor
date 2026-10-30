@@ -19,7 +19,7 @@ internal sealed class AdjacentTransferService
     public static AdjacentBounds LegalBounds => new(91, 10, 88, 13, 90, 11, 14, 87);
     public static AdjacentBounds UllathorpeBounds => new(94, 7, 92, 9, 93, 8, 10, 91);
 
-    public short[] DetectExistingMaps(WorldMap map, AdjacentBounds bounds)
+    public short[] DetectExistingMaps(WorldSector map, AdjacentBounds bounds)
     {
         ArgumentNullException.ThrowIfNull(map);
         Validate(bounds);
@@ -29,7 +29,7 @@ internal sealed class AdjacentTransferService
             FindVertical(map, bounds.LeftX, bounds.TopY + 1, bounds.BottomY - 1)];
     }
 
-    public int Apply(WorldMap map, IReadOnlyList<AdjacentTransfer> transfers)
+    public int Apply(WorldSector map, IReadOnlyList<AdjacentTransfer> transfers)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (transfers.Count != 4) throw new ArgumentException("Se requieren cuatro lados.", nameof(transfers));
@@ -72,15 +72,15 @@ internal sealed class AdjacentTransferService
 
     private static void Validate(AdjacentBounds bounds)
     {
-        if (bounds.TopY < 1 || bounds.BottomY > WorldMap.Height || bounds.LeftX < 1 || bounds.RightX > WorldMap.Width || bounds.TopY >= bounds.BottomY || bounds.LeftX >= bounds.RightX)
+        if (bounds.TopY < 1 || bounds.BottomY > WorldSector.Height || bounds.LeftX < 1 || bounds.RightX > WorldSector.Width || bounds.TopY >= bounds.BottomY || bounds.LeftX >= bounds.RightX)
             throw new ArgumentOutOfRangeException(nameof(bounds));
     }
-    private static short FindHorizontal(WorldMap map, int y, int start, int end)
+    private static short FindHorizontal(WorldSector map, int y, int start, int end)
     {
         for (var x = start; x <= end; x++) if (map.Blocks[x, y].TileExit.Map != 0) return map.Blocks[x, y].TileExit.Map;
         return 0;
     }
-    private static short FindVertical(WorldMap map, int x, int start, int end)
+    private static short FindVertical(WorldSector map, int x, int start, int end)
     {
         for (var y = start; y <= end; y++) if (map.Blocks[x, y].TileExit.Map != 0) return map.Blocks[x, y].TileExit.Map;
         return 0;

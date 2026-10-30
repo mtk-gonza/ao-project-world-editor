@@ -10,7 +10,7 @@ public sealed class MapMiniMapTests
     [Fact]
     public void Minimap_uses_top_layer_color_and_red_for_full_block()
     {
-        var map = new WorldMap(); map.Blocks[3, 4].Graphics[0].GraphicIndex = 1; map.Blocks[3, 4].Blocked = 0xF;
+        var map = new WorldSector(); map.Blocks[3, 4].Graphics[0].GraphicIndex = 1; map.Blocks[3, 4].Blocked = 0xF;
         var graphics = new[] { new GraphicData(), new GraphicData { MiniMapColor = unchecked((int)0x0000FF00) } };
         using var image = new MapMiniMapService().Create(map, graphics, false);
         Assert.Equal(Color.FromArgb(255, 0, 255, 0).ToArgb(), image.GetPixel(2, 3).ToArgb());
@@ -22,7 +22,7 @@ public sealed class MapMiniMapTests
     [Fact]
     public void Minimap_applies_vb6_overlay_priority_and_any_block_mask()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var block = map.Blocks[3, 4];
         block.Graphics[0].GraphicIndex = 1;
         block.Graphics[1].GraphicIndex = 2;
@@ -46,7 +46,7 @@ public sealed class MapMiniMapTests
     [Fact]
     public void Minimap_leaves_tiles_outside_csm_domain_black()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(3, 2, 3, 2) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(3, 2, 3, 2) };
         map.Blocks[1, 1].Graphics[0].GraphicIndex = 1;
         map.Blocks[2, 2].Graphics[0].GraphicIndex = 1;
         var graphics = new[] { new GraphicData(), new GraphicData { MiniMapColor = 0x000000FF } };
@@ -60,7 +60,7 @@ public sealed class MapMiniMapTests
     [Fact]
     public void Minimap_does_not_erase_lower_layer_when_upper_grh_has_no_color()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[3, 4].Graphics[0].GraphicIndex = 1;
         map.Blocks[3, 4].Graphics[1].GraphicIndex = 2;
         var graphics = new[]
@@ -78,7 +78,7 @@ public sealed class MapMiniMapTests
     [Fact]
     public void Minimap_default_options_match_vb6_layer1_and_layer2_only()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[3, 4].Graphics[0].GraphicIndex = 1;
         map.Blocks[3, 4].Graphics[2].GraphicIndex = 2;
         map.Blocks[3, 4].Graphics[3].GraphicIndex = 2;

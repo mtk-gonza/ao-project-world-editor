@@ -16,8 +16,8 @@ public sealed class WorldOutputAuditTests
         Directory.CreateDirectory(maps);
         try
         {
-            var service = new CsmMapFileService();
-            var map = new WorldMap();
+            var service = new SectorCsmFileService();
+            var map = new WorldSector();
             map.Info.Name = "Uno";
             map.Blocks[50, 91].TileExit.Map = 2;
             map.Blocks[50, 10].TileExit.Map = 3;
@@ -33,7 +33,7 @@ public sealed class WorldOutputAuditTests
 
             var report = new WorldOutputAuditService().WriteReport(issues, generated.Directory);
             Assert.True(File.Exists(report));
-            Assert.StartsWith("MapId\tCode\tSeverity", File.ReadAllLines(report)[0]);
+            Assert.StartsWith("SectorId\tCode\tSeverity", File.ReadAllLines(report)[0]);
 
             map.Blocks[50, 91].TileExit.Map = 9;
             service.Save(map, Path.Combine(maps, "mapa1.csm"));

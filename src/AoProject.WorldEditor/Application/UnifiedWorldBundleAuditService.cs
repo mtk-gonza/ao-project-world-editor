@@ -19,6 +19,19 @@ internal sealed class UnifiedWorldBundleAuditService
             issues.Add(new("EMPTY-BUNDLE", "El bundle no contiene pisos."));
         if (bundle.ActiveFloorZ is not null && !bundle.Floors.ContainsKey(bundle.ActiveFloorZ.Value))
             issues.Add(new("ACTIVE-FLOOR", "El piso activo no existe en el bundle.", bundle.ActiveFloorZ));
+        var duplicateChunks = bundle.Placements.Values
+            .Where(item => bundle.SectorFloors.ContainsKey(item.SectorId))
+            .GroupBy(item => (FloorZ: bundle.SectorFloors[item.SectorId], item.Chunk))
+            .Where(group => group.Count() > 1);
+        foreach (var group in duplicateChunks)
+            issues.Add(new("DUPLICATE-PLACEMENT", $"Hay placements duplicados en Z={group.Key.FloorZ}, ChunkX={group.Key.Chunk.X}, ChunkY={group.Key.Chunk.Y}."));
+        foreach (var placement in bundle.Placements.Values)
+        {
+            if (placement.Chunk.X < 0 || placement.Chunk.X > 18 || placement.Chunk.Y < 0)
+                issues.Add(new("PLACEMENT-BOUNDS", $"El placement {placement.SectorId} excede el layout válido."));
+            if (!bundle.SectorFloors.TryGetValue(placement.SectorId, out var z) || !bundle.Floors.ContainsKey(z))
+                issues.Add(new("MISSING-MAP-FLOOR", $"El placement {placement.SectorId} no tiene un floor declarado."));
+        }
 
         var floorAudit = new UnifiedWorldAuditService();
         foreach (var (z, floor) in bundle.Floors)

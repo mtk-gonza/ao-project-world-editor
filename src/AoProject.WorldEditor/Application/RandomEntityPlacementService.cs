@@ -7,7 +7,7 @@ internal readonly record struct RandomObjectPlacementOptions(int Count, short Ob
 
 internal sealed class RandomEntityPlacementService
 {
-    public int PlaceNpcs(WorldMap map, IReadOnlyList<NpcData> npcs, RandomNpcPlacementOptions options)
+    public int PlaceNpcs(WorldSector map, IReadOnlyList<NpcData> npcs, RandomNpcPlacementOptions options)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(npcs);
         if (options.Count <= 0) return 0;
@@ -23,7 +23,7 @@ internal sealed class RandomEntityPlacementService
         return placed;
     }
 
-    public int PlaceObjects(WorldMap map, IReadOnlyList<ObjectData> objects, RandomObjectPlacementOptions options)
+    public int PlaceObjects(WorldSector map, IReadOnlyList<ObjectData> objects, RandomObjectPlacementOptions options)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(objects);
         if (options.Count <= 0) return 0;

@@ -89,16 +89,16 @@ internal sealed class ParticleGroupService
         return true;
     }
 
-    public int SyncFromMap(WorldMap map)
+    public int SyncFromMap(WorldSector map)
     {
         ArgumentNullException.ThrowIfNull(map);
         var created = 0;
         var known = new HashSet<short>();
         var seen = new HashSet<int>();
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {

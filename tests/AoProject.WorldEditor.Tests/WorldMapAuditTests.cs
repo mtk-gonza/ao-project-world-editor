@@ -69,17 +69,17 @@ public sealed class WorldMapAuditTests
 
         foreach (var layout in layouts)
         {
-            var ids = layout.MapIds.Where(id => id > 0).ToArray();
+            var ids = layout.SectorIds.Where(id => id > 0).ToArray();
             var dups = ids.GroupBy(id => id).Where(group => group.Count() > 1)
                 .OrderByDescending(group => group.Count())
                 .Select(group => $"{group.Key}x{group.Count()}").Take(5);
             var missing = ids.Where(id => !files.ContainsKey(id)).Distinct().Count();
-            lines.Add($"WORLDMAP{layout.WorldId}: {layout.Width}x{layout.Height} cells={layout.MapIds.Count} " +
+            lines.Add($"WORLDMAP{layout.WorldId}: {layout.Width}x{layout.Height} cells={layout.SectorIds.Count} " +
                 $"identity={ids.Length} distinct={ids.Distinct().Count()} missing={missing} " +
                 $"dups=[{string.Join(",", dups)}]");
         }
 
-        var loader = new CsmMapFileService();
+        var loader = new SectorCsmFileService();
         var exits = new Dictionary<short, List<(int X, int Y, short To, int TX, int TY)>>();
         var paintedFull = 0;
         var loaded = 0;
@@ -87,13 +87,13 @@ public sealed class WorldMapAuditTests
         var sw = Stopwatch.StartNew();
         foreach (var (mapId, path) in files)
         {
-            WorldMap map;
+            WorldSector map;
             try { map = loader.Load(path); }
             catch (Exception error) { failed.Add($"{mapId}:{error.GetType().Name}"); continue; }
             loaded++;
             var painted = 0;
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 var block = map.Blocks[x, y];
                 if (block.TileExit.Map > 0)
@@ -104,7 +104,7 @@ public sealed class WorldMapAuditTests
                 for (var layer = 0; layer < block.Graphics.Length; layer++)
                     if (block.Graphics[layer].GraphicIndex > 0) { painted++; break; }
             }
-            if (painted == WorldMap.Width * WorldMap.Height) paintedFull++;
+            if (painted == WorldSector.Width * WorldSector.Height) paintedFull++;
         }
         lines.Add($"loaded={loaded} failed={failed.Count} [{string.Join(",", failed.Take(10))}] " +
             $"elapsed={sw.ElapsedMilliseconds}ms fullyPainted100x100={paintedFull}");
@@ -129,8 +129,8 @@ public sealed class WorldMapAuditTests
         if (layout1 is not null)
         {
             var cellOf = new Dictionary<short, (int X, int Y)>();
-            for (var index = 0; index < layout1.MapIds.Count; index++)
-                if (layout1.MapIds[index] > 0) cellOf[layout1.MapIds[index]] = (index % layout1.Width, index / layout1.Width);
+            for (var index = 0; index < layout1.SectorIds.Count; index++)
+                if (layout1.SectorIds[index] > 0) cellOf[layout1.SectorIds[index]] = (index % layout1.Width, index / layout1.Width);
             var deltas = new Dictionary<string, int>();
             foreach (var (mapId, list) in exits)
             {
@@ -158,11 +158,11 @@ public sealed class WorldMapAuditTests
         var mapsDir = Path.Combine(root, "Mapas");
         if (!Directory.Exists(mapsDir)) return;
         var files = MapFiles(mapsDir);
-        var loader = new CsmMapFileService();
+        var loader = new SectorCsmFileService();
         var lines = new List<string>();
 
         var baseline = GC.GetTotalMemory(true);
-        var maps = new List<WorldMap>();
+        var maps = new List<WorldSector>();
         var sw = Stopwatch.StartNew();
         foreach (var (_, path) in files.OrderBy(item => item.Key))
         {
@@ -187,7 +187,7 @@ public sealed class WorldMapAuditTests
         lines.Add($"LoadWorld (lazy): loaded={world.LoadedMapCount} placements={world.Assembly.Placements.Count} " +
             $"elapsed={sw.ElapsedMilliseconds}ms memory={openBytes / 1024d / 1024d:F1} MB");
 
-        var visibleSample = world.Assembly.Placements.Select(item => item.MapId).Distinct().Take(9).ToArray();
+        var visibleSample = world.Assembly.Placements.Select(item => item.SectorId).Distinct().Take(9).ToArray();
         foreach (var mapId in visibleSample)
             try { _ = world.Maps[mapId]; } catch { }
         var visibleBytes = GC.GetTotalMemory(false) - sessionBaseline;
@@ -217,13 +217,13 @@ public sealed class WorldMapAuditTests
         GC.Collect();
 
         // Snapshot cost on a bounded sample; the full world scales linearly.
-        var sample = new Dictionary<short, WorldMap>();
+        var sample = new Dictionary<short, WorldSector>();
         foreach (var (mapId, path) in files.OrderBy(item => item.Key).Take(100))
             try { sample[mapId] = loader.Load(path); } catch { }
         var snapshotBaseline = GC.GetTotalMemory(true);
-        var snapshots = new List<WorldMapSnapshot>();
+        var snapshots = new List<WorldSectorSnapshot>();
         sw.Restart();
-        foreach (var map in sample.Values) snapshots.Add(WorldMapSnapshot.Capture(map));
+        foreach (var map in sample.Values) snapshots.Add(WorldSectorSnapshot.Capture(map));
         var snapshotBytes = GC.GetTotalMemory(false) - snapshotBaseline;
         lines.Add($"snapshot {sample.Count} maps: {snapshotBytes / 1024d / 1024d:F1} MB, " +
             $"{snapshotBytes / 1024d / 1024d / Math.Max(1, sample.Count):F2} MB/map, elapsed={sw.ElapsedMilliseconds}ms; " +
@@ -242,31 +242,31 @@ public sealed class WorldMapAuditTests
         if (!Directory.Exists(mapsDir)) return;
         var files = MapFiles(mapsDir);
         var layouts = new MapsWorldDataService().Load(Path.Combine(root, "init", "mapsworlddata.dat"));
-        var loader = new CsmMapFileService();
+        var loader = new SectorCsmFileService();
         var lines = new List<string>();
 
         foreach (var layout in layouts)
         {
-            var rootMap = layout.MapIds.FirstOrDefault(id => id > 0 && files.ContainsKey(id));
+            var rootMap = layout.SectorIds.FirstOrDefault(id => id > 0 && files.ContainsKey(id));
             if (rootMap <= 0) { lines.Add($"WORLDMAP{layout.WorldId}: no root"); continue; }
-            var maps = new Dictionary<short, WorldMap>();
-            foreach (var mapId in layout.MapIds.Where(id => id > 0 && files.ContainsKey(id)).Distinct())
+            var maps = new Dictionary<short, WorldSector>();
+            foreach (var mapId in layout.SectorIds.Where(id => id > 0 && files.ContainsKey(id)).Distinct())
                 try { maps[mapId] = loader.Load(files[mapId]); } catch { }
 
             var assembly = MapsWorldDataService.BuildAssembly(layouts, files.Keys.ToArray(), rootMap)!;
             var validatorIssues = new GlobalWorldLayoutValidator().Validate(assembly, maps, rootMap);
             var discovered = new GlobalWorldAssembler().Assemble(maps, rootMap);
             var officialCell = new Dictionary<short, (int X, int Y)>();
-            for (var index = 0; index < layout.MapIds.Count; index++)
-                if (layout.MapIds[index] > 0) officialCell[layout.MapIds[index]] = (index % layout.Width, index / layout.Width);
-            var identityCount = layout.MapIds.Count(id => id > 0);
+            for (var index = 0; index < layout.SectorIds.Count; index++)
+                if (layout.SectorIds[index] > 0) officialCell[layout.SectorIds[index]] = (index % layout.Width, index / layout.Width);
+            var identityCount = layout.SectorIds.Count(id => id > 0);
             var exact = 0;
             var modulo = 0;
             if (officialCell.Count == identityCount)
             {
                 foreach (var placement in discovered.Placements)
                 {
-                    if (!officialCell.TryGetValue(placement.MapId, out var official)) continue;
+                    if (!officialCell.TryGetValue(placement.SectorId, out var official)) continue;
                     if (official == (placement.Chunk.X, placement.Chunk.Y)) exact++;
                     var normalizedX = ((placement.Chunk.X % layout.Width) + layout.Width) % layout.Width;
                     if (official == (normalizedX, placement.Chunk.Y)) modulo++;
@@ -302,14 +302,14 @@ public sealed class WorldMapAuditTests
             var layout = layouts.FirstOrDefault(item => item.WorldId == 1);
             if (layout is not null)
             {
-                var loader = new CsmMapFileService();
-                var maps = new Dictionary<short, WorldMap>();
-                foreach (var mapId in layout.MapIds.Where(id => id > 0 && files.ContainsKey(id)).Distinct())
+                var loader = new SectorCsmFileService();
+                var maps = new Dictionary<short, WorldSector>();
+                foreach (var mapId in layout.SectorIds.Where(id => id > 0 && files.ContainsKey(id)).Distinct())
                     try { maps[mapId] = loader.Load(files[mapId]); } catch { }
 
                 // Whole-world sweep (old behaviour) vs a 9-map window that
                 // approximates what the viewport-limited path builds per frame.
-                var window = layout.MapIds.Where(id => id > 0 && maps.ContainsKey(id)).Take(9).ToArray();
+                var window = layout.SectorIds.Where(id => id > 0 && maps.ContainsKey(id)).Take(9).ToArray();
                 foreach (var (label, subset) in new[]
                 {
                     ("all", maps.Keys.ToArray()),
@@ -345,14 +345,14 @@ public sealed class WorldMapAuditTests
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
             ]
         };
         var document = new GlobalWorldDocument(assembly,
-            new Dictionary<short, WorldMap> { [1] = new(), [2] = new() },
+            new Dictionary<short, WorldSector> { [1] = new(), [2] = new() },
             new Dictionary<short, string> { [1] = "1.csm", [2] = "2.csm" }, 1);
-        foreach (var (mapId, x, y) in new (short MapId, int X, int Y)[]
+        foreach (var (mapId, x, y) in new (short SectorId, int X, int Y)[]
                  {
                      (2, 14, 50), (2, 1, 50), (2, 13, 50), (2, 88, 50),
                      (2, 100, 50), (1, 1, 50), (1, 13, 50), (1, 88, 50), (1, 100, 50)
@@ -365,7 +365,7 @@ public sealed class WorldMapAuditTests
             }
             document.TryResolve(global.X, global.Y, out var location);
             lines.Add($"roundtrip map{mapId}({x},{y})->global({global.X},{global.Y})->" +
-                $"map{location.MapId}({location.LocalX},{location.LocalY})");
+                $"map{location.SectorId}({location.LocalX},{location.LocalY})");
         }
         Write("overlay cost and roundtrip", lines);
     }

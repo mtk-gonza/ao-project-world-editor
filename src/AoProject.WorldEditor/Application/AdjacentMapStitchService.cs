@@ -9,7 +9,7 @@ internal readonly record struct StitchResult(StitchSide Side, short Map, int Cop
 /// <summary>Port of Form3.HacerTranslados region propagation.</summary>
 internal sealed class AdjacentMapStitchService
 {
-    public short DetectNeighborMap(WorldMap map, StitchSide side)
+    public short DetectNeighborMap(WorldSector map, StitchSide side)
     {
         ArgumentNullException.ThrowIfNull(map);
         var (fixedCoordinate, start, end, horizontal, fallbackX, fallbackY) = side switch
@@ -27,7 +27,7 @@ internal sealed class AdjacentMapStitchService
         return map.Blocks[fallbackX, fallbackY].TileExit.Map;
     }
 
-    public int CopySide(WorldMap source, WorldMap destination, StitchSide side)
+    public int CopySide(WorldSector source, WorldSector destination, StitchSide side)
     {
         var (region, targetX, targetY) = side switch
         {

@@ -20,12 +20,12 @@ internal sealed class AutoSaveService
 
     public void Stop() => IntervalMinutes = 0;
 
-    public string? Save(WorldMap? map, string? sourcePath, string destinationRoot)
+    public string? Save(WorldSector? map, string? sourcePath, string destinationRoot)
     {
         if (!Enabled || map is null || string.IsNullOrWhiteSpace(sourcePath)) return null;
         var fileName = Path.GetFileNameWithoutExtension(sourcePath) + ".csm";
         var destination = Path.Combine(Path.GetFullPath(destinationRoot), fileName);
-        new CsmMapFileService().Save(map, destination);
+        new SectorCsmFileService().Save(map, destination);
         return destination;
     }
 }

@@ -21,7 +21,7 @@ internal sealed class GlobalCsmArchiveService
         ArgumentNullException.ThrowIfNull(world);
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
         var maps = new List<MapEntry>();
-        var csm = new CsmMapFileService();
+        var csm = new SectorCsmFileService();
         foreach (var mapId in world.Paths.Keys.OrderBy(id => id))
         {
             if (!world.Paths.TryGetValue(mapId, out var source)) continue;
@@ -46,7 +46,7 @@ internal sealed class GlobalCsmArchiveService
         }
         for (var i = 0; i < maps.Count; i++)
         {
-            writer.Write(maps[i].MapId);
+            writer.Write(maps[i].SectorId);
             writer.Write(locations[i].CsmOffset); writer.Write(locations[i].CsmLength);
             writer.Write(locations[i].SideOffset); writer.Write(locations[i].SideLength);
         }
@@ -78,17 +78,17 @@ internal sealed class GlobalCsmArchiveService
             dat.WriteLine($"WrapX={(world.Assembly.WrapX ? 1 : 0)}");
             dat.WriteLine();
             dat.WriteLine("[AssemblyPlacements]");
-            foreach (var placement in world.Assembly.Placements.OrderBy(item => item.MapId))
-                dat.WriteLine($"Mapa{placement.MapId}={placement.Chunk.X},{placement.Chunk.Y},{placement.LevelId}");
+            foreach (var placement in world.Assembly.Placements.OrderBy(item => item.SectorId))
+                dat.WriteLine($"Mapa{placement.SectorId}={placement.Chunk.X},{placement.Chunk.Y},{placement.LevelId}");
             dat.WriteLine();
             dat.WriteLine("[AssemblyLinks]");
             foreach (var link in world.Assembly.Links)
                 dat.WriteLine($"{link.FromMap},{link.ToMap},{link.Side},{link.Evidence},{link.SourceX},{link.SourceY},{link.TargetX},{link.TargetY}");
             foreach (var map in maps)
             {
-                if (!world.Maps.TryGetValue(map.MapId, out var resolvedMap)) continue;
+                if (!world.Maps.TryGetValue(map.SectorId, out var resolvedMap)) continue;
                 dat.WriteLine();
-                dat.WriteLine($"[Mapa{map.MapId}]");
+                dat.WriteLine($"[Mapa{map.SectorId}]");
                 WriteMapInfo(dat, resolvedMap.Info);
                 foreach (var file in map.Sidecars.Where(file => file.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)))
                 {
@@ -101,7 +101,7 @@ internal sealed class GlobalCsmArchiveService
         }
 
         var files = maps.SelectMany(map => map.Sidecars.Select(file =>
-            new ArchiveFile($"Mapa{map.MapId}/{file.Name.Replace('\\', '/')}", file.Data))).ToArray();
+            new ArchiveFile($"Mapa{map.SectorId}/{file.Name.Replace('\\', '/')}", file.Data))).ToArray();
         var resolved = GlobalResolvedWorldSnapshot.Serialize(world, images);
         File.WriteAllBytes(infPath, SerializeFiles(files.Append(new ArchiveFile("__global_resolved_world.bin", resolved)).ToArray()));
         if (!string.IsNullOrWhiteSpace(mapDestination))
@@ -123,7 +123,7 @@ internal sealed class GlobalCsmArchiveService
         var shifts = BuildWorldImageShifts(world);
         using var composer = new WorldMiniMapComposer(layouts, MapMiniMapOptions.Vb6Default,
             catalog.Root, shifts);
-        var csm = new CsmMapFileService();
+        var csm = new SectorCsmFileService();
         foreach (var pair in world.Paths.OrderBy(pair => pair.Key))
         {
             try
@@ -148,12 +148,12 @@ internal sealed class GlobalCsmArchiveService
         var stitcher = new WorldBorderStitcher(world.Assembly.Placements, mapId =>
         {
             if (!world.Paths.TryGetValue(mapId, out var path)) return null;
-            try { return WorldBorderStitcher.Sample(new CsmMapFileService().Load(path)); }
+            try { return WorldBorderStitcher.Sample(new SectorCsmFileService().Load(path)); }
             catch { return null; }
         });
         var shifts = stitcher.ForAll(world.Assembly.Placements.Select(item => item.Chunk));
         return world.Assembly.Placements
-            .GroupBy(item => item.MapId)
+            .GroupBy(item => item.SectorId)
             .ToDictionary(group => group.Key, group =>
             {
                 var chunk = group.First().Chunk;
@@ -163,7 +163,7 @@ internal sealed class GlobalCsmArchiveService
             });
     }
 
-    private static void WriteMapInfo(StreamWriter writer, MapInfo info)
+    private static void WriteMapInfo(StreamWriter writer, SectorInfo info)
     {
         writer.WriteLine($"Name={info.Name}");
         writer.WriteLine($"Music={info.Music}");
@@ -188,7 +188,7 @@ internal sealed class GlobalCsmArchiveService
         writer.WriteLine($"Light={info.Light}");
     }
 
-    private static byte[] ReadMapPayload(GlobalWorldDocument world, short mapId, string source, CsmMapFileService csm)
+    private static byte[] ReadMapPayload(GlobalWorldDocument world, short mapId, string source, SectorCsmFileService csm)
     {
         if (!world.Maps.TryGetValue(mapId, out var map) || !map.Info.Changed)
             return File.ReadAllBytes(source);
@@ -246,11 +246,11 @@ internal sealed class GlobalCsmArchiveService
         return true;
     }
 
-    public static IReadOnlyList<short> ReadMapIds(string path)
+    public static IReadOnlyList<short> ReadSectorIds(string path)
     {
         if (!TryReadIndex(path, out var entries, out var stream)) return [];
         stream.Dispose();
-        return entries.Select(entry => entry.MapId).ToArray();
+        return entries.Select(entry => entry.SectorId).ToArray();
     }
 
     public static bool TryRead(string path, short mapId, out byte[] payload) =>
@@ -303,7 +303,7 @@ internal sealed class GlobalCsmArchiveService
         if (!TryReadIndex(path, out var entries, out var stream)) return false;
         using (stream)
         {
-            var entry = entries.FirstOrDefault(item => item.MapId == mapId);
+            var entry = entries.FirstOrDefault(item => item.SectorId == mapId);
             if (entry is null) return false;
             var offset = sidecars ? entry.SideOffset : entry.CsmOffset;
             var length = sidecars ? entry.SideLength : entry.CsmLength;
@@ -337,7 +337,7 @@ internal sealed class GlobalCsmArchiveService
         catch (IOException) { stream?.Dispose(); return false; }
     }
 
-    private sealed record MapEntry(short MapId, byte[] Payload, IReadOnlyList<ArchiveFile> Sidecars);
+    private sealed record MapEntry(short SectorId, byte[] Payload, IReadOnlyList<ArchiveFile> Sidecars);
     private sealed record ArchiveFile(string Name, byte[] Data);
-    private sealed record IndexEntry(short MapId, long CsmOffset, long CsmLength, long SideOffset, long SideLength);
+    private sealed record IndexEntry(short SectorId, long CsmOffset, long CsmLength, long SideOffset, long SideLength);
 }

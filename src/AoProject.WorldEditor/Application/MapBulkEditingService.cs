@@ -5,7 +5,7 @@ namespace AoProject.WorldEditor.Application;
 /// <summary>Bulk operations corresponding to the destructive commands in modEdicion.bas.</summary>
 internal sealed class MapBulkEditingService
 {
-    public int ReplaceGraphic(WorldMap map, int layer, int oldGraphic, int newGraphic)
+    public int ReplaceGraphic(WorldSector map, int layer, int oldGraphic, int newGraphic)
     {
         ValidateLayer(layer);
         var changed = 0;
@@ -19,7 +19,7 @@ internal sealed class MapBulkEditingService
         return changed;
     }
 
-    public void ClearLayer(WorldMap map, int layer)
+    public void ClearLayer(WorldSector map, int layer)
     {
         ValidateLayer(layer);
         var emptyGraphic = layer == 0 ? 1 : 0;
@@ -27,37 +27,37 @@ internal sealed class MapBulkEditingService
         MarkChanged(map, true);
     }
 
-    public void SetBlocked(WorldMap map, byte value)
+    public void SetBlocked(WorldSector map, byte value)
     {
         ForEachBlock(map, block => block.Blocked = value);
         MarkChanged(map, true);
     }
 
-    public void ClearTriggers(WorldMap map)
+    public void ClearTriggers(WorldSector map)
     {
         ForEachBlock(map, block => block.Trigger = 0);
         MarkChanged(map, true);
     }
 
-    public void ClearObjects(WorldMap map)
+    public void ClearObjects(WorldSector map)
     {
         ForEachBlock(map, block => { block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default; });
         MarkChanged(map, true);
     }
 
-    public void ClearExits(WorldMap map)
+    public void ClearExits(WorldSector map)
     {
         ForEachBlock(map, block => { block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0; });
         MarkChanged(map, true);
     }
 
-    private static void ForEachBlock(WorldMap map, Action<MapBlock> action)
+    private static void ForEachBlock(WorldSector map, Action<SectorTile> action)
     {
         ArgumentNullException.ThrowIfNull(map);
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
             action(map.Blocks[x, y]);
@@ -69,7 +69,7 @@ internal sealed class MapBulkEditingService
             throw new ArgumentOutOfRangeException(nameof(layer));
     }
 
-    private static void MarkChanged(WorldMap map, bool changed)
+    private static void MarkChanged(WorldSector map, bool changed)
     {
         if (changed) map.Info.Changed = true;
     }

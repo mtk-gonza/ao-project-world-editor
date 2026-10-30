@@ -1,4 +1,4 @@
-﻿using AoProject.WorldEditor.Application;
+using AoProject.WorldEditor.Application;
 using AoProject.WorldEditor.Domain;
 using AoProject.WorldEditor.Infrastructure;
 using Xunit;
@@ -11,7 +11,7 @@ public sealed class MapDataAuditTests
     public void A_clean_map_has_no_errors_and_survives_the_round_trip()
     {
         using var fixture = new MapFixture();
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Info.Name = "Limpio";
         map.Blocks[15, 13].Trigger = 54;
         fixture.Save(map, "mapa1.csm");
@@ -27,7 +27,7 @@ public sealed class MapDataAuditTests
     public void Reports_an_exit_to_a_map_that_is_not_in_the_folder()
     {
         using var fixture = new MapFixture();
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Info.Name = "Salida";
         map.Blocks[50, 50].TileExit.Map = 999;
         map.Blocks[50, 50].TileExit.X = 10;
@@ -43,9 +43,9 @@ public sealed class MapDataAuditTests
     public void Reports_content_outside_the_csm_size()
     {
         using var fixture = new MapFixture();
-        var map = new WorldMap
+        var map = new WorldSector
         {
-            CsmMapSize = new CsmMapSize(20, 10, 20, 10)
+            CsmSectorSize = new CsmSectorSize(20, 10, 20, 10)
         };
         map.Info.Name = "Chico";
         map.Blocks[1, 1].Graphics[0].GraphicIndex = 5;
@@ -70,7 +70,7 @@ public sealed class MapDataAuditTests
         private readonly string _root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ao-map-audit-" + Guid.NewGuid().ToString("N"));
         public MapFixture() => Directory.CreateDirectory(_root);
         public string FilePath(string name) => System.IO.Path.Combine(_root, name);
-        public void Save(WorldMap map, string name) => new CsmMapFileService().Save(map, FilePath(name));
+        public void Save(WorldSector map, string name) => new SectorCsmFileService().Save(map, FilePath(name));
         public void Dispose() { try { Directory.Delete(_root, true); } catch { } }
     }
 }

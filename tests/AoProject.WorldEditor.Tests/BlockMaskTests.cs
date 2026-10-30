@@ -18,7 +18,7 @@ public sealed class BlockMaskTests
         var root = Path.Combine(Path.GetTempPath(), "ao-mask-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var path = Path.Combine(root, "mapa1.csm"); new Infrastructure.CsmMapFileService().Save(new WorldMap(), path);
+            var path = Path.Combine(root, "mapa1.csm"); new Infrastructure.SectorCsmFileService().Save(new WorldSector(), path);
             var session = new WorldEditorSession(root); session.LoadMap(path);
             var changed = session.ApplyBlockMask(new TileSelection(4, 5, 6, 7), mask);
             Assert.Equal(9, changed);

@@ -9,7 +9,7 @@ public sealed class MapEntityUiWorkflowTests
     [Fact]
     public void Entity_editing_service_supports_object_npc_trigger_and_transfer_payloads()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var objects = new[] { new ObjectData(), new ObjectData { GraphicIndex = 700 } };
         var npcs = new[] { new NpcData(), new NpcData { Body = 2 } };
         var service = new MapEntityEditingService();

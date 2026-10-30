@@ -40,7 +40,8 @@ Logs are written to `<project>/logs/`. Autosave snapshots go to
 `%LOCALAPPDATA%/AoProject/WorldEditor/WorldEditor.ini`.
 
 Audits and auxiliary world outputs are generated under `artifacts/audit/` and
-`artifacts/world/`. The resource repository is never written by these commands.
+`artifacts/world/`. The explicit runtime-world generation command is the exception:
+it writes only `ao-project-resources/world` and `ao-project-resources/maps`.
 What is verified with evidence and what is still pending is tracked in
 [`docs/AUDIT-COVERAGE.md`](docs/AUDIT-COVERAGE.md). The closing gate is local:
 build, test suite and, when needed, the audit command.
@@ -87,16 +88,19 @@ From the workspace root:
 & "$env:LOCALAPPDATA\dotnet-sdk\dotnet.exe" build .\ao-project-world-editor\AoProject.WorldEditor.sln -c Release
 ```
 
-The resource repository is read-only input. Set `AO_RESOURCES` to
-`D:\projects\PERSONAL\ao-project\ao-project-resources` when wiring the runtime
-catalog; the editor must never write to that directory.
+The original `reference/Recursos` tree is read-only input. The explicit world
+generation command writes only the generated runtime to
+`ao-project-resources/world` and its PNG previews to `ao-project-resources/maps`.
+Set `AO_RESOURCES` to `D:\projects\PERSONAL\ao-project\ao-project-resources`
+when wiring the source catalog; ordinary editing must never modify the original
+resource maps.
 
 ## Code indexes
 
 Both indexes are generated artifacts and are gitignored:
 
 ```powershell
-# codebase-memory (MCP). Project: D-projects-PERSONAL-ao-project-ao-project-world-editor
+# codebase-memory (MCP). Project: D-projects-ao-project-ao-project-world-editor
 # artifact: .codebase-memory/graph.db.zst
 
 # graphify (code-only, no API key required)
@@ -111,6 +115,8 @@ Project-local documentation lives in [`docs/`](docs/README.md):
 
 - [`docs/CONTEXT.md`](docs/CONTEXT.md): project context, authority, architecture,
   formats and runtime conventions.
+- [`docs/WORLD-MAP-FORMAT.md`](docs/WORLD-MAP-FORMAT.md): authoritative runtime
+  bundle/floor format and generated PNG layout.
 - [`docs/STATE.md`](docs/STATE.md): measured state, feature matrix and test coverage.
 - [`docs/WORLD-MAP-AUDIT.md`](docs/WORLD-MAP-AUDIT.md): exhaustive audit of the
   global world map feature, findings and evidence.

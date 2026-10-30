@@ -2,7 +2,7 @@ using AoProject.WorldEditor.Domain;
 
 namespace AoProject.WorldEditor.Application;
 
-internal sealed record GlobalWorldLayoutIssue(short MapId, string Message);
+internal sealed record GlobalWorldLayoutIssue(short SectorId, string Message);
 
 /// <summary>
 /// Validates the official mapsworlddata grid in place: every adjacent pair of
@@ -14,7 +14,7 @@ internal sealed class GlobalWorldLayoutValidator
 {
     public IReadOnlyList<GlobalWorldLayoutIssue> Validate(
         GlobalWorldAssembly official,
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         short rootMap)
     {
         ArgumentNullException.ThrowIfNull(official);
@@ -23,7 +23,7 @@ internal sealed class GlobalWorldLayoutValidator
         var issues = new List<GlobalWorldLayoutIssue>();
         var cells = official.Placements
             .GroupBy(placement => placement.Chunk)
-            .ToDictionary(group => group.Key, group => group.First().MapId);
+            .ToDictionary(group => group.Key, group => group.First().SectorId);
         if (cells.Count == 0)
         {
             issues.Add(new GlobalWorldLayoutIssue(rootMap, "El layout activo no tiene sectores."));
@@ -67,7 +67,7 @@ internal sealed class GlobalWorldLayoutValidator
 
     private static void CheckPair(
         short fromId,
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         short toId,
         HashSet<short> filler,
         List<GlobalWorldLayoutIssue> issues,
@@ -84,9 +84,9 @@ internal sealed class GlobalWorldLayoutValidator
                 $"Falta salida {backward} de {toId} hacia {fromId} en el borde canonico."));
     }
 
-    private static bool HasExit(WorldMap map, GlobalWorldSide side, short target)
+    private static bool HasExit(WorldSector map, GlobalWorldSide side, short target)
     {
-        for (var index = 1; index <= WorldMap.Width; index++)
+        for (var index = 1; index <= WorldSector.Width; index++)
         {
             var exit = BorderExit(map, side, index);
             if (exit.Map != target) continue;
@@ -103,7 +103,7 @@ internal sealed class GlobalWorldLayoutValidator
         return false;
     }
 
-    private static WorldPosition BorderExit(WorldMap map, GlobalWorldSide side, int index) => side switch
+    private static WorldPosition BorderExit(WorldSector map, GlobalWorldSide side, int index) => side switch
     {
         GlobalWorldSide.West => map.Blocks[13, index].TileExit,
         GlobalWorldSide.East => map.Blocks[88, index].TileExit,

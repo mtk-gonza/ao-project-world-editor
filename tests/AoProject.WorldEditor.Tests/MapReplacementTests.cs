@@ -9,7 +9,7 @@ public sealed class MapReplacementTests
     [Fact]
     public void Replacement_moves_graphics_and_updates_entities_like_reference()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[2, 2].Graphics[0].GraphicIndex = 10;
         map.Blocks[3, 3].Object.Index = 1;
         map.Blocks[4, 4].NpcIndex = 1;

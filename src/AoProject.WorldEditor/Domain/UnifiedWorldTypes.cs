@@ -2,7 +2,7 @@ namespace AoProject.WorldEditor.Domain;
 
 /// <summary>
 /// Runtime representation of the migrated world. It is one rectangular map;
-/// legacy MapId values are consumed only by the compiler and never identify a
+/// legacy SectorId values are consumed only by the compiler and never identify a
 /// tile in this model.
 /// </summary>
 internal sealed class UnifiedWorldMap
@@ -39,6 +39,8 @@ internal sealed class UnifiedWorldMap
         Rain = new byte[count];
         Snow = new byte[count];
         Fog = new byte[count];
+        Water = new bool[count];
+        Lava = new bool[count];
     }
 
     public int Width { get; }
@@ -68,6 +70,8 @@ internal sealed class UnifiedWorldMap
     public byte[] Rain { get; }
     public byte[] Snow { get; }
     public byte[] Fog { get; }
+    public bool[] Water { get; }
+    public bool[] Lava { get; }
 
     public List<UnifiedWorldExit> Exits { get; } = [];
     public List<UnifiedWorldRoofZone> RoofZones { get; } = [];
@@ -93,20 +97,21 @@ internal sealed class UnifiedWorldBundle
 
     public IReadOnlyDictionary<int, UnifiedWorldMap> Floors => _floors;
     public int? ActiveFloorZ { get; private set; }
-    public IReadOnlyDictionary<short, GlobalMapPlacement> Placements { get; private set; } =
-        new Dictionary<short, GlobalMapPlacement>();
-    public IReadOnlyDictionary<short, int> MapFloors { get; private set; } =
+    public IReadOnlyDictionary<short, GlobalSectorPlacement> Placements { get; private set; } =
+        new Dictionary<short, GlobalSectorPlacement>();
+    public IReadOnlyDictionary<short, int> SectorFloors { get; private set; } =
         new Dictionary<short, int>();
-    public List<UnifiedWorldMapMetadata> MapMetadata { get; } = [];
+    public List<UnifiedWorldSectorMetadata> SectorMetadata { get; } = [];
+    public List<UnifiedWorldSectorSource> SectorSources { get; } = [];
 
-    public void SetPlacements(IEnumerable<GlobalMapPlacement> placements)
+    public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {
-        Placements = placements.ToDictionary(item => item.MapId);
+        Placements = placements.ToDictionary(item => item.SectorId);
     }
 
-    public void SetMapFloors(IEnumerable<KeyValuePair<short, int>> mapFloors)
+    public void SetSectorFloors(IEnumerable<KeyValuePair<short, int>> sectorFloors)
     {
-        MapFloors = mapFloors.ToDictionary(item => item.Key, item => item.Value);
+        SectorFloors = sectorFloors.ToDictionary(item => item.Key, item => item.Value);
     }
 
     public void Add(UnifiedWorldMap floor)
@@ -126,13 +131,21 @@ internal sealed class UnifiedWorldBundle
     }
 }
 
+/// <summary>Original sector payloads embedded in the generated world bundle.</summary>
+internal sealed record UnifiedWorldSectorSource(
+    short SectorId,
+    string SourceName,
+    byte[] Csm,
+    byte[] Inf,
+    byte[] Dat);
+
 /// <summary>Complete source-map metadata retained alongside the compact floors.</summary>
-internal sealed class UnifiedWorldMapMetadata
+internal sealed class UnifiedWorldSectorMetadata
 {
-    public short MapId { get; init; }
+    public short SectorId { get; init; }
     public int FloorZ { get; init; }
-    public CsmMapSize MapSize { get; init; } = CsmMapSize.Default;
-    public MapInfo Info { get; } = new();
+    public CsmSectorSize MapSize { get; init; } = CsmSectorSize.Default;
+    public SectorInfo Info { get; } = new();
     public MapEnvironment Environment { get; } = new();
 }
 
@@ -149,7 +162,7 @@ internal sealed record UnifiedWorldExit(
     int SourceY,
     int TargetX,
     int TargetY,
-    short ExternalMapId = 0,
+    short ExternalSectorId = 0,
     short ExternalX = 0,
     short ExternalY = 0,
     int SourceZ = 0,
@@ -177,8 +190,8 @@ internal sealed record UnifiedWorldEnvironmentProfile(
 internal sealed record UnifiedWorldConflict(
     int GlobalX,
     int GlobalY,
-    short FirstMapId,
-    short SecondMapId,
+    short FirstSectorId,
+    short SecondSectorId,
     string Field,
     string Message,
     int Z = 0);

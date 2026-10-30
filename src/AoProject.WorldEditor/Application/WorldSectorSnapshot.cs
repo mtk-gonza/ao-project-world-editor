@@ -3,34 +3,34 @@ using AoProject.WorldEditor.Domain;
 namespace AoProject.WorldEditor.Application;
 
 /// <summary>Deep snapshot used to undo one bulk editor command atomically.</summary>
-internal sealed class WorldMapSnapshot
+internal sealed class WorldSectorSnapshot
 {
     private readonly MapInfoSnapshot _info;
     private readonly MapEnvironmentSnapshot _environment;
-    private readonly BlockSnapshot[,] _blocks = new BlockSnapshot[WorldMap.Width + 1, WorldMap.Height + 1];
+    private readonly BlockSnapshot[,] _blocks = new BlockSnapshot[WorldSector.Width + 1, WorldSector.Height + 1];
 
-    private WorldMapSnapshot(WorldMap map)
+    private WorldSectorSnapshot(WorldSector map)
     {
         _info = MapInfoSnapshot.Capture(map.Info);
         _environment = MapEnvironmentSnapshot.Capture(map.Environment);
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
             _blocks[x, y] = BlockSnapshot.Capture(map.Blocks[x, y]);
     }
 
-    public static WorldMapSnapshot Capture(WorldMap map)
+    public static WorldSectorSnapshot Capture(WorldSector map)
     {
         ArgumentNullException.ThrowIfNull(map);
-        return new WorldMapSnapshot(map);
+        return new WorldSectorSnapshot(map);
     }
 
-    public void Restore(WorldMap map)
+    public void Restore(WorldSector map)
     {
         ArgumentNullException.ThrowIfNull(map);
         _info.Restore(map.Info);
         _environment.Restore(map.Environment);
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
             _blocks[x, y].Restore(map.Blocks[x, y]);
         map.Info.Changed = true;
     }
@@ -43,7 +43,7 @@ internal sealed class WorldMapSnapshot
         private readonly bool _playerKilling, _changed;
         private readonly byte _magic, _invisibility, _resurrection, _noEncrypt, _backup, _safety;
 
-        private MapInfoSnapshot(MapInfo info)
+        private MapInfoSnapshot(SectorInfo info)
         {
             _music = info.Music; _musicHigh = info.MusicNumberHigh; _musicLow = info.MusicNumberLow;
             _ambient = info.Ambient; _exit = info.Exit; _letterGraphic = info.LetterGraphic;
@@ -55,8 +55,8 @@ internal sealed class WorldMapSnapshot
             _resurrection = info.ResurrectionDisabled; _noEncrypt = info.NoEncryptMap; _backup = info.Backup;
         }
 
-        public static MapInfoSnapshot Capture(MapInfo info) => new(info);
-        public void Restore(MapInfo info)
+        public static MapInfoSnapshot Capture(SectorInfo info) => new(info);
+        public void Restore(SectorInfo info)
         {
             info.Music = _music; info.MusicNumberHigh = _musicHigh; info.MusicNumberLow = _musicLow;
             info.Ambient = _ambient; info.Exit = _exit; info.LetterGraphic = _letterGraphic;
@@ -93,7 +93,7 @@ internal sealed class WorldMapSnapshot
         private readonly byte _blocked, _red, _green, _blue;
         private readonly short _trigger;
 
-        private BlockSnapshot(MapBlock block)
+        private BlockSnapshot(SectorTile block)
         {
             _graphics = (GraphicAnimation[])block.Graphics.Clone();
             _objectGraphic = block.ObjectGraphic;
@@ -106,8 +106,8 @@ internal sealed class WorldMapSnapshot
             _red = block.Red; _green = block.Green; _blue = block.Blue; _trigger = block.Trigger;
         }
 
-        public static BlockSnapshot Capture(MapBlock block) => new(block);
-        public void Restore(MapBlock block)
+        public static BlockSnapshot Capture(SectorTile block) => new(block);
+        public void Restore(SectorTile block)
         {
             Array.Copy(_graphics, block.Graphics, _graphics.Length); block.ObjectGraphic = _objectGraphic;
             Array.Copy(_lightValues, block.LightValues, _lightValues.Length); Array.Copy(_colors, block.Colors, _colors.Length);

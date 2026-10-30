@@ -8,8 +8,8 @@ internal sealed record UnifiedWorldConflictReportEntry(
     int Z,
     int GlobalX,
     int GlobalY,
-    short FirstMapId,
-    short SecondMapId,
+    short FirstSectorId,
+    short SecondSectorId,
     string Field,
     string Message);
 
@@ -20,7 +20,7 @@ internal sealed class UnifiedWorldConflictReportService
         ArgumentNullException.ThrowIfNull(bundle);
         return bundle.Floors.Values.SelectMany(map => map.Conflicts.Select(conflict =>
             new UnifiedWorldConflictReportEntry(map.FloorZ, conflict.GlobalX, conflict.GlobalY,
-                conflict.FirstMapId, conflict.SecondMapId, conflict.Field, conflict.Message)))
+                conflict.FirstSectorId, conflict.SecondSectorId, conflict.Field, conflict.Message)))
             .OrderBy(item => item.Z).ThenBy(item => item.GlobalY).ThenBy(item => item.GlobalX)
             .ThenBy(item => item.Field).ToArray();
     }
@@ -38,7 +38,7 @@ internal sealed class UnifiedWorldConflictReportService
             totalConflicts = entries.Count,
             byField = entries.GroupBy(item => item.Field).OrderByDescending(group => group.Count())
                 .ToDictionary(group => group.Key, group => group.Count()),
-            byMapPair = entries.GroupBy(item => $"{item.FirstMapId}/{item.SecondMapId}")
+            byMapPair = entries.GroupBy(item => $"{item.FirstSectorId}/{item.SecondSectorId}")
                 .OrderByDescending(group => group.Count())
                 .ToDictionary(group => group.Key, group => group.Count()),
             conflicts = entries
@@ -48,10 +48,10 @@ internal sealed class UnifiedWorldConflictReportService
             JsonSerializer.Serialize(summary, options), Encoding.UTF8);
 
         using var writer = new StreamWriter(Path.Combine(directory, "unified-world-conflicts.csv"), false, Encoding.UTF8);
-        writer.WriteLine("Z,GlobalX,GlobalY,FirstMapId,SecondMapId,Field,Message");
+        writer.WriteLine("Z,GlobalX,GlobalY,FirstSectorId,SecondSectorId,Field,Message");
         foreach (var item in entries)
-            writer.WriteLine(string.Join(",", item.Z, item.GlobalX, item.GlobalY, item.FirstMapId,
-                item.SecondMapId, Csv(item.Field), Csv(item.Message)));
+            writer.WriteLine(string.Join(",", item.Z, item.GlobalX, item.GlobalY, item.FirstSectorId,
+                item.SecondSectorId, Csv(item.Field), Csv(item.Message)));
     }
 
     private static string Csv(string value) => $"\"{value.Replace("\"", "\"\"")}\"";

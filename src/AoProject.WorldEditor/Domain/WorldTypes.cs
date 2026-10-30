@@ -69,7 +69,7 @@ internal sealed class WorldPosition
 }
 
 /// <summary>Metadata stored with a map.</summary>
-internal sealed class MapInfo
+internal sealed class SectorInfo
 {
     public string Music { get; set; } = string.Empty;
     public int MusicNumberHigh { get; set; }
@@ -95,8 +95,8 @@ internal sealed class MapInfo
     public string Light { get; set; } = string.Empty;
 }
 
-/// <summary>Mutable equivalent of the VB6 MapBlock structure.</summary>
-internal sealed class MapBlock
+/// <summary>Mutable equivalent of the VB6 SectorTile structure.</summary>
+internal sealed class SectorTile
 {
     public GraphicAnimation[] Graphics { get; } = new GraphicAnimation[8];
     public short CharacterIndex { get; set; }
@@ -117,35 +117,35 @@ internal sealed class MapBlock
     public byte Blue { get; set; }
 }
 
-internal sealed class WorldMap
+internal sealed class WorldSector
 {
     public const int Width = 100;
     public const int Height = 100;
 
-    public MapInfo Info { get; } = new();
-    public CsmMapSize CsmMapSize { get; set; } = CsmMapSize.Default;
-    public MapBlock[,] Blocks { get; } = CreateBlocks();
+    public SectorInfo Info { get; } = new();
+    public CsmSectorSize CsmSectorSize { get; set; } = CsmSectorSize.Default;
+    public SectorTile[,] Blocks { get; } = CreateBlocks();
     public LegacyMapHeader Header { get; set; } = LegacyMapHeader.Empty;
     public MapEnvironment Environment { get; } = new();
 
-    private static MapBlock[,] CreateBlocks()
+    private static SectorTile[,] CreateBlocks()
     {
-        var blocks = new MapBlock[Width + 1, Height + 1];
+        var blocks = new SectorTile[Width + 1, Height + 1];
         for (var x = 1; x <= Width; x++)
         for (var y = 1; y <= Height; y++)
-            blocks[x, y] = new MapBlock();
+            blocks[x, y] = new SectorTile();
         return blocks;
     }
 }
 
-internal readonly record struct CsmMapSize(short XMax, short XMin, short YMax, short YMin)
+internal readonly record struct CsmSectorSize(short XMax, short XMin, short YMax, short YMin)
 {
-    public static CsmMapSize Default => new(100, 1, 100, 1);
+    public static CsmSectorSize Default => new(100, 1, 100, 1);
 
-    public bool IsValid => XMin >= 1 && XMax <= WorldMap.Width && XMin <= XMax &&
-        YMin >= 1 && YMax <= WorldMap.Height && YMin <= YMax;
+    public bool IsValid => XMin >= 1 && XMax <= WorldSector.Width && XMin <= XMax &&
+        YMin >= 1 && YMax <= WorldSector.Height && YMin <= YMax;
 
-    public CsmMapSize Normalize() => IsValid ? this : Default;
+    public CsmSectorSize Normalize() => IsValid ? this : Default;
 }
 
 internal sealed class MapEnvironment
@@ -186,7 +186,7 @@ internal sealed class ObjectData
     public string Text { get; set; } = string.Empty;
     public byte Closed { get; set; }
     public byte Subtype { get; set; }
-    /// <summary>Explicit physical mask materialized into MapBlock.Blocked.</summary>
+    /// <summary>Explicit physical mask materialized into SectorTile.Blocked.</summary>
     public byte DefaultBlockedMask { get; set; }
 }
 

@@ -8,8 +8,8 @@ internal enum AuditSeverity
 }
 
 /// <summary>A finding for one CSM file or one cell of it.</summary>
-internal sealed record MapAuditIssue(
-    short MapId,
+internal sealed record SectorAuditIssue(
+    short SectorId,
     string Code,
     AuditSeverity Severity,
     string Message,
@@ -28,15 +28,15 @@ internal sealed record MapBorderExit(
 
 /// <summary>Compact per-map data kept after the map audit for the world coordinate pass.</summary>
 internal sealed record MapCoordinateInfo(
-    short MapId,
+    short SectorId,
     short XMin,
     short XMax,
     short YMin,
     short YMax,
     IReadOnlyList<MapBorderExit> BorderExits);
 
-internal sealed record MapAuditSummary(
-    short MapId,
+internal sealed record SectorAuditSummary(
+    short SectorId,
     string File,
     int FileSize,
     string Name,
@@ -54,13 +54,13 @@ internal sealed record MapAuditSummary(
     int Npcs,
     int Objects,
     int Exits,
-    IReadOnlyList<MapAuditIssue> Issues,
+    IReadOnlyList<SectorAuditIssue> Issues,
     IReadOnlyList<MapBorderExit> BorderExits);
 
 /// <summary>A finding for the official world grid or the local/global coordinate mapping.</summary>
 internal sealed record WorldAuditIssue(
     int WorldId,
-    short MapId,
+    short SectorId,
     string Code,
     AuditSeverity Severity,
     string Message,

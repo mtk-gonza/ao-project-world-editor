@@ -32,7 +32,7 @@ internal sealed class BatchMapExportService
             var destination = Path.Combine(destinationDirectory, Path.GetFileNameWithoutExtension(path) + ".png");
             try
             {
-                var map = new Infrastructure.CsmMapFileService().Load(path);
+                var map = new Infrastructure.SectorCsmFileService().Load(path);
                 capture.SavePng(map, graphics, resourceRoot, destination, objects: objects, particles: particles,
                     npcs: npcs, bodies: bodies, heads: heads, helmets: helmets, weapons: weapons, shields: shields);
                 results.Add(new BatchMapExportResult(path, destination, true));

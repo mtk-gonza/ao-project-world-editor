@@ -7,7 +7,7 @@ namespace AoProject.WorldEditor.Infrastructure;
 internal sealed class UnifiedWorldBundleFileService
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AOGBND01");
-    private const int Version = 4;
+    private const int Version = 5;
     private readonly UnifiedWorldFileService _floorFiles = new();
 
     public void Save(UnifiedWorldBundle bundle, string directory)
@@ -24,7 +24,9 @@ internal sealed class UnifiedWorldBundleFileService
         // an obsolete floor by directory enumeration.
         foreach (var stale in Directory.EnumerateFiles(directory, "floor-*.gmap"))
             File.Delete(stale);
-        var imageDirectory = Path.Combine(directory, "worldmap");
+        // PNG previews live beside the runtime bundle, in resources/maps.
+        var imageDirectory = Path.Combine(
+            Directory.GetParent(Path.GetFullPath(directory))?.FullName ?? directory, "maps");
         if (Directory.Exists(imageDirectory))
             foreach (var stale in Directory.EnumerateFiles(imageDirectory, "floor-*.png"))
                 File.Delete(stale);
@@ -35,24 +37,33 @@ internal sealed class UnifiedWorldBundleFileService
             writer.Write(floors.Length);
             foreach (var z in floors) writer.Write(z);
             writer.Write(bundle.Placements.Count);
-            foreach (var placement in bundle.Placements.Values.OrderBy(item => item.MapId))
+            foreach (var placement in bundle.Placements.Values.OrderBy(item => item.SectorId))
             {
-                writer.Write(placement.MapId);
+                writer.Write(placement.SectorId);
                 writer.Write(placement.Chunk.X);
                 writer.Write(placement.Chunk.Y);
                 writer.Write(placement.LevelId ?? string.Empty);
                 writer.Write(placement.StitchX);
                 writer.Write(placement.StitchY);
             }
-            writer.Write(bundle.MapFloors.Count);
-            foreach (var item in bundle.MapFloors.OrderBy(item => item.Key))
+            writer.Write(bundle.SectorFloors.Count);
+            foreach (var item in bundle.SectorFloors.OrderBy(item => item.Key))
             {
                 writer.Write(item.Key);
                 writer.Write(item.Value);
             }
-            writer.Write(bundle.MapMetadata.Count);
-            foreach (var metadata in bundle.MapMetadata.OrderBy(item => item.MapId))
+            writer.Write(bundle.SectorMetadata.Count);
+            foreach (var metadata in bundle.SectorMetadata.OrderBy(item => item.SectorId))
                 WriteMetadata(writer, metadata);
+            writer.Write(bundle.SectorSources.Count);
+            foreach (var source in bundle.SectorSources.OrderBy(item => item.SectorId))
+            {
+                writer.Write(source.SectorId);
+                writer.Write(source.SourceName);
+                WriteBytes(writer, source.Csm);
+                WriteBytes(writer, source.Inf);
+                WriteBytes(writer, source.Dat);
+            }
         }
         foreach (var z in floors)
             _floorFiles.Save(bundle.Floors[z], Path.Combine(directory, FloorFileName(z)));
@@ -75,7 +86,7 @@ internal sealed class UnifiedWorldBundleFileService
         for (var i = 0; i < count; i++) floorZs[i] = reader.ReadInt32();
         var placementCount = version >= 2 ? reader.ReadInt32() : 0;
         if (placementCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de placements inválida.");
-        var placements = new List<GlobalMapPlacement>(placementCount);
+        var placements = new List<GlobalSectorPlacement>(placementCount);
         for (var i = 0; i < placementCount; i++)
         {
             var mapId = reader.ReadInt16();
@@ -83,23 +94,35 @@ internal sealed class UnifiedWorldBundleFileService
             var levelId = reader.ReadString();
             var stitchX = version >= 3 ? reader.ReadInt32() : 0;
             var stitchY = version >= 3 ? reader.ReadInt32() : 0;
-            placements.Add(new GlobalMapPlacement(mapId, chunk, levelId, stitchX, stitchY));
+            placements.Add(new GlobalSectorPlacement(mapId, chunk, levelId, stitchX, stitchY));
         }
         bundle.SetPlacements(placements);
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             var mapFloorCount = reader.ReadInt32();
             if (mapFloorCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de pisos por mapa inválida.");
-            var mapFloors = new List<KeyValuePair<short, int>>(mapFloorCount);
+            var sectorFloors = new List<KeyValuePair<short, int>>(mapFloorCount);
             for (var i = 0; i < mapFloorCount; i++)
-                mapFloors.Add(new KeyValuePair<short, int>(reader.ReadInt16(), reader.ReadInt32()));
-            bundle.SetMapFloors(mapFloors);
+                sectorFloors.Add(new KeyValuePair<short, int>(reader.ReadInt16(), reader.ReadInt32()));
+            bundle.SetSectorFloors(sectorFloors);
         }
         if (version >= 4 && reader.BaseStream.Position < reader.BaseStream.Length)
         {
             var metadataCount = reader.ReadInt32();
             if (metadataCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de metadatos inválida.");
-            for (var i = 0; i < metadataCount; i++) bundle.MapMetadata.Add(ReadMetadata(reader));
+            for (var i = 0; i < metadataCount; i++) bundle.SectorMetadata.Add(ReadMetadata(reader));
+        }
+        if (version >= 5 && reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            var sourceCount = reader.ReadInt32();
+            if (sourceCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de fuentes de sector inválida.");
+            for (var i = 0; i < sourceCount; i++)
+            {
+                var sectorId = reader.ReadInt16();
+                var sourceName = reader.ReadString();
+                bundle.SectorSources.Add(new UnifiedWorldSectorSource(
+                    sectorId, sourceName, ReadBytes(reader), ReadBytes(reader), ReadBytes(reader)));
+            }
         }
         foreach (var z in floorZs)
         {
@@ -119,10 +142,25 @@ internal sealed class UnifiedWorldBundleFileService
 
     private static string FloorFileName(int z) => $"floor-{z:+#;-#;0}.gmap";
 
-    private static void WriteMetadata(BinaryWriter writer, UnifiedWorldMapMetadata metadata)
+    private static void WriteBytes(BinaryWriter writer, byte[] bytes)
+    {
+        writer.Write(bytes.Length);
+        writer.Write(bytes);
+    }
+
+    private static byte[] ReadBytes(BinaryReader reader)
+    {
+        var length = reader.ReadInt32();
+        if (length is < 0 or > 500_000_000) throw new InvalidDataException("Payload de sector inválido.");
+        var bytes = reader.ReadBytes(length);
+        if (bytes.Length != length) throw new EndOfStreamException("Payload de sector incompleto.");
+        return bytes;
+    }
+
+    private static void WriteMetadata(BinaryWriter writer, UnifiedWorldSectorMetadata metadata)
     {
         var info = metadata.Info;
-        writer.Write(metadata.MapId); writer.Write(metadata.FloorZ);
+        writer.Write(metadata.SectorId); writer.Write(metadata.FloorZ);
         writer.Write(metadata.MapSize.XMax); writer.Write(metadata.MapSize.XMin);
         writer.Write(metadata.MapSize.YMax); writer.Write(metadata.MapSize.YMin);
         writer.Write(info.Music); writer.Write(info.MusicNumberHigh); writer.Write(info.MusicNumberLow);
@@ -137,12 +175,12 @@ internal sealed class UnifiedWorldBundleFileService
         writer.Write(metadata.Environment.Snow); writer.Write(metadata.Environment.Fog);
     }
 
-    private static UnifiedWorldMapMetadata ReadMetadata(BinaryReader reader)
+    private static UnifiedWorldSectorMetadata ReadMetadata(BinaryReader reader)
     {
-        var metadata = new UnifiedWorldMapMetadata
+        var metadata = new UnifiedWorldSectorMetadata
         {
-            MapId = reader.ReadInt16(), FloorZ = reader.ReadInt32(),
-            MapSize = new CsmMapSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16())
+            SectorId = reader.ReadInt16(), FloorZ = reader.ReadInt32(),
+            MapSize = new CsmSectorSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16())
         };
         var info = metadata.Info;
         info.Music = reader.ReadString(); info.MusicNumberHigh = reader.ReadInt32(); info.MusicNumberLow = reader.ReadInt32();

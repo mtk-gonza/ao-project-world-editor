@@ -9,7 +9,7 @@ public sealed class SurfacePlacementTests
     [Fact]
     public void Surface_placement_applies_dimensions_layer_mosaic_and_blocking()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var surface = new SurfaceData { GraphicIndex = 500, Width = 2, Height = 2, Layer = 3, Blocked = true };
         var placed = new SurfacePlacementService().Place(map, surface, 10, 20, true);
 
@@ -23,7 +23,7 @@ public sealed class SurfacePlacementTests
     [Fact]
     public void PaintAt_uses_legacy_tile_based_mosaic_and_blocking()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         new SurfacePlacementService().PaintAt(map, 5, 6, 0, 100, 4, 3, true);
 
         Assert.Equal(100 + (6 % 3) * 4 + (5 % 4), map.Blocks[5, 6].Graphics[0].GraphicIndex);
@@ -33,7 +33,7 @@ public sealed class SurfacePlacementTests
     [Fact]
     public void PaintAt_rejects_tiles_outside_csm_domain()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(5, 2, 5, 2) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(5, 2, 5, 2) };
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SurfacePlacementService().PaintAt(map, 1, 1, 0, 100, 1, 1, false));
@@ -42,7 +42,7 @@ public sealed class SurfacePlacementTests
     [Fact]
     public void AutoCompleteAt_fills_only_the_effective_domain()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(3, 2, 3, 2) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(3, 2, 3, 2) };
 
         var placed = new SurfacePlacementService().AutoCompleteAt(map, 2, 2, 0, 500, 3, 2, true);
 
@@ -56,7 +56,7 @@ public sealed class SurfacePlacementTests
     [Fact]
     public void AutoCompleteAt_supports_single_row_or_column_mosaics()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
 
         var placed = new SurfacePlacementService().AutoCompleteAt(map, 4, 4, 0, 700, 1, 3, false);
 

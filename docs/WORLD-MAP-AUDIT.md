@@ -342,7 +342,7 @@ Severidades: C = critico, H = alto, M = medio.
   mapa vecino.
 - **Evidencia:** los tiles se recortan en `MapRenderGeometry.Combine` (92-104), pero
   `AppendObjectSprites` (WorldRenderControl:362-381) y el render de NPCs recorren el
-  `CsmMapSize` completo y se dibujan sin clip; `BuildOverlays` agrega overlays de
+  `CsmSectorSize` completo y se dibujan sin clip; `BuildOverlays` agrega overlays de
   todos los placements sin filtrar tiles ocultos (658-665).
 - **Impacto:** el mundo global muestra contenido duplicado/desplazado; con triggers
   activados es visible de inmediato.

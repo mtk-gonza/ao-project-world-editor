@@ -39,8 +39,8 @@ public sealed class AnimationFrameTests
         var mapPath = Path.Combine(root, "Mapas", "mapa1.csm");
         if (!File.Exists(mapPath)) return;
         var catalog = Infrastructure.WorldEditorResourceCatalog.Load(root);
-        var map = new Infrastructure.CsmMapFileService().Load(mapPath);
-        var animated = map.Blocks.Cast<MapBlock>().Where(block => block is not null)
+        var map = new Infrastructure.SectorCsmFileService().Load(mapPath);
+        var animated = map.Blocks.Cast<SectorTile>().Where(block => block is not null)
             .SelectMany(block => block.Graphics)
             .Select(graphic => graphic.GraphicIndex)
             .Distinct()

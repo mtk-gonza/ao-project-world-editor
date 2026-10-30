@@ -21,7 +21,7 @@ public sealed class MinimapCoverageDiagTests
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
         var output = new List<string>();
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         using var averages = new GraphicAverageColorService(root);
         var mapsDirectory = Path.Combine(root, "Mapas");
         foreach (var mapId in new short[] { 17, 842 })
@@ -33,8 +33,8 @@ public sealed class MinimapCoverageDiagTests
             var total = 0;
             var needsLayer2 = 0;
             var byGraphic = new Dictionary<int, int>();
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 total++;
                 var color = Color.Black;
@@ -96,7 +96,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var map = new CsmMapFileService().Load(Path.Combine(root, "Mapas", "mapa17.csm"));
+        var map = new SectorCsmFileService().Load(Path.Combine(root, "Mapas", "mapa17.csm"));
         var lines = new List<string>();
         for (var x = 28; x <= 32; x++)
         for (var y = 21; y <= 25; y++)
@@ -124,7 +124,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var lines = new List<string>();
         foreach (var mapId in new short[] { 842, 17, 401, 407 })
         {
@@ -136,8 +136,8 @@ public sealed class MinimapCoverageDiagTests
             var real = 0;
             var missing = 0;
             var histogram = new Dictionary<int, int>();
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 var index = map.Blocks[x, y].Graphics[0].GraphicIndex;
                 if (index == 0) zero++;
@@ -170,7 +170,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var lines = new List<string>();
         using var atlas = new GraphicAtlas(root);
         foreach (var mapId in new short[] { 842, 17 })
@@ -179,8 +179,8 @@ public sealed class MinimapCoverageDiagTests
             if (!File.Exists(path)) continue;
             var map = service.Load(path);
             var missing = new Dictionary<int, int>();
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             for (var layer = 0; layer < 4; layer++)
             {
                 var index = map.Blocks[x, y].Graphics[layer].GraphicIndex;
@@ -214,7 +214,7 @@ public sealed class MinimapCoverageDiagTests
         {
             var path = Path.Combine(root, "Mapas", $"mapa{mapId}.csm");
             if (!File.Exists(path)) continue;
-            var map = new CsmMapFileService().Load(path);
+            var map = new SectorCsmFileService().Load(path);
             for (var y = 20; y <= 26; y++)
             for (var x = 28; x <= 34; x++)
             {
@@ -320,7 +320,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var map = new CsmMapFileService().Load(Path.Combine(root, "Mapas", "mapa842.csm"));
+        var map = new SectorCsmFileService().Load(Path.Combine(root, "Mapas", "mapa842.csm"));
         using var averages = new GraphicAverageColorService(root);
         var lines = new List<string>();
         for (var y = 20; y <= 28; y++)
@@ -352,7 +352,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         using var averages = new GraphicAverageColorService(root);
         var output = new List<string>();
         foreach (var mapId in new short[] { 842, 401, 407, 17, 402 })
@@ -361,8 +361,8 @@ public sealed class MinimapCoverageDiagTests
         int black = 0, blackWithObject = 0, withObject = 0;
         int minX = 999, maxX = -1, minY = 999, maxY = -1;
         var samples = new List<string>();
-        for (var y = 1; y <= WorldMap.Height; y++)
-        for (var x = 1; x <= WorldMap.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
         {
             var block = map.Blocks[x, y];
             var index = block.Graphics[0].GraphicIndex;
@@ -416,7 +416,7 @@ public sealed class MinimapCoverageDiagTests
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         using var averages = new GraphicAverageColorService(root);
         var lines = new List<string>();
         foreach (var mapId in new short[] { 842, 17, 401, 407, 402 })
@@ -471,8 +471,8 @@ public sealed class MinimapCoverageDiagTests
             // Duplicate chunks and duplicate map ids.
             foreach (var group in assembly.Placements.GroupBy(item => item.Chunk).Where(g => g.Count() > 1))
                 lines.Add($"CHUNK DUPLICADO ({group.Key.X},{group.Key.Y}): " +
-                    string.Join(",", group.Select(item => item.MapId)));
-            foreach (var group in assembly.Placements.GroupBy(item => item.MapId).Where(g => g.Count() > 1))
+                    string.Join(",", group.Select(item => item.SectorId)));
+            foreach (var group in assembly.Placements.GroupBy(item => item.SectorId).Where(g => g.Count() > 1))
                 lines.Add($"MAPA EN VARIOS CHUNKS {group.Key}: " +
                     string.Join(" ", group.Select(item => $"({item.Chunk.X},{item.Chunk.Y})")));
             foreach (var conflict in assembly.Conflicts)
@@ -494,7 +494,7 @@ public sealed class MinimapCoverageDiagTests
                     var right = item.Chunk.X * 75 + 88 - 1;
                     var bottom = item.Chunk.Y * 81 + 91 - 1;
                     return gx >= left && gx <= right && gy >= top && gy <= bottom;
-                }).Select(item => item.MapId).ToArray();
+                }).Select(item => item.SectorId).ToArray();
                 lines.Add($"global({gx},{gy}) cubierto por: {string.Join(",", covering)}");
             }
         }
@@ -509,14 +509,14 @@ public sealed class MinimapCoverageDiagTests
         if (Environment.GetEnvironmentVariable("AO_MINIMAP_DIAG") != "1") return;
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
-        var map = new CsmMapFileService().Load(Path.Combine(root, "Mapas", "mapa17.csm"));
+        var map = new SectorCsmFileService().Load(Path.Combine(root, "Mapas", "mapa17.csm"));
         var lines = new List<string>();
         foreach (var probe in new (int X, int Y, int Layer)[] { (17, 11, 0), (49, 11, 1), (30, 22, 0), (31, 24, 0) })
         {
             var graphic = map.Blocks[probe.X, probe.Y].Graphics[probe.Layer].GraphicIndex;
             var hits = new List<string>();
-            for (var y = 1; y <= WorldMap.Height; y++)
-            for (var x = 1; x <= WorldMap.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
             for (var layer = 0; layer < 4; layer++)
                 if (map.Blocks[x, y].Graphics[layer].GraphicIndex == graphic)
                     hits.Add($"({x},{y},c{layer + 1})");
@@ -609,7 +609,7 @@ public sealed class MinimapCoverageDiagTests
         if (Environment.GetEnvironmentVariable("AO_MINIMAP_DIAG") != "1") return;
         var root = ResourceRoot();
         if (!Directory.Exists(root)) return;
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var lines = new List<string>();
         // Vertical junctions: lower map row 11 vs upper map row 91.
         foreach (var pair in new (short Lower, short Upper)[] { (17, 203), (103, 17), (18, 204) })
@@ -617,7 +617,7 @@ public sealed class MinimapCoverageDiagTests
             var lower = service.Load(Path.Combine(root, "Mapas", $"mapa{pair.Lower}.csm"));
             var upper = service.Load(Path.Combine(root, "Mapas", $"mapa{pair.Upper}.csm"));
             var same = 0; var both = 0;
-            for (var x = 1; x <= WorldMap.Width; x++)
+            for (var x = 1; x <= WorldSector.Width; x++)
             {
                 var a = lower.Blocks[x, 11].Graphics[0].GraphicIndex;
                 var b = upper.Blocks[x, 91].Graphics[0].GraphicIndex;
@@ -632,7 +632,7 @@ public sealed class MinimapCoverageDiagTests
             var right = service.Load(Path.Combine(root, "Mapas", $"mapa{pair.Right}.csm"));
             var left = service.Load(Path.Combine(root, "Mapas", $"mapa{pair.Left}.csm"));
             var same = 0; var both = 0;
-            for (var y = 1; y <= WorldMap.Height; y++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 var a = right.Blocks[14, y].Graphics[0].GraphicIndex;
                 var b = left.Blocks[88, y].Graphics[0].GraphicIndex;
@@ -663,13 +663,13 @@ public sealed class MinimapCoverageDiagTests
         var rootMap = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, ids)).FirstOrDefault(id => id > 0);
         var assembly = MapsWorldDataService.BuildAssembly(layouts, ids, rootMap);
         if (assembly is null) return;
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         var paths = files.ToDictionary(item => item.Id, item => item.Path);
-        var cache = new Dictionary<short, WorldMap?>();
-        WorldMap? MapOf(short id)
+        var cache = new Dictionary<short, WorldSector?>();
+        WorldSector? MapOf(short id)
         {
             if (cache.TryGetValue(id, out var cached)) return cached;
-            WorldMap? map = null;
+            WorldSector? map = null;
             if (paths.TryGetValue(id, out var path))
             {
                 try { map = service.Load(path); } catch { map = null; }

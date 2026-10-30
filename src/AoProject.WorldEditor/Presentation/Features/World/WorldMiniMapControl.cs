@@ -12,7 +12,7 @@ internal sealed class WorldMiniMapControl : Control
     private GlobalWorldDocument? _world;
     private readonly Dictionary<short, Bitmap> _maps = [];
     private readonly System.Windows.Forms.Timer _buildTimer;
-    private List<GlobalMapPlacement> _pending = [];
+    private List<GlobalSectorPlacement> _pending = [];
     private IReadOnlyList<GraphicData>? _graphics;
     private string? _resources;
     private (int MinX, int MinY, int MaxX, int MaxY) _bounds;
@@ -34,7 +34,7 @@ internal sealed class WorldMiniMapControl : Control
             {
                 var tileX = (int)MathF.Floor((e.X - 6 + _detailOffsetX) / (DetailScale * Math.Max(0.01f, _detailFit))) + 1;
                 var tileY = (int)MathF.Floor((e.Y - 6 + _detailOffsetY) / (DetailScale * Math.Max(0.01f, _detailFit))) + 1;
-                _detailCenter(Math.Clamp(tileX, 1, WorldMap.Width), Math.Clamp(tileY, 1, WorldMap.Height));
+                _detailCenter(Math.Clamp(tileX, 1, WorldSector.Width), Math.Clamp(tileY, 1, WorldSector.Height));
                 return;
             }
             if (_unifiedOverview is not null && _unifiedCenter is not null)
@@ -146,7 +146,7 @@ internal sealed class WorldMiniMapControl : Control
     /// centered on the selected tile. The world overview keeps the flat colour
     /// map because at 220 px a world tile is sub-pixel.
     /// </summary>
-    public void SetLocalMap(WorldMap? map, WorldEditorResourceCatalog? resources,
+    public void SetLocalMap(WorldSector? map, WorldEditorResourceCatalog? resources,
         Func<(int X, int Y)?> selected, Action<int, int> center)
     {
         _unifiedOverview?.Dispose(); _unifiedOverview = null;
@@ -211,7 +211,7 @@ internal sealed class WorldMiniMapControl : Control
     /// image for every map (418 times, 1425x1782 px on the UI thread) froze the
     /// renderer, so only the new cell is drawn.
     /// </summary>
-    private void AddMapToWorldImage(GlobalMapPlacement placement, Bitmap mapImage)
+    private void AddMapToWorldImage(GlobalSectorPlacement placement, Bitmap mapImage)
     {
         if (_world is null) return;
         var cellsX = Math.Max(1, _world.Assembly.Width);
@@ -246,7 +246,7 @@ internal sealed class WorldMiniMapControl : Control
             canvas.DrawImage(mapImage,
                 new RectangleF(placement.Chunk.X * GlobalChunkGeometry.WidthTiles - shiftX,
                     placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - shiftY,
-                    WorldMap.Width, WorldMap.Height),
+                    WorldSector.Width, WorldSector.Height),
                 new RectangleF(0, 0, mapImage.Width, mapImage.Height), GraphicsUnit.Pixel);
         }
         var coreWidth = Math.Min(WorldRadarService.RadarStrideX, mapImage.Width - (WorldRadarService.MinTileX - 1));
@@ -305,10 +305,10 @@ internal sealed class WorldMiniMapControl : Control
             _stitcher = new WorldBorderStitcher(world.Assembly.Placements, mapId =>
             {
                 if (!world.Paths.TryGetValue(mapId, out var path)) return null;
-                try { return WorldBorderStitcher.Sample(new CsmMapFileService().Load(path)); }
+                try { return WorldBorderStitcher.Sample(new SectorCsmFileService().Load(path)); }
                 catch { return null; }
             });
-            var placements = world.Assembly.Placements.Where(item => world.Maps.ContainsKey(item.MapId)).ToArray();
+            var placements = world.Assembly.Placements.Where(item => world.Maps.ContainsKey(item.SectorId)).ToArray();
             if (placements.Length > 0)
             {
                 _bounds = (placements.Min(item => item.Chunk.X) * GlobalChunkGeometry.WidthTiles +
@@ -319,7 +319,7 @@ internal sealed class WorldMiniMapControl : Control
                         GlobalChunkGeometry.CoreMaxX,
                     placements.Max(item => item.Chunk.Y) * GlobalChunkGeometry.HeightTiles +
                         GlobalChunkGeometry.CoreMaxY);
-                _pending = placements.DistinctBy(item => item.MapId).ToList();
+                _pending = placements.DistinctBy(item => item.SectorId).ToList();
                 _buildTimer.Start();
             }
         }
@@ -366,7 +366,7 @@ internal sealed class WorldMiniMapControl : Control
         var graphics = _graphics;
         var resources = _resources;
         var generation = _buildGeneration;
-        var visibleIds = VisibleMapIds(world);
+        var visibleIds = VisibleSectorIds(world);
         _building = true;
         _ = Task.Run(() =>
         {
@@ -374,7 +374,7 @@ internal sealed class WorldMiniMapControl : Control
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                if (!world.Maps.TryGetValue(placement.MapId, out var map)) return;
+                if (!world.Maps.TryGetValue(placement.SectorId, out var map)) return;
                 // Average of the real tile art: the legacy palette alternates per
                 // tile and reads as stripes once the world image is scaled down.
                 // The service is shared per resource root so the PNGs are decoded
@@ -397,10 +397,10 @@ internal sealed class WorldMiniMapControl : Control
             }
             catch (Exception error)
             {
-                TryLogMinimapError(placement.MapId, error);
+                TryLogMinimapError(placement.SectorId, error);
             }
             if (Environment.GetEnvironmentVariable("AO_RADAR_DEBUG") == "1")
-                LogBuild($"{placement.MapId} {watch.ElapsedMilliseconds} ms pendientes={_pending.Count}");
+                LogBuild($"{placement.SectorId} {watch.ElapsedMilliseconds} ms pendientes={_pending.Count}");
             if (IsDisposed) { image?.Dispose(); return; }
             try
             {
@@ -409,7 +409,7 @@ internal sealed class WorldMiniMapControl : Control
                     _building = false;
                     if (image is null || generation != _buildGeneration || !ReferenceEquals(_world, world))
                     { image?.Dispose(); return; }
-                    _maps[placement.MapId] = image;
+                    _maps[placement.SectorId] = image;
                     AddMapToWorldImage(placement, image);
                     Invalidate();
                 }));
@@ -432,7 +432,7 @@ internal sealed class WorldMiniMapControl : Control
     }
 
     /// <summary>Removes and returns the pending map closest to the viewport center.</summary>
-    private GlobalMapPlacement TakeNearestToView()
+    private GlobalSectorPlacement TakeNearestToView()
     {
         var center = ViewCenterChunk();
         var best = 0;
@@ -451,7 +451,7 @@ internal sealed class WorldMiniMapControl : Control
         return placement;
     }
 
-    private IReadOnlyCollection<short> VisibleMapIds(GlobalWorldDocument world)    {
+    private IReadOnlyCollection<short> VisibleSectorIds(GlobalWorldDocument world)    {
         if (_viewport is null) return Array.Empty<short>();
         var view = _viewport();
         // Wider than the renderer's own ring (one chunk): the minimap must never
@@ -463,7 +463,7 @@ internal sealed class WorldMiniMapControl : Control
         return world.Assembly.Placements
             .Where(item => item.Chunk.X >= minX && item.Chunk.X <= maxX &&
                 item.Chunk.Y >= minY && item.Chunk.Y <= maxY)
-            .Select(item => item.MapId)
+            .Select(item => item.SectorId)
             .Distinct()
             .ToArray();
     }

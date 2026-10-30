@@ -31,18 +31,18 @@ internal sealed class WorldMiniMapProjection
     public int ChunksX { get; }
     public int ChunksY { get; }
     public bool WrapX { get; }
-    public int Width => ChunksX * WorldMap.Width;
-    public int Height => ChunksY * WorldMap.Height;
+    public int Width => ChunksX * WorldSector.Width;
+    public int Height => ChunksY * WorldSector.Height;
 
     /// <summary>Maps a local tile (1..100) of a chunk to its minimap pixel.</summary>
     public WorldMiniMapPoint ToPixel(GlobalChunkCoordinate chunk, int localX, int localY)
     {
-        if (localX is < 1 or > WorldMap.Width)
+        if (localX is < 1 or > WorldSector.Width)
             throw new ArgumentOutOfRangeException(nameof(localX), localX, "Tile local fuera de 1..100.");
-        if (localY is < 1 or > WorldMap.Height)
+        if (localY is < 1 or > WorldSector.Height)
             throw new ArgumentOutOfRangeException(nameof(localY), localY, "Tile local fuera de 1..100.");
-        var x = chunk.X * WorldMap.Width + (localX - 1);
-        var y = chunk.Y * WorldMap.Height + (localY - 1);
+        var x = chunk.X * WorldSector.Width + (localX - 1);
+        var y = chunk.Y * WorldSector.Height + (localY - 1);
         return new WorldMiniMapPoint(Wrap(x, Width), y);
     }
 

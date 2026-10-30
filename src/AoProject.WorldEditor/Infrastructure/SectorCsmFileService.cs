@@ -4,18 +4,18 @@ using AoProject.WorldEditor.Domain;
 namespace AoProject.WorldEditor.Infrastructure;
 
 /// <summary>Reader for the current CSM map format used by Recursos/Mapas.</summary>
-internal sealed class CsmMapFileService
+internal sealed class SectorCsmFileService
 {
     private const int MaxRecords = 1_000_000;
 
-    public WorldMap Load(string path)
+    public WorldSector Load(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         using var reader = new BinaryReader(File.OpenRead(path), Encoding.Latin1, leaveOpen: false);
         return Load(reader);
     }
 
-    public WorldMap Load(string path, short mapId)
+    public WorldSector Load(string path, short mapId)
     {
         if (GlobalCsmArchiveService.TryRead(path, mapId, out var payload))
         {
@@ -25,13 +25,13 @@ internal sealed class CsmMapFileService
         return Load(path);
     }
 
-    private static WorldMap Load(BinaryReader reader)
+    private static WorldSector Load(BinaryReader reader)
     {
         var counts = new Counts(reader);
-        var worldMapSize = new CsmMapSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16()).Normalize();
+        var worldMapSize = new CsmSectorSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16()).Normalize();
 
-        var world = new WorldMap();
-        world.CsmMapSize = worldMapSize;
+        var world = new WorldSector();
+        world.CsmSectorSize = worldMapSize;
         ReadMapMetadata(reader, world);
         ReadBlocked(reader, world, counts.Blocked);
         ReadLayer(reader, world, counts.Layers[0], 0);
@@ -48,7 +48,7 @@ internal sealed class CsmMapFileService
         return world;
     }
 
-    public void Save(WorldMap world, string path)
+    public void Save(WorldSector world, string path)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -65,8 +65,8 @@ internal sealed class CsmMapFileService
         writer.Write(records.Count(record => record.Npc != 0));
         writer.Write(records.Count(record => record.ObjectIndex != 0));
         writer.Write(records.Count(record => record.ExitMap != 0));
-        writer.Write(world.CsmMapSize.XMax); writer.Write(world.CsmMapSize.XMin);
-        writer.Write(world.CsmMapSize.YMax); writer.Write(world.CsmMapSize.YMin);
+        writer.Write(world.CsmSectorSize.XMax); writer.Write(world.CsmSectorSize.XMin);
+        writer.Write(world.CsmSectorSize.YMax); writer.Write(world.CsmSectorSize.YMin);
         WriteString(writer, world.Info.Name);
         writer.Write(world.Info.Backup);
         WriteString(writer, world.Info.Restriction);
@@ -105,10 +105,10 @@ internal sealed class CsmMapFileService
         writer.Write(bytes);
     }
 
-    private static IEnumerable<MapRecord> Enumerate(WorldMap world)
+    private static IEnumerable<MapRecord> Enumerate(WorldSector world)
     {
-        for (short y = 1; y <= WorldMap.Height; y++)
-        for (short x = 1; x <= WorldMap.Width; x++)
+        for (short y = 1; y <= WorldSector.Height; y++)
+        for (short x = 1; x <= WorldSector.Width; x++)
         {
             var block = world.Blocks[x, y];
             yield return new MapRecord(x, y, block);
@@ -117,8 +117,8 @@ internal sealed class CsmMapFileService
 
     private sealed class MapRecord
     {
-        private readonly MapBlock _block;
-        public MapRecord(short x, short y, MapBlock block) { X = x; Y = y; _block = block; }
+        private readonly SectorTile _block;
+        public MapRecord(short x, short y, SectorTile block) { X = x; Y = y; _block = block; }
         public short X { get; }
         public short Y { get; }
         public bool Blocked => _block.Blocked != 0;
@@ -136,7 +136,7 @@ internal sealed class CsmMapFileService
         public short ExitY => _block.TileExit.Y;
     }
 
-    private static void ReadMapMetadata(BinaryReader reader, WorldMap world)
+    private static void ReadMapMetadata(BinaryReader reader, WorldSector world)
     {
         var info = world.Info;
         info.Name = ReadString(reader);
@@ -159,7 +159,7 @@ internal sealed class CsmMapFileService
         world.Environment.Fog = reader.ReadByte();
     }
 
-    private static void ReadBlocked(BinaryReader reader, WorldMap world, int count)
+    private static void ReadBlocked(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -171,7 +171,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadLayer(BinaryReader reader, WorldMap world, int count, int layer)
+    private static void ReadLayer(BinaryReader reader, WorldSector world, int count, int layer)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -183,7 +183,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadTriggers(BinaryReader reader, WorldMap world, int count)
+    private static void ReadTriggers(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -195,7 +195,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadLights(BinaryReader reader, WorldMap world, int count)
+    private static void ReadLights(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -212,7 +212,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadParticles(BinaryReader reader, WorldMap world, int count)
+    private static void ReadParticles(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -224,7 +224,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadObjects(BinaryReader reader, WorldMap world, int count)
+    private static void ReadObjects(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -241,7 +241,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadNpcs(BinaryReader reader, WorldMap world, int count)
+    private static void ReadNpcs(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -253,7 +253,7 @@ internal sealed class CsmMapFileService
         }
     }
 
-    private static void ReadTileExits(BinaryReader reader, WorldMap world, int count)
+    private static void ReadTileExits(BinaryReader reader, WorldSector world, int count)
     {
         ValidateCount(count);
         for (var i = 0; i < count; i++)
@@ -283,7 +283,7 @@ internal sealed class CsmMapFileService
         return Encoding.Latin1.GetString(bytes);
     }
 
-    private static bool Inside(short x, short y) => x is >= 1 and <= WorldMap.Width && y is >= 1 and <= WorldMap.Height;
+    private static bool Inside(short x, short y) => x is >= 1 and <= WorldSector.Width && y is >= 1 and <= WorldSector.Height;
     private static void ValidateCount(int count)
     {
         if (count is < 0 or > MaxRecords)

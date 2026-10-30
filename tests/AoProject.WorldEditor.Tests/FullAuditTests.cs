@@ -63,7 +63,7 @@ public sealed class FullAuditTests
         var report = new WorldOutputAuditService().WriteReport(issues, result.Directory);
         _output.WriteLine($"output audit issues={issues.Count} errors={issues.Count(issue => issue.Severity == Domain.AuditSeverity.Error)} report={report}");
         foreach (var issue in issues.Take(10))
-            _output.WriteLine($"  {issue.Severity} {issue.Code} map{issue.MapId}: {issue.Message}");
+            _output.WriteLine($"  {issue.Severity} {issue.Code} map{issue.SectorId}: {issue.Message}");
         Assert.True(File.Exists(report));
         Assert.DoesNotContain(issues, issue => issue.Severity == Domain.AuditSeverity.Error);
 
@@ -98,7 +98,7 @@ public sealed class FullAuditTests
 
         var transfers = IniDocument.Load(transfersPath, Encoding.Latin1);
         var names = IniDocument.Load(namesPath, Encoding.Latin1);
-        var service = new CsmMapFileService();
+        var service = new SectorCsmFileService();
         int sections = 0, completeSections = 0, keys = 0, keysMatched = 0;
         int nameTotal = 0, nameMatched = 0;
         foreach (var path in Directory.EnumerateFiles(maps, "*.csm"))
@@ -157,7 +157,7 @@ public sealed class FullAuditTests
         var catalog = WorldEditorResourceCatalog.Load(root);
         foreach (var path in Directory.EnumerateFiles(maps, "*.csm").OrderBy(item => item).Take(40))
         {
-            var map = new CsmMapFileService().Load(path);
+            var map = new SectorCsmFileService().Load(path);
             var characters = new CharacterListService();
             characters.RefreshAll(map, catalog.Npcs);
             foreach (var character in characters.Characters)
@@ -217,9 +217,9 @@ public sealed class FullAuditTests
         foreach (var path in Directory.EnumerateFiles(maps, "*.csm")
                      .OrderBy(item => Path.GetFileName(item), StringComparer.OrdinalIgnoreCase))
         {
-            var map = new CsmMapFileService().Load(path);
-            for (var x = 1; x <= WorldMap.Width; x++)
-            for (var y = 1; y <= WorldMap.Height; y++)
+            var map = new SectorCsmFileService().Load(path);
+            for (var x = 1; x <= WorldSector.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
             {
                 var light = map.Blocks[x, y].Light;
                 if (light.Range < 100) continue;

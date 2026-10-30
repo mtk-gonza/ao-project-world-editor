@@ -17,15 +17,15 @@ internal sealed class MapConversionService
 
         var sources = Directory.EnumerateFiles(sourceDirectory, "*.map", SearchOption.TopDirectoryOnly)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
-        var legacy = new MapFileService();
-        var csm = new CsmMapFileService();
+        var legacy = new LegacySectorFileService();
+        var csm = new SectorCsmFileService();
         var results = new List<MapConversionResult>(sources.Length);
         foreach (var path in sources)
         {
             var destination = Path.Combine(destinationDirectory, Path.GetFileNameWithoutExtension(path) + ".csm");
             try
             {
-                WorldMap map = legacy.LoadV3(path);
+                WorldSector map = legacy.LoadV3(path);
                 csm.Save(map, destination);
                 results.Add(new MapConversionResult(path, destination, true));
             }

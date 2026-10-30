@@ -7,7 +7,7 @@ namespace AoProject.WorldEditor.Infrastructure;
 internal sealed class UnifiedWorldFileService
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AOGMAP01");
-    private const int Version = 3;
+    private const int Version = 4;
     private const int MaxDimension = 100_000;
     private const int MaxRecords = 20_000_000;
 
@@ -52,6 +52,8 @@ internal sealed class UnifiedWorldFileService
         WriteArray(writer, map.Rain);
         WriteArray(writer, map.Snow);
         WriteArray(writer, map.Fog);
+        WriteArray(writer, map.Water);
+        WriteArray(writer, map.Lava);
 
         writer.Write(map.Exits.Count);
         foreach (var exit in map.Exits)
@@ -59,7 +61,7 @@ internal sealed class UnifiedWorldFileService
             writer.Write((byte)exit.Kind);
             writer.Write(exit.SourceX); writer.Write(exit.SourceY);
             writer.Write(exit.TargetX); writer.Write(exit.TargetY);
-            writer.Write(exit.ExternalMapId); writer.Write(exit.ExternalX); writer.Write(exit.ExternalY);
+            writer.Write(exit.ExternalSectorId); writer.Write(exit.ExternalX); writer.Write(exit.ExternalY);
             writer.Write(exit.SourceZ); writer.Write(exit.TargetZ); writer.Write(exit.ExternalZ);
         }
         writer.Write(map.RoofZones.Count);
@@ -132,6 +134,11 @@ internal sealed class UnifiedWorldFileService
         ReadArray(reader, map.Rain);
         ReadArray(reader, map.Snow);
         ReadArray(reader, map.Fog);
+        if (version >= 4)
+        {
+            ReadArray(reader, map.Water);
+            ReadArray(reader, map.Lava);
+        }
 
         var exitCount = ReadCount(reader, "salidas");
         for (var i = 0; i < exitCount; i++)

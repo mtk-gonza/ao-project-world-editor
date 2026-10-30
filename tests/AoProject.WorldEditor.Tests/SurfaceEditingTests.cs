@@ -9,7 +9,7 @@ public sealed class SurfaceEditingTests
     [Fact]
     public void Fill_and_borders_follow_reference_coordinates()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var service = new SurfaceEditingService();
         service.Fill(map, 0, 100, 2, 2);
         service.FillBorders(map, 1, 200);
@@ -24,7 +24,7 @@ public sealed class SurfaceEditingTests
     [Fact]
     public void Lock_borders_use_the_effective_csm_domain()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(5, 2, 5, 2) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(5, 2, 5, 2) };
 
         new SurfaceEditingService().LockBorders(map);
 

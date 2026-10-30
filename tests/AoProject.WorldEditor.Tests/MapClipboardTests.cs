@@ -9,7 +9,7 @@ public sealed class MapClipboardTests
     [Fact]
     public void Copy_and_paste_preserve_all_graphic_layers()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         for (var layer = 0; layer < 4; layer++) map.Blocks[2, 2].Graphics[layer].GraphicIndex = 100 + layer;
         var clipboard = new MapClipboardService();
 

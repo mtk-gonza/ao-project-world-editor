@@ -18,7 +18,7 @@ internal sealed class GlobalWorldAssembler
     private const int SouthTargetBoundary = 90;
 
     public GlobalWorldAssembly Assemble(
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         short rootMap,
         string levelId = "surface")
     {
@@ -77,7 +77,7 @@ internal sealed class GlobalWorldAssembler
         }
 
         var placements = positions
-            .Select(item => new GlobalMapPlacement(item.Key, item.Value, levelId))
+            .Select(item => new GlobalSectorPlacement(item.Key, item.Value, levelId))
             .OrderBy(item => item.Chunk.Y)
             .ThenBy(item => item.Chunk.X)
             .ToArray();
@@ -94,14 +94,14 @@ internal sealed class GlobalWorldAssembler
 
     private static int Mod(int value, int modulus) => ((value % modulus) + modulus) % modulus;
 
-    private static IReadOnlyList<GlobalMapLink> DiscoverLinks(IReadOnlyDictionary<short, WorldMap> maps)
+    private static IReadOnlyList<GlobalMapLink> DiscoverLinks(IReadOnlyDictionary<short, WorldSector> maps)
     {
         var candidates = new List<GlobalMapLink>();
         foreach (var (mapId, map) in maps)
-        for (var y = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-             y <= Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height); y++)
-        for (var x = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-             x <= Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width); x++)
+        for (var y = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+             y <= Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height); y++)
+        for (var x = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+             x <= Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width); x++)
         {
             var exit = map.Blocks[x, y].TileExit;
             if (exit.Map <= 0 || exit.Map == mapId || !maps.ContainsKey(exit.Map)) continue;

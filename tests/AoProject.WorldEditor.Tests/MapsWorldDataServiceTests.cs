@@ -15,7 +15,7 @@ public sealed class MapsWorldDataServiceTests
             File.WriteAllText(path, "[INIT]\nTOTALWORLDS=1\n[WORLDMAP1]\n1=10\n2=11\n3=12\n4=13\nANCHO=2\nALTO=2\n[WORLDMAP2]\n1=20\nANCHO=1\nALTO=1\n");
             var service = new MapsWorldDataService();
             var layouts = service.Load(path);
-            var maps = new Dictionary<short, WorldMap>
+            var maps = new Dictionary<short, WorldSector>
             {
                 [10] = new(), [11] = new(), [12] = new(), [13] = new()
             };
@@ -25,8 +25,8 @@ public sealed class MapsWorldDataServiceTests
             Assert.NotNull(assembly);
             Assert.Equal(2, assembly!.Width);
             Assert.True(assembly.WrapX);
-            Assert.Equal(new GlobalChunkCoordinate(1, 0), assembly.Placements.Single(item => item.MapId == 11).Chunk);
-            Assert.Equal("world-1", assembly.Placements.Single(item => item.MapId == 10).LevelId);
+            Assert.Equal(new GlobalChunkCoordinate(1, 0), assembly.Placements.Single(item => item.SectorId == 11).Chunk);
+            Assert.Equal("world-1", assembly.Placements.Single(item => item.SectorId == 10).LevelId);
             Assert.Equal([2], service.IgnoredWorldIds);
         }
         finally { File.Delete(path); }
@@ -40,7 +40,7 @@ public sealed class MapsWorldDataServiceTests
         {
             File.WriteAllText(path, "[INIT]\nTOTALWORLDS=1\n[WORLDMAP1]\n1=10\n2=10\nANCHO=2\nALTO=1\n");
             var layouts = new MapsWorldDataService().Load(path);
-            var assembly = MapsWorldDataService.BuildAssembly(layouts, new Dictionary<short, WorldMap> { [10] = new() }, 10);
+            var assembly = MapsWorldDataService.BuildAssembly(layouts, new Dictionary<short, WorldSector> { [10] = new() }, 10);
 
             Assert.NotNull(assembly);
             Assert.Equal(2, assembly!.Placements.Count);

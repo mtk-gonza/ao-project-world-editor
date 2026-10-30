@@ -10,7 +10,7 @@ public sealed class WorldMapRenderGuardTests
     [Fact]
     public void Overlay_builder_skips_the_tile_sweep_when_no_overlay_is_enabled()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[10, 10].Trigger = 5;
         map.Blocks[10, 10].Blocked = 0xF;
         map.Blocks[10, 10].TileExit.Map = 2;
@@ -26,7 +26,7 @@ public sealed class WorldMapRenderGuardTests
     [Fact]
     public void Overlay_builder_keeps_the_selection_without_other_toggles()
     {
-        var overlays = MapOverlayGeometry.Build(new WorldMap(), new WorldRenderOptions(), (12, 34));
+        var overlays = MapOverlayGeometry.Build(new WorldSector(), new WorldRenderOptions(), (12, 34));
 
         var selection = Assert.Single(overlays);
         Assert.Equal(OverlayKind.Selection, selection.Kind);
@@ -48,9 +48,9 @@ public sealed class WorldMapRenderGuardTests
     [Fact]
     public void Grid_overlay_covers_the_full_map()
     {
-        var overlays = MapOverlayGeometry.Build(new WorldMap(), new WorldRenderOptions { ShowGrid = true });
+        var overlays = MapOverlayGeometry.Build(new WorldSector(), new WorldRenderOptions { ShowGrid = true });
 
-        Assert.Equal(WorldMap.Width * WorldMap.Height, overlays.Count);
+        Assert.Equal(WorldSector.Width * WorldSector.Height, overlays.Count);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public sealed class WorldMapRenderGuardTests
     [Fact]
     public void Light_lookup_outside_the_map_returns_white_instead_of_throwing()
     {
-        var lights = new int[WorldMap.Width + 1, WorldMap.Height + 1, 4];
+        var lights = new int[WorldSector.Width + 1, WorldSector.Height + 1, 4];
         lights[50, 50, 0] = unchecked((int)0xFF102030);
 
         Assert.Equal(unchecked((int)0xFF102030), D3D11WorldRenderer.LightColorAt(lights, 50, 50, 0));

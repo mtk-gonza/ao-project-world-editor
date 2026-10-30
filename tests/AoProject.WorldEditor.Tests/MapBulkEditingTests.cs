@@ -9,7 +9,7 @@ public sealed class MapBulkEditingTests
     [Fact]
     public void Bulk_operations_modify_expected_map_fields()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[2, 3].Graphics[1].GraphicIndex = 10;
         map.Blocks[4, 5].Trigger = 7;
         map.Blocks[6, 7].Object.Index = 3;

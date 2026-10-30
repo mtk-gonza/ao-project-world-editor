@@ -24,7 +24,7 @@ internal sealed class MapOptimizationService
     private static readonly HashSet<short> SpecialObjectTypes = [4, 8, 10, 22];
 
     public MapOptimizationResult Optimize(
-        WorldMap map,
+        WorldSector map,
         IReadOnlyList<ObjectData> objects,
         MapOptimizationOptions options)
     {
@@ -33,10 +33,10 @@ internal sealed class MapOptimizationService
         var removedNpcs = 0; var removedObjects = 0; var removedExits = 0;
         var removedTriggers = 0; var mapped = 0; var blocked = 0;
 
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var y = minY; y <= maxY; y++)
         for (var x = minX; x <= maxX; x++)
         {
@@ -79,7 +79,7 @@ internal sealed class MapOptimizationService
         return new(removedNpcs, removedObjects, removedExits, removedTriggers, mapped, blocked);
     }
 
-    private static void ClearExit(MapBlock block)
+    private static void ClearExit(SectorTile block)
     {
         block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
     }

@@ -32,7 +32,7 @@ internal sealed class GlobalArchiveAuditService
         if (issues.Any(issue => issue.Error)) return new(fullPath, 0, issues);
 
         IReadOnlyList<short> ids;
-        try { ids = GlobalCsmArchiveService.ReadMapIds(fullPath); }
+        try { ids = GlobalCsmArchiveService.ReadSectorIds(fullPath); }
         catch (Exception error)
         {
             issues.Add(new("CSM-INDEX", $"Índice global inválido: {error.Message}"));

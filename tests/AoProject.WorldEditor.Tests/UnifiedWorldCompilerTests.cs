@@ -11,7 +11,7 @@ public sealed class UnifiedWorldCompilerTests
     [Fact]
     public void Compiles_one_rectangular_map_and_preserves_entities()
     {
-        var first = new WorldMap();
+        var first = new WorldSector();
         first.Blocks[20, 20].Graphics[0].GraphicIndex = 100;
         first.Blocks[20, 20].Blocked = BlockedMask.AllSides;
         first.Blocks[20, 20].NpcIndex = 3;
@@ -20,7 +20,7 @@ public sealed class UnifiedWorldCompilerTests
         first.Blocks[20, 20].Light.Range = 4;
         first.Blocks[20, 20].Trigger = 60;
         first.Blocks[20, 20].Graphics[3].GraphicIndex = 200;
-        var second = new WorldMap();
+        var second = new WorldSector();
         second.Blocks[20, 20].Graphics[0].GraphicIndex = 300;
 
         var world = new GlobalWorldDocument(
@@ -29,11 +29,11 @@ public sealed class UnifiedWorldCompilerTests
                 Width = 2, Height = 1,
                 Placements =
                 [
-                    new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "world"),
-                    new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "world")
+                    new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "world"),
+                    new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "world")
                 ]
             },
-            new Dictionary<short, WorldMap> { [1] = first, [2] = second },
+            new Dictionary<short, WorldSector> { [1] = first, [2] = second },
             new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().Compile(world);
@@ -58,31 +58,54 @@ public sealed class UnifiedWorldCompilerTests
     [Fact]
     public void Keeps_an_exit_to_a_map_outside_the_world_as_external()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[20, 20].TileExit.Map = 999;
         map.Blocks[20, 20].TileExit.X = 40;
         map.Blocks[20, 20].TileExit.Y = 50;
         var world = new GlobalWorldDocument(
             new GlobalWorldAssembly { Width = 1, Height = 1, Placements = [new(1, new(0, 0), "world")] },
-            new Dictionary<short, WorldMap> { [1] = map },
+            new Dictionary<short, WorldSector> { [1] = map },
             new Dictionary<short, string> { [1] = "mapa1.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().Compile(world);
 
         var exit = Assert.Single(result.Map.Exits);
         Assert.Equal(UnifiedWorldExitKind.External, exit.Kind);
-        Assert.Equal((short)999, exit.ExternalMapId);
+        Assert.Equal((short)999, exit.ExternalSectorId);
         Assert.Equal((short)40, exit.ExternalX);
         Assert.Equal((short)50, exit.ExternalY);
         Assert.Equal(1, result.Map.ExitIndex[result.Map.Offset(19, 19)]);
     }
 
     [Fact]
+    public void Removes_legacy_sector_exit_when_maps_are_physically_adjacent()
+    {
+        var west = new WorldSector();
+        west.Blocks[88, 20].TileExit.Map = 2;
+        west.Blocks[88, 20].TileExit.X = 14;
+        west.Blocks[88, 20].TileExit.Y = 20;
+        var east = new WorldSector();
+        var world = new GlobalWorldDocument(
+            new GlobalWorldAssembly
+            {
+                Width = 2, Height = 1,
+                Placements = [new(1, new(0, 0), "world"), new(2, new(1, 0), "world")]
+            },
+            new Dictionary<short, WorldSector> { [1] = west, [2] = east },
+            new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
+
+        var result = new UnifiedWorldCompiler().Compile(world);
+
+        Assert.Empty(result.Map.Exits);
+        Assert.Equal(0, result.Map.ExitIndex[result.Map.Offset(87, 19)]);
+    }
+
+    [Fact]
     public void Stitched_border_preserves_blocking_from_both_source_maps()
     {
-        var west = new WorldMap();
-        var east = new WorldMap();
-        for (var y = 1; y <= WorldMap.Height; y++)
+        var west = new WorldSector();
+        var east = new WorldSector();
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             west.Blocks[88, y].Graphics[0].GraphicIndex = 10;
             east.Blocks[14, y].Graphics[0].GraphicIndex = 10;
@@ -94,7 +117,7 @@ public sealed class UnifiedWorldCompilerTests
                 Width = 2, Height = 1,
                 Placements = [new(1, new(0, 0), "world"), new(2, new(1, 0), "world")]
             },
-            new Dictionary<short, WorldMap> { [1] = west, [2] = east },
+            new Dictionary<short, WorldSector> { [1] = west, [2] = east },
             new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().CompileFloors(world, applyStitching: true);
@@ -105,22 +128,50 @@ public sealed class UnifiedWorldCompilerTests
     [Fact]
     public void Keeps_negative_special_exit_on_underground_external_floor()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[20, 20].TileExit.Map = -1;
         map.Blocks[20, 20].TileExit.X = 36;
         map.Blocks[20, 20].TileExit.Y = 76;
         var world = new GlobalWorldDocument(
             new GlobalWorldAssembly { Width = 1, Height = 1, Placements = [new(1, new(0, 0), "world")] },
-            new Dictionary<short, WorldMap> { [1] = map },
+            new Dictionary<short, WorldSector> { [1] = map },
             new Dictionary<short, string> { [1] = "mapa1.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().Compile(world);
 
         var exit = Assert.Single(result.Map.Exits);
         Assert.Equal(UnifiedWorldExitKind.External, exit.Kind);
-        Assert.Equal((short)-1, exit.ExternalMapId);
+        Assert.Equal((short)-1, exit.ExternalSectorId);
         Assert.Equal(-1, exit.ExternalZ);
         Assert.Equal(0, exit.SourceZ);
+    }
+
+    [Fact]
+    public void Does_not_promote_missing_3000_exit_into_surface_geometry()
+    {
+        var source = new WorldSector();
+        source.Blocks[20, 20].TileExit.Map = 3000;
+        source.Blocks[20, 20].TileExit.X = 36;
+        source.Blocks[20, 20].TileExit.Y = 76;
+        var lower = new WorldSector();
+        var world = new GlobalWorldDocument(
+            new GlobalWorldAssembly
+            {
+                Placements = [new(1, new(0, 0), "surface"), new(266, new(0, 0), "special"), new(2, new(0, 0), "lower")]
+            },
+            new Dictionary<short, WorldSector> { [1] = new(), [266] = source, [2] = lower },
+            new Dictionary<short, string> { [1] = "mapa1.csm", [266] = "mapa266.csm", [2] = "mapa2.csm" }, 1);
+        world.FloorAssemblies =
+        [
+            (0, new GlobalWorldAssembly { Placements = [new(1, new(0, 0), "surface")] }),
+            (-1, new GlobalWorldAssembly { Placements = [new(2, new(0, 0), "lower")] })
+        ];
+
+        var bundle = new UnifiedWorldCompiler().CompileFloors(world);
+
+        Assert.Empty(bundle.Floors[0].Exits);
+        Assert.DoesNotContain(bundle.Placements.Keys, id => id == 266);
+        Assert.Empty(new UnifiedWorldBundleAuditService().Audit(bundle).Issues);
     }
 
     [Fact]
@@ -130,7 +181,9 @@ public sealed class UnifiedWorldCompilerTests
         var offset = map.Offset(1, 1);
         map.GraphicIndices[map.GraphicOffset(offset, 3)] = 700;
         map.Blocked[offset] = BlockedMask.North;
-        map.NpcIndex[offset] = 9;
+            map.NpcIndex[offset] = 9;
+            map.Water[offset] = true;
+            map.Lava[offset] = true;
         map.Exits.Add(new UnifiedWorldExit(UnifiedWorldExitKind.External, 1, 1, -1, -1, 800, 10, 11, -1, 0, -1));
         map.RoofZones.Add(new UnifiedWorldRoofZone(1, 60, 0, 0, 2, 1));
         map.Npcs.Add(new UnifiedWorldNpcPlacement(1, 1, 2, 3, 1, 4, 5, 6));
@@ -147,7 +200,9 @@ public sealed class UnifiedWorldCompilerTests
             Assert.Equal(-1, loaded.FloorZ);
             Assert.Equal((byte)BlockedMask.North, loaded.Blocked[loadedOffset]);
             Assert.Equal((short)9, loaded.NpcIndex[loadedOffset]);
-            Assert.Equal((short)800, Assert.Single(loaded.Exits).ExternalMapId);
+            Assert.True(loaded.Water[loadedOffset]);
+            Assert.True(loaded.Lava[loadedOffset]);
+            Assert.Equal((short)800, Assert.Single(loaded.Exits).ExternalSectorId);
             Assert.Equal("music", Assert.Single(loaded.EnvironmentProfiles).Music);
             Assert.Equal(6400, Assert.Single(loaded.EnvironmentProfiles).LegacyLevel);
             Assert.Equal((short)2, Assert.Single(loaded.Npcs).Body);
@@ -159,8 +214,8 @@ public sealed class UnifiedWorldCompilerTests
     [Fact]
     public void Overlapping_border_data_is_merged_only_when_every_field_matches()
     {
-        var first = new WorldMap();
-        var second = new WorldMap();
+        var first = new WorldSector();
+        var second = new WorldSector();
         first.Blocks[20, 20].Graphics[0].GraphicIndex = 10;
         second.Blocks[20, 20].Graphics[0].GraphicIndex = 10;
         second.Blocks[20, 20].Light.Range = 3;
@@ -170,7 +225,7 @@ public sealed class UnifiedWorldCompilerTests
                 Width = 1, Height = 1,
                 Placements = [new(1, new(0, 0), "world"), new(2, new(0, 0), "world")]
             },
-            new Dictionary<short, WorldMap> { [1] = first, [2] = second },
+            new Dictionary<short, WorldSector> { [1] = first, [2] = second },
             new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().Compile(world);
@@ -240,8 +295,9 @@ public sealed class UnifiedWorldCompilerTests
         var bundle = new UnifiedWorldBundle();
         bundle.Add(new UnifiedWorldMap(2, 2, 0));
         bundle.SetPlacements([
-            new GlobalMapPlacement(42, new GlobalChunkCoordinate(3, 4), "world", 7, 9)
+            new GlobalSectorPlacement(42, new GlobalChunkCoordinate(3, 4), "world", 7, 9)
         ]);
+        bundle.SetSectorFloors([new KeyValuePair<short, int>(42, 0)]);
         var directory = Path.Combine(Path.GetTempPath(), "aogbundle-stitch-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -260,8 +316,8 @@ public sealed class UnifiedWorldCompilerTests
     {
         var bundle = new UnifiedWorldBundle();
         bundle.Add(new UnifiedWorldMap(2, 2, 0));
-        var metadata = new UnifiedWorldMapMetadata { MapId = 842, FloorZ = 0,
-            MapSize = new CsmMapSize(88, 13, 91, 10) };
+        var metadata = new UnifiedWorldSectorMetadata { SectorId = 842, FloorZ = 0,
+            MapSize = new CsmSectorSize(88, 13, 91, 10) };
         metadata.Info.Name = "Mapa de prueba";
         metadata.Info.MapVersion = 7;
         metadata.Info.PlayerKilling = true;
@@ -272,15 +328,15 @@ public sealed class UnifiedWorldCompilerTests
         metadata.Info.Exit = "salida";
         metadata.Environment.BaseLight = 0x112233;
         metadata.Environment.Rain = 1;
-        bundle.MapMetadata.Add(metadata);
+        bundle.SectorMetadata.Add(metadata);
         var directory = Path.Combine(Path.GetTempPath(), "aogbundle-meta-" + Guid.NewGuid().ToString("N"));
         try
         {
             var service = new UnifiedWorldBundleFileService();
             service.Save(bundle, directory);
             var loaded = service.Load(directory);
-            var actual = Assert.Single(loaded.MapMetadata);
-            Assert.Equal((short)842, actual.MapId);
+            var actual = Assert.Single(loaded.SectorMetadata);
+            Assert.Equal((short)842, actual.SectorId);
             Assert.Equal("Mapa de prueba", actual.Info.Name);
             Assert.Equal((short)7, actual.Info.MapVersion);
             Assert.True(actual.Info.PlayerKilling);
@@ -292,21 +348,43 @@ public sealed class UnifiedWorldCompilerTests
     }
 
     [Fact]
+    public void Unified_world_bundle_roundtrips_embedded_sector_source()
+    {
+        var bundle = new UnifiedWorldBundle();
+        bundle.Add(new UnifiedWorldMap(2, 2, 0));
+        bundle.SectorSources.Add(new UnifiedWorldSectorSource(17, "sector.csm",
+            [1, 2, 3], [4, 5], [6]));
+        var directory = Path.Combine(Path.GetTempPath(), "aogbundle-source-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new UnifiedWorldBundleFileService();
+            service.Save(bundle, directory);
+            var source = Assert.Single(service.Load(directory).SectorSources);
+            Assert.Equal((short)17, source.SectorId);
+            Assert.Equal("sector.csm", source.SourceName);
+            Assert.Equal(new byte[] { 1, 2, 3 }, source.Csm);
+            Assert.Equal(new byte[] { 4, 5 }, source.Inf);
+            Assert.Equal(new byte[] { 6 }, source.Dat);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public void Compiler_preserves_a_transfer_between_global_floors()
     {
-        var surface = new WorldMap();
+        var surface = new WorldSector();
         surface.Info.Level = 0;
         surface.Blocks[20, 20].TileExit.Map = 2;
         surface.Blocks[20, 20].TileExit.X = 30;
         surface.Blocks[20, 20].TileExit.Y = 30;
-        var underground = new WorldMap();
+        var underground = new WorldSector();
         underground.Info.Level = -1;
         var world = new GlobalWorldDocument(
             new GlobalWorldAssembly
             {
             Placements = [new(1, new(0, 0), "surface"), new(2, new(1, 0), "underground")]
             },
-            new Dictionary<short, WorldMap> { [1] = surface, [2] = underground },
+            new Dictionary<short, WorldSector> { [1] = surface, [2] = underground },
             new Dictionary<short, string> { [1] = "surface.csm", [2] = "underground.csm" }, 1);
 
         var bundle = new UnifiedWorldCompiler().CompileFloors(world, null,

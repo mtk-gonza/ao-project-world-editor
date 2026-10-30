@@ -9,13 +9,13 @@ public sealed class GlobalWorldDocumentTests
     [Fact]
     public void Resolves_global_tile_to_sector_and_local_coordinates()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var assembly = new GlobalWorldAssembly
         {
-            Placements = [new GlobalMapPlacement(7, new GlobalChunkCoordinate(2, -1), "surface")]
+            Placements = [new GlobalSectorPlacement(7, new GlobalChunkCoordinate(2, -1), "surface")]
         };
         var document = new GlobalWorldDocument(assembly,
-            new Dictionary<short, WorldMap> { [7] = map },
+            new Dictionary<short, WorldSector> { [7] = map },
             new Dictionary<short, string> { [7] = "mapa7.csm" }, 7);
 
         Assert.True(document.TryResolve(162, -72, out var location));
@@ -29,11 +29,11 @@ public sealed class GlobalWorldDocumentTests
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
             ]
         };
-        var maps = new Dictionary<short, WorldMap> { [1] = new(), [2] = new() };
+        var maps = new Dictionary<short, WorldSector> { [1] = new(), [2] = new() };
         var document = new GlobalWorldDocument(assembly, maps,
             new Dictionary<short, string>(), 1);
 
@@ -50,16 +50,16 @@ public sealed class GlobalWorldDocumentTests
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
             ]
         };
         var document = new GlobalWorldDocument(assembly,
-            new Dictionary<short, WorldMap> { [1] = new(), [2] = new() },
+            new Dictionary<short, WorldSector> { [1] = new(), [2] = new() },
             new Dictionary<short, string>(), 1);
 
-        var west = document.CollectMapIds(new GlobalTileSelection(20, 20, 30, 30));
-        var both = document.CollectMapIds(new GlobalTileSelection(80, 20, 100, 30));
+        var west = document.CollectSectorIds(new GlobalTileSelection(20, 20, 30, 30));
+        var both = document.CollectSectorIds(new GlobalTileSelection(80, 20, 100, 30));
 
         Assert.Equal(new short[] { 1 }, west);
         Assert.Equal(new short[] { 1, 2 }, both.OrderBy(id => id));
@@ -72,12 +72,12 @@ public sealed class GlobalWorldDocumentTests
         {
             Placements =
             [
-                new GlobalMapPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
-                new GlobalMapPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
+                new GlobalSectorPlacement(1, new GlobalChunkCoordinate(0, 0), "surface"),
+                new GlobalSectorPlacement(2, new GlobalChunkCoordinate(1, 0), "surface")
             ]
         };
         var document = new GlobalWorldDocument(assembly,
-            new Dictionary<short, WorldMap> { [1] = new(), [2] = new() },
+            new Dictionary<short, WorldSector> { [1] = new(), [2] = new() },
             new Dictionary<short, string>(), 1);
 
         Assert.True(document.TryGetGlobalTile(1, 88, 50, out var westEdge));

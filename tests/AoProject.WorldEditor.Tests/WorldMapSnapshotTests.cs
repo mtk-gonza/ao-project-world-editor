@@ -9,10 +9,10 @@ public sealed class WorldMapSnapshotTests
     [Fact]
     public void Snapshot_restores_bulk_mutations_atomically()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[7, 8].Graphics[2].GraphicIndex = 123;
         map.Blocks[7, 8].Blocked = 4;
-        var snapshot = WorldMapSnapshot.Capture(map);
+        var snapshot = WorldSectorSnapshot.Capture(map);
         map.Blocks[7, 8].Graphics[2].GraphicIndex = 999;
         map.Blocks[7, 8].Blocked = 0;
 

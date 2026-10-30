@@ -17,7 +17,7 @@ internal sealed class MultiMapReplacementService
         var replacement = new MapReplacementService();
         var maps = Directory.EnumerateFiles(directory, "*.csm", SearchOption.TopDirectoryOnly).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
         var results = new List<MultiMapReplacementResult>(maps.Length);
-        var io = new CsmMapFileService();
+        var io = new SectorCsmFileService();
         foreach (var path in maps)
         {
             var map = io.Load(path);

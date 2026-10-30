@@ -4,9 +4,9 @@ using AoProject.WorldEditor.Domain;
 namespace AoProject.WorldEditor.Infrastructure;
 
 /// <summary>Port of MapInfo_Cargar/MapInfo_Guardar and clsIniReader semantics.</summary>
-internal sealed class MapMetadataService
+internal sealed class SectorMetadataService
 {
-    public void Load(WorldMap world, string path)
+    public void Load(WorldSector world, string path)
     {
         if (!File.Exists(path))
             return;
@@ -29,7 +29,7 @@ internal sealed class MapMetadataService
         info.PlayerKilling = IntValue(values, "Pk") == 0;
     }
 
-    public void Save(WorldMap world, string path)
+    public void Save(WorldSector world, string path)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

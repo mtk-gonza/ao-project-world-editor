@@ -24,7 +24,7 @@ public sealed class CharacterListTests
     [Fact]
     public void Refresh_rebuilds_the_list_from_map_npcs()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[5, 6].NpcIndex = 1;
         map.Blocks[7, 8].NpcIndex = 1;
         var npcs = new[] { new NpcData(), new NpcData { Body = 4, Head = 5, Heading = 3 } };

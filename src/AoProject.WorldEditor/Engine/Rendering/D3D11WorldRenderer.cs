@@ -593,8 +593,8 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
     {
         if (_lights is null)
             return new CornerLights(new ColorF(1,1,1,1), new ColorF(1,1,1,1), new ColorF(1,1,1,1), new ColorF(1,1,1,1));
-        var x = Math.Clamp(pixelX / MapRenderGeometry.TilePixels + 1, 1, WorldMap.Width);
-        var y = Math.Clamp(pixelY / MapRenderGeometry.TilePixels + 1, 1, WorldMap.Height);
+        var x = Math.Clamp(pixelX / MapRenderGeometry.TilePixels + 1, 1, WorldSector.Width);
+        var y = Math.Clamp(pixelY / MapRenderGeometry.TilePixels + 1, 1, WorldSector.Height);
         return new CornerLights(Light(x, y, 1), Light(x, y, 3), Light(x, y, 2), Light(x, y, 0));
     }
 

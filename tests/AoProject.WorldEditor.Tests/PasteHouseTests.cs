@@ -13,13 +13,13 @@ public sealed class PasteHouseTests
         var root = Path.Combine(Path.GetTempPath(), "ao-house-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var house = new WorldMap();
+            var house = new WorldSector();
             house.Blocks[65, 23].Graphics[0].GraphicIndex = 501;
             house.Blocks[66, 24].Object.Index = 3;
             house.Blocks[65, 23].NpcIndex = 9;
-            var housePath = Path.Combine(root, "mapa169.csm"); new CsmMapFileService().Save(house, housePath);
+            var housePath = Path.Combine(root, "mapa169.csm"); new SectorCsmFileService().Save(house, housePath);
 
-            var targetPath = Path.Combine(root, "mapa1.csm"); new CsmMapFileService().Save(new WorldMap(), targetPath);
+            var targetPath = Path.Combine(root, "mapa1.csm"); new SectorCsmFileService().Save(new WorldSector(), targetPath);
             var session = new WorldEditorSession(root); session.LoadMap(targetPath);
 
             var copied = session.PasteHouse(housePath, 20, 40);

@@ -37,7 +37,7 @@ public sealed class SurfaceCatalogAndCoastTests
     [Fact]
     public void FixCoasts_clears_second_layer_only_for_coast_graphics()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[10, 10].Graphics[0].GraphicIndex = 7284;
         map.Blocks[10, 10].Graphics[1].GraphicIndex = 55;
         map.Blocks[10, 11].Graphics[0].GraphicIndex = 1;

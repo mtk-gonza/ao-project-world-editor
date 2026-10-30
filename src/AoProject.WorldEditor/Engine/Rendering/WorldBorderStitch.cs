@@ -35,11 +35,11 @@ internal sealed class WorldBorderStitcher
     private int _prewarming;
     private volatile bool _isComplete;
 
-    public WorldBorderStitcher(IEnumerable<GlobalMapPlacement> placements,
+    public WorldBorderStitcher(IEnumerable<GlobalSectorPlacement> placements,
         Func<short, BorderSample?> sampleOf)
     {
         _byChunk = placements.GroupBy(item => item.Chunk)
-            .ToDictionary(group => group.Key, group => group.First().MapId);
+            .ToDictionary(group => group.Key, group => group.First().SectorId);
         _sampleOf = sampleOf;
     }
 
@@ -51,18 +51,18 @@ internal sealed class WorldBorderStitcher
     }
 
     /// <summary>Reads the border lines of a map and lets the caller drop the map.</summary>
-    public static BorderSample Sample(WorldMap map)
+    public static BorderSample Sample(WorldSector map)
     {
-        var firstRow = new int[WorldMap.Width];
-        var lastRow = new int[WorldMap.Width];
-        var firstColumn = new int[WorldMap.Height];
-        var lastColumn = new int[WorldMap.Height];
-        for (var x = 1; x <= WorldMap.Width; x++)
+        var firstRow = new int[WorldSector.Width];
+        var lastRow = new int[WorldSector.Width];
+        var firstColumn = new int[WorldSector.Height];
+        var lastColumn = new int[WorldSector.Height];
+        for (var x = 1; x <= WorldSector.Width; x++)
         {
             firstRow[x - 1] = map.Blocks[x, FirstCoreY].Graphics[0].GraphicIndex;
             lastRow[x - 1] = map.Blocks[x, LastCoreY].Graphics[0].GraphicIndex;
         }
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             firstColumn[y - 1] = map.Blocks[FirstCoreX, y].Graphics[0].GraphicIndex;
             lastColumn[y - 1] = map.Blocks[LastCoreX, y].Graphics[0].GraphicIndex;
@@ -206,7 +206,7 @@ internal sealed class WorldBorderStitcher
     {
         if (upper is not { } top || lower is not { } bottom) return false;
         int same = 0, both = 0;
-        for (var index = 0; index < WorldMap.Width; index++)
+        for (var index = 0; index < WorldSector.Width; index++)
         {
             var a = bottom.FirstRow[index];
             var b = top.LastRow[index];
@@ -222,7 +222,7 @@ internal sealed class WorldBorderStitcher
     {
         if (left is not { } west || right is not { } east) return false;
         int same = 0, both = 0;
-        for (var index = 0; index < WorldMap.Height; index++)
+        for (var index = 0; index < WorldSector.Height; index++)
         {
             var a = east.FirstColumn[index];
             var b = west.LastColumn[index];

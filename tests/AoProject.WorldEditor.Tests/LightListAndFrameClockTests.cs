@@ -23,7 +23,7 @@ public sealed class LightListAndFrameClockTests
     [Fact]
     public void Light_list_syncs_from_map_blocks()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[3, 4].Light.Range = 9; map.Blocks[3, 4].Light.Color = 0x445566;
         var lights = new LightListService();
         Assert.Equal(1, lights.SyncFromMap(map));

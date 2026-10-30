@@ -209,7 +209,7 @@ internal sealed class MainForm : Form
          file.DropDownItems.Add(save);
          file.DropDownItems.Add(saveAs);
          file.DropDownItems.Add(new ToolStripSeparator());
-         file.DropDownItems.Add(new ToolStripMenuItem("Guardar como world.floors...", null, SaveUnifiedWorldBundleAs));
+          file.DropDownItems.Add(new ToolStripMenuItem("Guardar mundo con pisos...", null, SaveUnifiedWorldBundleAs));
          file.DropDownItems.Add(new ToolStripMenuItem("Compilar mapa único legacy (*.gmap)...", null, SaveUnifiedWorldAs));
         file.DropDownItems.Add(reopen);
         menu.Items.Add(file);
@@ -496,7 +496,7 @@ internal sealed class MainForm : Form
             }
             else
             {
-                _renderControl.CenterOnTile(Math.Clamp(x, 1, WorldMap.Width), Math.Clamp(y, 1, WorldMap.Height));
+                _renderControl.CenterOnTile(Math.Clamp(x, 1, WorldSector.Width), Math.Clamp(y, 1, WorldSector.Height));
                 _status.Text = $"Centrado en coordenadas locales {x},{y}";
             }
         }
@@ -559,7 +559,7 @@ internal sealed class MainForm : Form
             {
                 if (_brushShape == "Individual" && (brushX != x || brushY != y)) continue;
                 if (_brushShape == "Circular" && ((brushX - x) * (brushX - x) + (brushY - y) * (brushY - y) > radius * radius)) continue;
-                if (brushX < 1 || brushX > WorldMap.Width || brushY < 1 || brushY > WorldMap.Height) continue;
+                if (brushX < 1 || brushX > WorldSector.Width || brushY < 1 || brushY > WorldSector.Height) continue;
                 _session.ApplyInteractiveClick(brushX, brushY, _renderControl.SelectedLayer, _renderControl.SelectedGraphicIndex,
                     _terrainPresetSelected, _autoCompleteSurfaces && _mosaicEnabled,
                     _mosaicEnabled ? _mosaicWidth : 1, _mosaicEnabled ? _mosaicHeight : 1,
@@ -787,7 +787,7 @@ internal sealed class MainForm : Form
             return;
         }
         Destructive("crear salida global", () =>
-            _session.SetTransfer(source.X, source.Y, location.MapId, (short)location.LocalX, (short)location.LocalY));
+            _session.SetTransfer(source.X, source.Y, location.SectorId, (short)location.LocalX, (short)location.LocalY));
     }
 
     private ToolStripMenuItem CreateBlockingMode(string text, Func<bool> get, Action<bool> set)
@@ -1291,7 +1291,7 @@ internal sealed class MainForm : Form
         dialog.Controls.Add(panel); dialog.Controls.Add(accept); dialog.AcceptButton = accept;
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         if (!short.TryParse(fields["Versión"].Text, out var version)) { MessageBox.Show(this, "La versión debe ser un entero.", "Información del mapa"); return; }
-        var values = new MapInfoValues(fields["Nombre"].Text, fields["Música"].Text, version, pk.Checked,
+        var values = new SectorInfoValues(fields["Nombre"].Text, fields["Música"].Text, version, pk.Checked,
             (byte)(magic.Checked ? 1 : 0), (byte)(invisibility.Checked ? 1 : 0), (byte)(resurrection.Checked ? 1 : 0),
             (byte)(encrypt.Checked ? 1 : 0), fields["Terreno"].Text, fields["Zona"].Text, fields["Restricción"].Text,
             (byte)(backup.Checked ? 1 : 0), fields["Luz"].Text);
@@ -1855,7 +1855,7 @@ internal sealed class MainForm : Form
                 ? "Auditoría: OK"
                 : "Auditoría:" + Environment.NewLine + string.Join(Environment.NewLine,
                     audit.Issues.Select(issue => $"- {issue.Code}: {issue.Message}").Concat(
-                        semantic.Issues.Select(issue => $"- {issue.Code}: mapa={issue.MapId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}")));
+                        semantic.Issues.Select(issue => $"- {issue.Code}: mapa={issue.SectorId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}")));
             _status.Text = $"WORLD guardado: world.csm, world.dat y world.inf ({world.Paths.Count} mapas) | {auditStatus}";
             MessageBox.Show(this,
                 $"Se guardaron los tres archivos globales con {world.Paths.Count} mapas y sus metadatos:{Environment.NewLine}{Environment.NewLine}" +
@@ -1908,7 +1908,7 @@ internal sealed class MainForm : Form
                 $"Tiles escritos: {result.WrittenTiles}{Environment.NewLine}" +
                 $"Bordes fusionados: {result.MergedTiles}{Environment.NewLine}" +
                 $"NPCs: {result.Npcs} | Objetos: {result.Objects} | Partículas: {result.Particles}{Environment.NewLine}" +
-                $"Luces: {result.Lights} | Salidas internas: {result.InternalExits} | Externas: {result.ExternalExits}{Environment.NewLine}" +
+                 $"Luces: {result.Lights} | Internas: {result.InternalExits} | Entre pisos: {result.CrossFloorExits} | Externas: {result.ExternalExits}{Environment.NewLine}" +
                 $"Resultado: {conflictText}",
                 "Mapa único generado", MessageBoxButtons.OK,
                 result.Conflicts.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
@@ -1929,22 +1929,22 @@ internal sealed class MainForm : Form
         }
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Seleccione la carpeta donde se guardará world.floors",
+            Description = "Seleccione la raiz de recursos; se generara la carpeta world",
             SelectedPath = ClientResourceRoot
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        var directory = Path.Combine(dialog.SelectedPath, "world.floors");
+        var directory = Path.Combine(dialog.SelectedPath, "world");
         try
         {
             UseWaitCursor = true;
-            _status.Text = "Generando world.floors desde los mapas originales...";
+            _status.Text = "Generando mundo con pisos desde los mapas originales...";
             var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory, applyStitching: true));
             await OpenBundlePreviewDirectory(directory);
-            _status.Text = $"world.floors guardado: {bundle.Floors.Count} pisos | Z=0 activo";
+            _status.Text = $"Mundo guardado: {bundle.Floors.Count} pisos | Z=0 activo";
             MessageBox.Show(this,
-                $"world.floors generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
+                $"Mundo generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
                 $"Pisos: {string.Join(", ", bundle.Floors.Keys.Select(z => $"Z={z}"))}",
-                "world.floors guardado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "Mundo guardado", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception error)
         {
@@ -2087,8 +2087,8 @@ internal sealed class MainForm : Form
         if (!ConfirmPendingChanges()) return;
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Seleccione la carpeta del bundle de pisos",
-            SelectedPath = Path.Combine(ClientResourceRoot, "world.floors")
+            Description = "Seleccione la carpeta del mundo con pisos",
+            SelectedPath = Path.Combine(ClientResourceRoot, "world")
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         await OpenBundlePreviewDirectory(dialog.SelectedPath);
@@ -2112,7 +2112,9 @@ internal sealed class MainForm : Form
             _previewFloorZ = images.ContainsKey(0) ? 0 : images.Keys.OrderBy(z => z).First();
             UseWaitCursor = true;
             _status.Text = "Mostrando mundo completo; cargando datos del piso...";
-            var overview = Path.Combine(directory, "worldmap", $"floor-{_previewFloorZ.Value:+#;-#;0}.png");
+            var mapsDirectory = Path.Combine(
+                Directory.GetParent(Path.GetFullPath(directory))?.FullName ?? directory, "maps");
+            var overview = Path.Combine(mapsDirectory, $"floor-{_previewFloorZ.Value:+#;-#;0}.png");
             _radarEnabled = true;
             _sidebar.SetRadarVisible(true);
             _radarTimer.Start();
@@ -2139,16 +2141,16 @@ internal sealed class MainForm : Form
     public async Task RebuildBundleAsync(string directory)
     {
         UseWaitCursor = true;
-        _status.Text = "Regenerando world.floors con stitching...";
+        _status.Text = "Regenerando mundo con pisos y stitching...";
         try
         {
-            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
+            var source = SourceSectorsDirectory;
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
                 _session.SaveUnifiedWorldBundle(directory, applyStitching: true);
             });
-            _status.Text = "world.floors regenerado con stitching.";
+            _status.Text = "Mundo con pisos regenerado con stitching.";
         }
         finally { UseWaitCursor = false; }
     }
@@ -2156,10 +2158,10 @@ internal sealed class MainForm : Form
     public async Task AuditStitchAsync(string directory)
     {
         UseWaitCursor = true;
-        _status.Text = "Analizando stitching sin regenerar world.floors...";
+        _status.Text = "Analizando stitching sin regenerar el mundo...";
         try
         {
-            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
+            var source = SourceSectorsDirectory;
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
@@ -2193,10 +2195,10 @@ internal sealed class MainForm : Form
         _status.Text = "Generando bundle experimental compacto...";
         try
         {
-            // The canonical source is the original loose CSM collection. The
-            // old generated `world` archive is not part of the new runtime
-            // pipeline and must not be used to rebuild world.floors.
-            var source = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
+            // The canonical source is the normalized sector collection. The
+            // old generated `world` archive is not part of the runtime
+            // pipeline and must not be used to rebuild the runtime world.
+            var source = SourceSectorsDirectory;
             await Task.Run(() =>
             {
                 _session.LoadWorld(source);
@@ -2230,8 +2232,10 @@ internal sealed class MainForm : Form
                 _compiledUnifiedWorld = floorMap;
                 _renderControl.SetUnifiedWorld(floorMap, _session.Resources);
                 _renderControl.SetZoom(1f);
-                var overview = Path.Combine(Path.GetDirectoryName(_previewFloorImages[nextZ])!, "worldmap",
-                    $"floor-{nextZ:+#;-#;0}.png");
+                var bundleDirectory = Path.GetDirectoryName(_previewFloorImages[nextZ])!;
+                var mapsDirectory = Path.Combine(
+                    Directory.GetParent(Path.GetFullPath(bundleDirectory))?.FullName ?? bundleDirectory, "maps");
+                var overview = Path.Combine(mapsDirectory, $"floor-{nextZ:+#;-#;0}.png");
                 var overviewImage = File.Exists(overview)
                     ? await Task.Run(() => LoadBitmapCopy(overview))
                     : null;
@@ -2311,13 +2315,13 @@ internal sealed class MainForm : Form
             {
                 bar.Style = ProgressBarStyle.Marquee;
                 bar.MarqueeAnimationSpeed = 24;
-                label.Text = "Compilando world.floors con metadatos de reference\\Recursos...";
-                var bundleDirectory = Path.Combine(ClientResourceRoot, "world.floors");
+                label.Text = "Compilando mundo con pisos y metadatos de reference\\Recursos...";
+                var bundleDirectory = Path.Combine(ClientResourceRoot, "world");
                 await Task.Run(() => _session.SaveUnifiedWorldBundle(bundleDirectory, applyStitching: true));
                 bar.Style = ProgressBarStyle.Continuous;
                 bar.MarqueeAnimationSpeed = 0;
                 bar.Value = 100;
-                label.Text = "world.floors generado correctamente.";
+                label.Text = "Mundo con pisos generado correctamente.";
                 _compileFloorsAfterWorldLoad = false;
                 await OpenBundlePreviewDirectory(bundleDirectory);
                 _settings.LastMap = _session.CurrentMapPath ?? string.Empty;
@@ -2328,7 +2332,7 @@ internal sealed class MainForm : Form
             _renderControl.SetGlobalWorld(world, _session.Resources);
             _miniMap.SetWorld(world, _session.Resources.Graphics, () => _renderControl.GlobalViewport,
                 _renderControl.CenterOnGlobalTile, _session.ResourceRoot);
-            var connectedIds = world.Assembly.Placements.Select(item => item.MapId).ToHashSet();
+            var connectedIds = world.Assembly.Placements.Select(item => item.SectorId).ToHashSet();
             var disconnected = world.Maps.Keys.Count(mapId => !connectedIds.Contains(mapId));
             _status.Text = $"Mundo abierto: {world.Assembly.Placements.Count} sectores | " +
                 $"{world.LoadedMapCount} en memoria | {world.Assembly.Conflicts.Count} conflictos | " +
@@ -2414,9 +2418,16 @@ internal sealed class MainForm : Form
     private static string ClientResourceRoot => ResourceRootResolver.GeneratedRoot();
 
     private string SourceMapsDirectory =>
-        Directory.Exists(Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas"))
-            ? Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas")
-            : Path.Combine(_session.ResourceRoot, "Mapas");
+        Directory.Exists(Path.Combine(ClientResourceRoot, "sectors"))
+            ? Path.Combine(ClientResourceRoot, "sectors")
+            : Directory.Exists(Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas"))
+                ? Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas")
+                : Path.Combine(_session.ResourceRoot, "sectors");
+
+    private string SourceSectorsDirectory =>
+        Directory.Exists(Path.Combine(ClientResourceRoot, "sectors"))
+            ? Path.Combine(ClientResourceRoot, "sectors")
+            : SourceMapsDirectory;
 
     private void RunGlobalArchiveAudit(object? sender, EventArgs e)
     {
@@ -2443,7 +2454,7 @@ internal sealed class MainForm : Form
             var semanticDetails = semantic.Issues.Count == 0
                 ? "No se encontraron inconsistencias semánticas en el ensamblado."
                 : string.Join(Environment.NewLine, semantic.Issues.Select(issue =>
-                    $"{issue.Severity.ToString().ToUpperInvariant()} [{issue.Code}] mapa={issue.MapId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}"));
+                    $"{issue.Severity.ToString().ToUpperInvariant()} [{issue.Code}] mapa={issue.SectorId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}"));
             MessageBox.Show(this,
                 $"Auditoría de WORLD terminada.{Environment.NewLine}{Environment.NewLine}" +
                 "[Estructura binaria]" + Environment.NewLine + structuralDetails + Environment.NewLine + Environment.NewLine +
@@ -2648,7 +2659,7 @@ internal sealed class MainForm : Form
         var issues = new GlobalWorldLayoutValidator().Validate(official, _session.CurrentWorld.Maps, _session.CurrentWorld.RootMap);
         _status.Text = issues.Count == 0 ? "Layout oficial validado sin diferencias" : $"Layout oficial: {issues.Count} diferencias";
         if (issues.Count > 0)
-            MessageBox.Show(this, string.Join(Environment.NewLine, issues.Take(30).Select(issue => $"Mapa {issue.MapId}: {issue.Message}")),
+            MessageBox.Show(this, string.Join(Environment.NewLine, issues.Take(30).Select(issue => $"Mapa {issue.SectorId}: {issue.Message}")),
                 "Diferencias del layout oficial", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
@@ -2699,7 +2710,7 @@ internal sealed class MainForm : Form
             }
             else if (_session.CurrentWorld.Paths.TryGetValue(portal.DestinationMap, out var specialPath) &&
                 MessageBox.Show(dialog,
-                    (_session.CurrentWorld.Assembly.Placements.Any(placement => placement.MapId == portal.DestinationMap)
+                    (_session.CurrentWorld.Assembly.Placements.Any(placement => placement.SectorId == portal.DestinationMap)
                         ? "El tile destino es de borde y no se ve en la vista global."
                         : "El destino no está en el layout activo.") +
                     " ¿Abrirlo como mapa individual?",
@@ -2828,7 +2839,7 @@ internal sealed class MainForm : Form
         else if (_session.CurrentMap is not null)
         {
             var (x, y) = _renderControl.ViewportCenterTile;
-            _renderControl.CenterOnTile(Math.Clamp(x + dx, 1, WorldMap.Width), Math.Clamp(y + dy, 1, WorldMap.Height));
+            _renderControl.CenterOnTile(Math.Clamp(x + dx, 1, WorldSector.Width), Math.Clamp(y + dy, 1, WorldSector.Height));
         }
         _radarDirty = true;
         UpdateRadar();
@@ -2857,9 +2868,9 @@ internal sealed class MainForm : Form
             var marked = BitmapPixel(crop, markerX, markerY);
             var expected = 0;
             var sample = "sin mapa";
-            if (world.Maps.TryGetValue(location.MapId, out var map) &&
-                location.LocalX >= 1 && location.LocalX <= WorldMap.Width &&
-                location.LocalY >= 1 && location.LocalY <= WorldMap.Height)
+            if (world.Maps.TryGetValue(location.SectorId, out var map) &&
+                location.LocalX >= 1 && location.LocalX <= WorldSector.Width &&
+                location.LocalY >= 1 && location.LocalY <= WorldSector.Height)
             {
                 var layer1 = map.Blocks[location.LocalX, location.LocalY].Graphics[0].GraphicIndex;
                 var graphics = _session.Resources.Graphics;
@@ -2877,7 +2888,7 @@ internal sealed class MainForm : Form
                     $"active={data?.Active} palette={data?.MiniMapColor:X8})";
             }
             var aligned = marked != Color.Black.ToArgb() && marked == expected;
-            LogRadarDebugLine($"g=({x},{y}) map={location.MapId} local=({location.LocalX},{location.LocalY}) " +
+            LogRadarDebugLine($"g=({x},{y}) map={location.SectorId} local=({location.LocalX},{location.LocalY}) " +
                 $"chunk=({chunk.X},{chunk.Y}) px=({px},{py}) stitch=({stitch.X},{stitch.Y}) " +
                 $"imagen={worldImage.Width}x{worldImage.Height} " +
                 $"marca=({markerX},{markerY}) pixel={Color.FromArgb(marked)} {sample} " +
@@ -2920,17 +2931,17 @@ internal sealed class MainForm : Form
             worldCopy.Dispose();
             var placements = string.Join(Environment.NewLine, world.Assembly.Placements
                 .OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X)
-                .Select(item => $"{item.Chunk.X},{item.Chunk.Y} -> {item.MapId} ({item.LevelId})"));
+                .Select(item => $"{item.Chunk.X},{item.Chunk.Y} -> {item.SectorId} ({item.LevelId})"));
             File.WriteAllText(Path.Combine(folder, "placements.txt"),
                 $"width={world.Assembly.Width} height={world.Assembly.Height}" +
                 $"{Environment.NewLine}{placements}");
-            if (!world.Maps.TryGetValue(location.MapId, out var map)) return;
-            _miniMap.DebugMapImage(location.MapId)?.Save(Path.Combine(folder, $"built{location.MapId}.png"),
+            if (!world.Maps.TryGetValue(location.SectorId, out var map)) return;
+            _miniMap.DebugMapImage(location.SectorId)?.Save(Path.Combine(folder, $"built{location.SectorId}.png"),
                 System.Drawing.Imaging.ImageFormat.Png);
             using var averages = new GraphicAverageColorService(_session.ResourceRoot);
             using var minimap = new MapMiniMapService().CreateSmooth(map, _session.Resources.Graphics,
                 averages, new MapMiniMapOptions(ShowLayer2: false, ShowLayer3: false, ShowLayer4: false));
-            minimap.Save(Path.Combine(folder, $"map{location.MapId}.png"),
+            minimap.Save(Path.Combine(folder, $"map{location.SectorId}.png"),
                 System.Drawing.Imaging.ImageFormat.Png);
         }
         catch { }

@@ -13,7 +13,7 @@ internal sealed class UnifiedWorldFloorAssignmentService
         // special disconnected components and extended exits are handled by the
         // world assembler/compiler, not by an external manifest.
         return world.Assembly.Placements
-            .Select(item => item.MapId)
+            .Select(item => item.SectorId)
             .Distinct()
             .ToDictionary(mapId => mapId, _ => 0);
     }
@@ -25,7 +25,7 @@ internal sealed class UnifiedWorldFloorAssignmentService
         var assignments = JsonSerializer.Deserialize<Dictionary<short, int>>(File.ReadAllText(path))
             ?? new Dictionary<short, int>();
         if (assignments.Any(item => item.Key <= 0))
-            throw new InvalidDataException("La asignación de pisos contiene un MapId inválido.");
+            throw new InvalidDataException("La asignación de pisos contiene un SectorId inválido.");
         return assignments;
     }
 
@@ -34,7 +34,7 @@ internal sealed class UnifiedWorldFloorAssignmentService
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(assignments);
         if (assignments.Any(item => item.Key <= 0))
-            throw new InvalidDataException("La asignación de pisos contiene un MapId inválido.");
+            throw new InvalidDataException("La asignación de pisos contiene un SectorId inválido.");
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         File.WriteAllText(path, JsonSerializer.Serialize(assignments,
             new JsonSerializerOptions { WriteIndented = true }));

@@ -9,7 +9,7 @@ public sealed class MapCleanupTests
     [Fact]
     public void Cleanup_removes_each_supported_entity_type()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].NpcIndex = 4;
         map.Blocks[2, 2].Object.Index = 5;
         map.Blocks[3, 3].Trigger = 7;
@@ -27,7 +27,7 @@ public sealed class MapCleanupTests
     [Fact]
     public void Clear_map_restores_base_graphic_and_removes_all_editable_payloads()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var block = map.Blocks[5, 6];
         block.Graphics[0].GraphicIndex = 99; block.Graphics[1].GraphicIndex = 98; block.Blocked = 0xF;
         block.NpcIndex = 2; block.Object.Index = 3; block.TileExit.Map = 4; block.Trigger = 5;

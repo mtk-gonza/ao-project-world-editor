@@ -43,9 +43,9 @@ internal sealed class WorldMiniMapComposer : IDisposable
                 layout.Height * GlobalChunkGeometry.HeightTiles, PixelFormat.Format32bppArgb);
             _graphics[world] = Graphics.FromImage(_canvases[world]);
             _graphics[world].Clear(Color.Black);
-            for (var index = 0; index < layout.MapIds.Count; index++)
+            for (var index = 0; index < layout.SectorIds.Count; index++)
             {
-                var mapId = layout.MapIds[index];
+                var mapId = layout.SectorIds[index];
                 if (mapId <= 0) continue;
                 if (!_cells.TryGetValue(mapId, out var cells))
                     _cells[mapId] = cells = [];
@@ -59,7 +59,7 @@ internal sealed class WorldMiniMapComposer : IDisposable
     public int LoadedMaps { get; private set; }
 
     /// <summary>Draws the minimap of one map in every cell that references it.</summary>
-    public bool Add(short mapId, WorldMap map, IReadOnlyList<GraphicData> graphics,
+    public bool Add(short mapId, WorldSector map, IReadOnlyList<GraphicData> graphics,
         IReadOnlyList<ObjectData>? objects)
     {
         if (!_cells.TryGetValue(mapId, out var cells)) return false;

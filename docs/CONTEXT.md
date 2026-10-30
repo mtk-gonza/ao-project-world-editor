@@ -9,10 +9,13 @@ WorldEditor de Argentum Online, escrito originalmente en VB6 con DirectDraw/Dire
 - Runtime destino: .NET 8 WinForms en Windows.
 - Backend grafico: Vortice.Direct3D11 (`Rendering/D3D11WorldRenderer.cs`).
 - Recursos fuente: `reference/Recursos` (solo lectura).
-- Artefactos runtime: `ao-project-resources/world.floors` (generados, no fuente).
+- Artefactos runtime: `ao-project-resources/world` (bundle y floors generados) y
+  `ao-project-resources/maps` (PNG generados, no fuente).
 - Pisos de importacion: `WORLDMAP1 -> Z=0`, `WORLDMAP2 -> Z=-1` y
-  `WORLDMAP3 -> Z=-2`, derivados automaticamente de `mapsworlddata.dat`; no se usa
-  `world-floors.json`.
+  `WORLDMAP3 -> Z=-2`, derivados automaticamente de `mapsworlddata.dat`. El bundle
+  agrega `Z=-3` para CSM positivos existentes sin placement oficial; los CSM
+  especiales sin placement se preservan embebidos pero no se dibujan en `Z=0`.
+  No se usa un manifiesto externo de pisos.
 - Ledger de paridad: `../docs/parity/world-editor-coverage.tsv` (617 procedimientos,
   100% `Ported` al 2026-10-28).
 
@@ -49,7 +52,8 @@ Dentro:
 Fuera:
 
 - Cambiar la semantica del juego para acomodar la implementacion moderna.
-- Escribir en `ao-project-resources`.
+- Modificar los CSM originales. La generación explícita sí escribe únicamente
+  `ao-project-resources/world` y `ao-project-resources/maps`.
 - El cliente de juego y el servidor (viven en sus propios repos).
 
 ## 4. Arquitectura
@@ -65,13 +69,13 @@ ao-project-world-editor/
     Application/      Servicios de edicion, sesion, undo, mundo global, audio
     Domain/           Modelo de mapa y reglas puras
       Rendering/      WorldRenderOptions (sin dependencia de D3D)
-    Infrastructure/   Lectores/escritores CSM/V3, bundle v3, indices, INI, mapsworlddata
+    Infrastructure/   Lectores/escritores legacy, bundle v5, índices, INI, mapsworlddata
       Runtime/        EditorPaths (raiz del proyecto, logs, autosave)
     Engine/Rendering/ D3D11, atlas, geometria de render, camara, texto
    Presentation/
       Forms/          MainForm
       Features/World/ WorldRenderControl, WorldMiniMapControl
-   tests/AoProject.WorldEditor.Tests/   xUnit (362 tests al 2026-10-29)
+       tests/AoProject.WorldEditor.Tests/   xUnit (368 tests al 2026-10-30)
 ```
 
 Rutas de runtime (centralizadas en `Infrastructure/Runtime/EditorPaths.cs`):
@@ -82,7 +86,9 @@ Rutas de runtime (centralizadas en `Infrastructure/Runtime/EditorPaths.cs`):
 | `<proyecto>/artifacts/autosave/` | Copias de autoguardado |
 | `<proyecto>/artifacts/backups/` | Copias previas a cada guardado |
 | `<proyecto>/artifacts/audit/` | Reportes de la auditoria completa |
-| `<proyecto>/artifacts/world/` | `NameMapa.dat`, `translados.ini`, minimapas |
+| `<proyecto>/artifacts/world/` | Salidas auxiliares y auditorías locales |
+| `ao-project-resources/world/` | `bundle.aog`, `floor-*.gmap` y TSV del mundo generado |
+| `ao-project-resources/maps/` | `floor-*.png` del mundo generado |
 | `%LOCALAPPDATA%/AoProject/WorldEditor/WorldEditor.ini` | Preferencias del usuario |
 
 Flujo de arranque:
@@ -101,7 +107,7 @@ Flujo de arranque:
 - `MapBlock`: 8 graficos animados, objeto, NPC, personaje, particula, luz, colores,
   bloqueo, trigger, transferencia (`TileExit`).
 - `MapInfo`: nombre, musica, terreno, zona, restriccion, luz, flags, `Changed`.
-- `CsmMapSize`: rectangulo valido del mapa (por defecto 1..100).
+- `CsmSectorSize`: rectangulo valido del sector (por defecto 1..100).
 - `MapEnvironment`: lluvia, nieve, niebla, luz base.
 
 ### 5.2 Archivos
@@ -169,9 +175,27 @@ GlobalY = (ChunkY - MinChunkY) * 81 + LocalY - 1 - StitchY
 Las coordenadas `ExternalX/ExternalY` de un teleport externo no se convierten a globales:
 se conservan en formato VB6 para el mapa destino.
 
-`Map=-1`, `Map=-2` y `Map=3000..3004` son salidas externas con `ExternalZ=-1`; no son
-placements normales. La semantica exacta de esos identificadores especiales queda
-documentada en `WORLD-STITCH-AND-TELEPORT-AUDIT.md`.
+`Map=-1` y `Map=-2` son salidas externas dinámicas (`ReturnPos`); no son placements
+normales. `Map=3000..3004` tampoco tiene CSM, pero durante la generación se adapta
+a un destino virtual `CrossFloor` en `Z=-1`, conservando sus coordenadas. La regla
+queda documentada en `WORLD-STITCH-AND-TELEPORT-AUDIT.md`.
+
+Los mapas positivos con CSM valido pero sin placement oficial se importan en una
+grilla determinista del piso virtual `Z=-3`. La incorporacion es transitiva: tambien
+se agregan los CSM positivos alcanzables desde esos mapas. Asi, el bundle no deja
+destinos positivos existentes fuera del sistema de coordenadas global.
+
+`bundle.aog` es versión 5. Cada floor es `AOGMAP01` versión 4 y transporta los arrays
+completos por tile: gráficos, luces, colores, bloqueo, trigger, entidades, ambiente,
+techos, agua, lava y salidas. El manifiesto conserva por `MapId` todos los campos de
+`SectorInfo`, `MapEnvironment`, `CsmSectorSize`, piso, placement y offsets de stitching.
+Cliente y servidor cargan el runtime desde `world` sin reabrir los sectores para jugar.
+El bundle v5 también contiene los payloads fuente de todos los sectores para
+preservación y auditoría.
+
+Las salidas legacy que solo conectan sectores fisicamente adyacentes se eliminan al
+compilar el mundo unico, incluyendo el wrap horizontal. Los portales no adyacentes,
+los cambios de piso y las salidas externas se conservan.
 
 ## 7. Feature "mapa mundial"
 

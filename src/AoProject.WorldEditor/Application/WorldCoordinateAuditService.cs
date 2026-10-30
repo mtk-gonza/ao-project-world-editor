@@ -5,7 +5,7 @@ namespace AoProject.WorldEditor.Application;
 
 /// <summary>
 /// Audits the official world layout and the local -> global coordinate mapping:
-/// core coverage, overlaps, gaps, wrap seam, CsmMapSize intersection, canonical
+/// core coverage, overlaps, gaps, wrap seam, CsmSectorSize intersection, canonical
 /// exits between adjacent cells and the TryGetGlobalTile/TryResolve round trip.
 /// </summary>
 internal sealed class WorldCoordinateAuditService
@@ -46,19 +46,19 @@ internal sealed class WorldCoordinateAuditService
             {
                 if (cells.ContainsKey(placement.Chunk))
                 {
-                    issues.Add(new WorldAuditIssue(layout.WorldId, placement.MapId, "WORLD-CHUNK", AuditSeverity.Error,
+                    issues.Add(new WorldAuditIssue(layout.WorldId, placement.SectorId, "WORLD-CHUNK", AuditSeverity.Error,
                         $"Chunk duplicado {placement.Chunk.X},{placement.Chunk.Y}.",
                         placement.Chunk.X, placement.Chunk.Y));
                     continue;
                 }
-                cells[placement.Chunk] = placement.MapId;
+                cells[placement.Chunk] = placement.SectorId;
             }
             var chunks = cells.Keys.ToHashSet();
             var width = assembly.Width > 0 ? assembly.Width : (cells.Count == 0 ? 0 : cells.Keys.Max(chunk => chunk.X) + 1);
             var height = assembly.Height > 0 ? assembly.Height : (cells.Count == 0 ? 0 : cells.Keys.Max(chunk => chunk.Y) + 1);
             var mapCounts = cells.Values.GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
             var filler = mapCounts.Where(pair => pair.Value > 1).Select(pair => pair.Key).ToHashSet();
-            var dummy = new WorldMap();
+            var dummy = new WorldSector();
             var paths = mapPaths ?? new Dictionary<short, string>();
             var document = new GlobalWorldDocument(assembly,
                 available.ToDictionary(id => id, _ => dummy), paths, root);
@@ -96,12 +96,12 @@ internal sealed class WorldCoordinateAuditService
                 if (intersectX1 > intersectX2 || intersectY1 > intersectY2)
                     issues.Add(new WorldAuditIssue(layout.WorldId, mapId, "WORLD-CSM-EMPTY", AuditSeverity.Error,
                         $"El core {minX}..{GlobalChunkGeometry.CoreMaxX},{minY}..{GlobalChunkGeometry.CoreMaxY} " +
-                        $"no intersecta CsmMapSize {info.XMin}..{info.XMax},{info.YMin}..{info.YMax}.",
+                        $"no intersecta CsmSectorSize {info.XMin}..{info.XMax},{info.YMin}..{info.YMax}.",
                         chunk.X, chunk.Y, left, top));
                 else if (intersectX1 > minX || intersectX2 < GlobalChunkGeometry.CoreMaxX ||
                          intersectY1 > minY || intersectY2 < GlobalChunkGeometry.CoreMaxY)
                     issues.Add(new WorldAuditIssue(layout.WorldId, mapId, "WORLD-CSM-PARTIAL", AuditSeverity.Warning,
-                        $"El core no esta cubierto completo por CsmMapSize " +
+                        $"El core no esta cubierto completo por CsmSectorSize " +
                         $"{info.XMin}..{info.XMax},{info.YMin}..{info.YMax}.",
                         chunk.X, chunk.Y, left, top));
 
@@ -164,11 +164,11 @@ internal sealed class WorldCoordinateAuditService
                 continue;
             }
             if (!document.TryResolve(global.X, global.Y, out var resolved) ||
-                resolved.MapId != mapId || resolved.LocalX != x || resolved.LocalY != y)
+                resolved.SectorId != mapId || resolved.LocalX != x || resolved.LocalY != y)
             {
                 issues.Add(new WorldAuditIssue(worldId, mapId, "WORLD-ROUNDTRIP", AuditSeverity.Error,
                     $"Round-trip roto en {x},{y} -> {global.X},{global.Y} -> " +
-                    $"{resolved.MapId}({resolved.LocalX},{resolved.LocalY}).",
+                    $"{resolved.SectorId}({resolved.LocalX},{resolved.LocalY}).",
                     chunk.X, chunk.Y, global.X, global.Y));
             }
         }
@@ -201,8 +201,8 @@ internal sealed class WorldCoordinateAuditService
             var a = visible[i];
             var b = visible[j];
             if (a.Left <= b.Right && b.Left <= a.Right && a.Top <= b.Bottom && b.Top <= a.Bottom)
-                issues.Add(new WorldAuditIssue(worldId, a.MapId, "WORLD-OVERLAP", AuditSeverity.Error,
-                    $"Solapamiento visible con mapa {b.MapId} en chunks {a.Chunk.X},{a.Chunk.Y} / {b.Chunk.X},{b.Chunk.Y}.",
+                issues.Add(new WorldAuditIssue(worldId, a.SectorId, "WORLD-OVERLAP", AuditSeverity.Error,
+                    $"Solapamiento visible con mapa {b.SectorId} en chunks {a.Chunk.X},{a.Chunk.Y} / {b.Chunk.X},{b.Chunk.Y}.",
                     a.Chunk.X, a.Chunk.Y, Math.Max(a.Left, b.Left), Math.Max(a.Top, b.Top)));
         }
 
@@ -214,7 +214,7 @@ internal sealed class WorldCoordinateAuditService
                 var previous = ordered[index - 1];
                 var current = ordered[index];
                 if (previous.Right + 1 != current.Left)
-                    issues.Add(new WorldAuditIssue(worldId, current.MapId,
+                    issues.Add(new WorldAuditIssue(worldId, current.SectorId,
                         previous.Right + 1 < current.Left ? "WORLD-GAP" : "WORLD-OVERLAP",
                         AuditSeverity.Error,
                         $"Celdas {previous.Chunk.X},{previous.Chunk.Y} y {current.Chunk.X},{current.Chunk.Y} " +
@@ -231,7 +231,7 @@ internal sealed class WorldCoordinateAuditService
                 var previous = ordered[index - 1];
                 var current = ordered[index];
                 if (previous.Bottom + 1 != current.Top)
-                    issues.Add(new WorldAuditIssue(worldId, current.MapId,
+                    issues.Add(new WorldAuditIssue(worldId, current.SectorId,
                         previous.Bottom + 1 < current.Top ? "WORLD-GAP" : "WORLD-OVERLAP",
                         AuditSeverity.Error,
                         $"Celdas {previous.Chunk.X},{previous.Chunk.Y} y {current.Chunk.X},{current.Chunk.Y} " +
@@ -242,7 +242,7 @@ internal sealed class WorldCoordinateAuditService
     }
 
     private readonly record struct VisibleCell(
-        short MapId,
+        short SectorId,
         GlobalChunkCoordinate Chunk,
         int MinLocalX,
         int MinLocalY,

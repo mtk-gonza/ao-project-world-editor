@@ -39,7 +39,7 @@ public sealed class MapLightingColorTests
     [Fact]
     public void A_round_light_stays_red_dominant_on_its_own_tile()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 100; // stored >= 100 -> effective radius 1
         map.Blocks[50, 50].Light.Color = 0xFF0000;
 
@@ -61,7 +61,7 @@ public sealed class MapLightingColorTests
     [Fact]
     public void Tiles_outside_every_light_use_the_ambient()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 100;
         map.Blocks[50, 50].Light.Color = 0xFF0000;
         var ambient = unchecked((int)0xFF203040);
@@ -75,7 +75,7 @@ public sealed class MapLightingColorTests
     [Fact]
     public void Flat_lights_stay_off_by_default()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[50, 50].Light.Range = 97;
         map.Blocks[50, 50].Light.Color = 0x00FF00;
 

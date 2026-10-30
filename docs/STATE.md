@@ -1,6 +1,6 @@
 # Estado medido
 
-Fecha: 2026-10-29
+Fecha: 2026-10-30
 Base: repo raiz `66eac79` (el World Editor vive en el repo raiz; no tiene `.git` propio).
 
 Este documento registra lo que se **midio**, no lo que dicen documentos viejos.
@@ -11,9 +11,10 @@ Si un numero cambia, se actualiza aca y en [`WORLD-MAP-AUDIT.md`](WORLD-MAP-AUDI
 | Metrica | Valor | Comando |
 | --- | --- | --- |
 | Build Release | 0 errores, 0 warnings | `dotnet build src/AoProject.WorldEditor/AoProject.WorldEditor.csproj --no-restore -c Release` |
-| Tests WorldEditor | **362/362** | `dotnet test tests/AoProject.WorldEditor.Tests/AoProject.WorldEditor.Tests.csproj --no-restore` |
-| Tests cliente | **784/784** | `dotnet test ..\ao-project-client\tests\AoProject.Client.Tests\AoProject.Client.Tests.csproj --no-restore` |
-| Tests servidor | **646/646** | `dotnet test ..\ao-project-server\tests\AoProject.Server.Tests\AoProject.Server.Tests.csproj --no-restore` |
+| Tests WorldEditor | **368/368** | `dotnet test AoProject.WorldEditor.sln --no-restore` |
+| Tests cliente | **797/797** | `dotnet test ..\ao-project-client\tests\AoProject.Client.Tests\AoProject.Client.Tests.csproj --no-build` |
+| Build servidor | **0 errores** | `dotnet build ..\ao-project-server\src\AoProject.Server\AoProject.Server.csproj` |
+| Build cliente/servidor | Aplicaciones compilan; las soluciones completas aún tienen tests legacy que llaman APIs CSM retiradas | compilar los `.csproj` de las aplicaciones |
 | Ledger de procedimientos | **617/617 Ported** (0 Waived, 0 Todo) | `.\tools\parity\Test-WorldEditorLedgerClosure.ps1` |
 | Tests del feature mapa mundial | **132** (14 originales + 11 guardas + 4 auditoria + 4 F2 + 5 F3 + 1 F4 + 16 F7/F8 + 1 paleta + 1 capas + 4 editor INI + 3 BMP + 2 mundo + 5 proyeccion + 3 alpha + 2 blend + 11 equipo + 6 luces + 3 indices + 4 perf + 4 minimapa + 10 radar + 13 diagnostico + 2 acople) | ver seccion 5 |
 
@@ -60,7 +61,17 @@ la auditoria de datos (`docs/MAP-DATA-AUDIT.md`).
 - `WORLDMAP4`: ignorado por `TOTALWORLDS=3`.
 - 157.353 salidas entre mapas (clases en el audit).
 - 1.184 salidas a `Map=-1`, 2 a `Map=-2` y 10 a `Map=3000..3004` en la auditoria de
-  los 843 CSM originales; las especiales se conservan como salidas externas.
+  los 843 CSM originales; las negativas son externas dinámicas y las 3000..3004 se
+  adaptan a `CrossFloor` virtual hacia `Z=-1` al generar `world`.
+- El bundle actual se genera como `AOGBND01` v5, con floors `Z=0,-1,-2,-3` y
+  payloads fuente embebidos por sector; el artefacto productivo anterior era v4.
+  Contiene 799 placements oficiales/virtuales válidos y sin destinos positivos externos sin resolver. Solo permanece
+  `Map=-1` como `ReturnPos` dinamico.
+- Las uniones legacy de sectores adyacentes se eliminan como `TileExit` runtime;
+  permanecen los portales internos no adyacentes y los teleports entre pisos.
+- El contrato final v5 es autosuficiente: agua, lava, entidades, luces, techos,
+  ambiente, restricciones, metadatos y teleports se transportan dentro de `world`;
+  los PNG derivados se guardan en `ao-project-resources/maps`.
 - 743 de 842 mapas estan pintados completamente en 100x100.
 
 ## 4. Mediciones de performance y memoria
@@ -201,7 +212,7 @@ Detalle y evidencia en [`WORLD-MAP-AUDIT.md`](WORLD-MAP-AUDIT.md).
 | `WorldMapAuditTests.cs` | 4 | arnes gated: dataset, memoria/preload/undo, wrap/validador, overlays/round-trip |
 | `WorldSaveTests.cs` | 2 | guardado dirty + backup y undo al reactivar el mismo mapa |
 | `MapDataAuditTests.cs` | 4 | CSM limpio/round-trip, exit faltante, bounds y archivo vacio |
-| `WorldCoordinateAuditTests.cs` | 4 | par valido, exit faltante, relleno y core fuera de CsmMapSize |
+| `WorldCoordinateAuditTests.cs` | 4 | par valido, exit faltante, relleno y core fuera de CsmSectorSize |
 | `WorldOutputTests.cs` | 2 | NameMapa.dat/translados.ini y preservacion de claves legacy |
 | `IniEditorTests.cs` | 3 | update in-place, secciones nuevas y duplicados |
 | `WorldOutputAuditTests.cs` | 1 | auditoria de NameMapa/translados contra el CSM |
@@ -217,7 +228,7 @@ Detalle y evidencia en [`WORLD-MAP-AUDIT.md`](WORLD-MAP-AUDIT.md).
 | `GlobalChunkBoundsTests.cs` | 2 | rectangulo visible global -> tiles locales |
 | `DetailedMiniMapTests.cs` | 4 | miniatura real, NPC amarillo, fallback al color plano y clamp de escala |
 | `WorldRadarTests.cs` | 10 | recorte centrado, clamp, centro, zoom, composicion, acople 75x81, ToRadarPixel y marcador (centro y borde) |
-| `MapRenderGeometryTests.cs` | 8 | techos, CsmMapSize, bordes compartidos y acople por linea (`Duplicated_border_junction_collapses_to_the_same_row`, `Different_border_junction_keeps_both_rows`) |
+| `MapRenderGeometryTests.cs` | 8 | techos, CsmSectorSize, bordes compartidos y acople por linea (`Duplicated_border_junction_collapses_to_the_same_row`, `Different_border_junction_keeps_both_rows`) |
 | `MapOverlayTests.cs` (clip) | +2 | recorte de overlays al viewport |
 | `FullAuditTests.cs` | 3 | auditoria completa, salidas reales y comparacion con las legacy (gated `AO_WORLD_AUDIT=1`) |
 
@@ -291,14 +302,15 @@ usuario y nota de alcance. F7/F8: auditoria completa y salidas auxiliares.
 - Paridad VB6: `../docs/parity/world-editor-migration.md`
 - ADR del editor: `../docs/parity/work/adr-world-editor.md`
 
-## 9. Indices de herramientas (2026-10-28)
+## 9. Indices de herramientas (2026-10-30)
 
 | Herramienta | Salida | Metricas |
 | --- | --- | --- |
-| codebase-memory (MCP) | `.codebase-memory/graph.db.zst` | proyecto `D-projects-PERSONAL-ao-project-ao-project-world-editor`; **3800 nodos / 12746 edges**; estado `ready` |
-| graphify (code-only) | `graphify-out/` | **2517 nodos / 7311 edges / 129 comunidades**; `graph.json`, `graph.html`, `GRAPH_REPORT.md` |
+| codebase-memory (MCP) | `.codebase-memory/graph.db.zst` | proyecto `D-projects-ao-project-ao-project-world-editor`; **4722 nodos / 24315 edges**; estado `indexed` |
+| graphify (code-only) | `graphify-out/` | No regenerado en este entorno: el ejecutable `graphify` no está instalado |
 
-Ambos indices se regeneraron despues de F7/F8 (auditorias y salidas auxiliares).
+El índice codebase-memory se regeneró después del contrato runtime v4. `graphify` queda
+pendiente hasta disponer de su ejecutable.
 
 Comandos:
 

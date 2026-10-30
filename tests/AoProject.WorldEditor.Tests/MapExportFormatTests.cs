@@ -17,7 +17,7 @@ public sealed class MapExportFormatTests
         try
         {
             var path = Path.Combine(root, "mapa" + extension);
-            new MapImageCaptureService().Save(new WorldMap(), [new GraphicData()], root, path);
+            new MapImageCaptureService().Save(new WorldSector(), [new GraphicData()], root, path);
             Assert.True(File.Exists(path));
             using var image = System.Drawing.Image.FromFile(path);
             Assert.Equal(3200, image.Width); Assert.Equal(3200, image.Height);

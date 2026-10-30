@@ -24,7 +24,7 @@ internal sealed record WorldOutputResult(
 /// </summary>
 internal sealed class WorldOutputService
 {
-    private readonly CsmMapFileService _maps = new();
+    private readonly SectorCsmFileService _maps = new();
 
     public WorldOutputResult Generate(
         string mapsDirectory,
@@ -45,7 +45,7 @@ internal sealed class WorldOutputService
         Directory.CreateDirectory(Path.Combine(directory, "minimapas-bmp"));
 
         var files = Directory.EnumerateFiles(mapsDirectory, "*.csm", SearchOption.TopDirectoryOnly)
-            .Select(path => (Path: path, Id: ParseMapId(path)))
+            .Select(path => (Path: path, Id: ParseSectorId(path)))
             .Where(item => item.Id > 0 && new FileInfo(item.Path).Length > 0)
             .GroupBy(item => item.Id).Select(group => group.First())
             .OrderBy(item => item.Id)
@@ -145,7 +145,7 @@ internal sealed class WorldOutputService
                 StringComparison.OrdinalIgnoreCase));
     }
 
-    private static short ParseMapId(string path)
+    private static short ParseSectorId(string path)
     {
         var digits = new string(Path.GetFileNameWithoutExtension(path).Where(char.IsDigit).ToArray());
         return short.TryParse(digits, out var id) ? id : (short)0;

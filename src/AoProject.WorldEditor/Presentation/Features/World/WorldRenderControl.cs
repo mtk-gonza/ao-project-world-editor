@@ -26,7 +26,7 @@ internal sealed class WorldRenderControl : Control
     private readonly System.Windows.Forms.Timer _renderTimer;
     private IWorldRenderer? _renderer;
     private Exception? _initializationError;
-    private WorldMap? _map;
+    private WorldSector? _map;
     private UnifiedWorldMap? _unifiedMap;
     private UnifiedWorldMap? _unifiedSourceMap;
     private Bitmap? _unifiedPreview;
@@ -35,7 +35,7 @@ internal sealed class WorldRenderControl : Control
     private WorldEditorResourceCatalog? _worldResources;
     private (int MinX, int MinY, int MaxX, int MaxY)? _lastGlobalChunkBounds;
     private HashSet<GlobalChunkCoordinate> _globalChunks = [];
-    private WorldMap? _selectedWorldMap;
+    private WorldSector? _selectedWorldMap;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<short, MapRenderGeometry> _globalGeometryCache = [];
     private readonly System.Collections.Concurrent.ConcurrentDictionary<short, IReadOnlyList<RenderSprite>> _globalSpriteCache = [];
     private int _globalWarmupGeneration;
@@ -58,7 +58,7 @@ internal sealed class WorldRenderControl : Control
     public bool NightMode { get; private set; }
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private double _animationEpoch;
-    private readonly Dictionary<WorldMap, ParticleGroupService> _particleGroups = new();
+    private readonly Dictionary<WorldSector, ParticleGroupService> _particleGroups = new();
     private readonly WorldCamera _camera = new();
     private readonly TextRenderService _text = new();
     private FontAtlas? _hudFont;
@@ -110,7 +110,7 @@ internal sealed class WorldRenderControl : Control
             ClientSize.Width / _camera.Zoom / MapRenderGeometry.TilePixels,
             ClientSize.Height / _camera.Zoom / MapRenderGeometry.TilePixels);
 
-    public void SetMap(WorldMap map)
+    public void SetMap(WorldSector map)
     {
         _unifiedPreview?.Dispose();
         _unifiedPreview = null;
@@ -308,20 +308,20 @@ internal sealed class WorldRenderControl : Control
                 var visible = world.Assembly.Placements.Where(item =>
                         item.Chunk.X >= bounds.MinX && item.Chunk.X <= bounds.MaxX &&
                         item.Chunk.Y >= bounds.MinY && item.Chunk.Y <= bounds.MaxY &&
-                        world.Maps.ContainsKey(item.MapId))
-                    .DistinctBy(item => item.MapId);
+                        world.Maps.ContainsKey(item.SectorId))
+                    .DistinctBy(item => item.SectorId);
                 foreach (var placement in visible)
                 {
                     if (token.IsCancellationRequested) return;
                     try
                     {
-                        if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
-                        geometries[placement.MapId] = MapRenderGeometry.Build(map, options);
-                        sprites[placement.MapId] = BuildSprites(map, resources, options, 0d);
+                        if (!world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
+                        geometries[placement.SectorId] = MapRenderGeometry.Build(map, options);
+                        sprites[placement.SectorId] = BuildSprites(map, resources, options, 0d);
                     }
                     catch (Exception error)
                     {
-                        errors.Add($"{placement.MapId}: {error.GetType().Name}: {error.Message}");
+                        errors.Add($"{placement.SectorId}: {error.GetType().Name}: {error.Message}");
                     }
                 }
             }
@@ -375,8 +375,8 @@ internal sealed class WorldRenderControl : Control
         return _world.Assembly.Placements
             .Where(item => item.Chunk.X >= bounds.MinX && item.Chunk.X <= bounds.MaxX &&
                 item.Chunk.Y >= bounds.MinY && item.Chunk.Y <= bounds.MaxY &&
-                _world.Maps.ContainsKey(item.MapId))
-            .Select(item => item.MapId).Distinct()
+                _world.Maps.ContainsKey(item.SectorId))
+            .Select(item => item.SectorId).Distinct()
             .All(mapId => _globalGeometryCache.ContainsKey(mapId) && _globalSpriteCache.ContainsKey(mapId));
     }
 
@@ -389,22 +389,22 @@ internal sealed class WorldRenderControl : Control
         var maxX = bounds.MaxX;
         var maxY = bounds.MaxY;
         var visible = _world.Assembly.Placements.Where(item => item.Chunk.X >= minX && item.Chunk.X <= maxX &&
-            item.Chunk.Y >= minY && item.Chunk.Y <= maxY && _world.Maps.ContainsKey(item.MapId)).ToArray();
+            item.Chunk.Y >= minY && item.Chunk.Y <= maxY && _world.Maps.ContainsKey(item.SectorId)).ToArray();
         // If a visible map has not been warmed yet, keep the previous geometry
         // instead of combining only the ready ones: the missing maps were drawn
         // as black holes until the next warm-up. The warm-up refreshes this when
         // it finishes.
-        if (visible.Any(item => !_globalGeometryCache.ContainsKey(item.MapId))) return;
+        if (visible.Any(item => !_globalGeometryCache.ContainsKey(item.SectorId))) return;
         // Neighbour detection must use every placement, not only the visible
         // ones: a map at the left edge of the viewport still has a west
         // neighbour that owns the shared border columns.
         _globalChunks = _world.Assembly.Placements.Select(item => item.Chunk).ToHashSet();
         // Do not evict maps while the background warm-up is reading them.
         if (_globalWarmingBounds is null)
-            _world.TrimLoadedMaps(visible.Select(item => item.MapId).Append(_world.RootMap));
+            _world.TrimLoadedMaps(visible.Select(item => item.SectorId).Append(_world.RootMap));
         var mapGeometry = visible.Select(item =>
         {
-            return _globalGeometryCache.TryGetValue(item.MapId, out var geometry)
+            return _globalGeometryCache.TryGetValue(item.SectorId, out var geometry)
                 ? (geometry, item.Chunk)
                 : ((MapRenderGeometry?)null, item.Chunk);
         }).Where(item => item.Item1 is not null)
@@ -417,7 +417,7 @@ internal sealed class WorldRenderControl : Control
         _stitcher ??= new WorldBorderStitcher(_world.Assembly.Placements, mapId =>
         {
             if (!_world.Paths.TryGetValue(mapId, out var path)) return null;
-            try { return WorldBorderStitcher.Sample(new CsmMapFileService().Load(path)); }
+            try { return WorldBorderStitcher.Sample(new SectorCsmFileService().Load(path)); }
             catch { return null; }
         });
         // Lines are computed in the background on first use (loading border maps on
@@ -458,10 +458,10 @@ internal sealed class WorldRenderControl : Control
             var dy = (placement.Chunk.Y * GlobalChunkGeometry.HeightTiles -
                 (_stitchRows is not null && _stitchRows.TryGetValue(placement.Chunk, out var rowShift)
                     ? rowShift : 0)) * MapRenderGeometry.TilePixels;
-            if (!_globalSpriteCache.TryGetValue(placement.MapId, out var localSprites)) continue;
+            if (!_globalSpriteCache.TryGetValue(placement.SectorId, out var localSprites)) continue;
             if (RenderOptions.ShowParticles)
             {
-                if (!_world.Maps.TryGetValue(placement.MapId, out var map)) continue;
+                if (!_world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
                 localSprites = BuildSprites(map, _worldResources, RenderOptions, AnimationSeconds());
             }
             var hasWest = _globalChunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
@@ -513,7 +513,7 @@ internal sealed class WorldRenderControl : Control
     /// <summary>World tile at the center of the viewport (0-based geometry index).</summary>
     public (int X, int Y) ViewportCenterGlobalTile => _camera.CenterGlobalTile(ClientSize.Width, ClientSize.Height);
 
-    public void SetMap(WorldMap map, WorldEditorResourceCatalog resources)
+    public void SetMap(WorldSector map, WorldEditorResourceCatalog resources)
     {
         SetMap(map);
         _atlas?.Dispose();
@@ -555,7 +555,7 @@ internal sealed class WorldRenderControl : Control
     }
 
     /// <summary>Raised when a single map is bound to the control (atlas ready).</summary>
-    public event Action<WorldMap, WorldEditorResourceCatalog>? MapBound;
+    public event Action<WorldSector, WorldEditorResourceCatalog>? MapBound;
 
     private void RegisterGraphic(int index, WorldEditorResourceCatalog resources)
     {
@@ -617,13 +617,13 @@ internal sealed class WorldRenderControl : Control
         Invalidate();
     }
 
-    private int AmbientColor(WorldMap map) => NightMode
+    private int AmbientColor(WorldSector map) => NightMode
         ? MapLightingService.NightLight
         : MapLightingService.AmbientFromColor(map.Environment.BaseLight);
 
     private double AnimationSeconds() => Math.Max(0d, _clock.Elapsed.TotalSeconds - _animationEpoch);
 
-    private IReadOnlyList<RenderSprite> BuildSprites(WorldMap map, WorldEditorResourceCatalog resources,
+    private IReadOnlyList<RenderSprite> BuildSprites(WorldSector map, WorldEditorResourceCatalog resources,
         WorldRenderOptions options, double elapsedSeconds)
     {
         var sprites = new List<RenderSprite>();
@@ -680,8 +680,8 @@ internal sealed class WorldRenderControl : Control
             var characters = map.Npcs.Select((npc, index) => new CharacterEntry
             {
                 Index = index + 1, Body = npc.Body, Head = npc.Head, Heading = npc.Heading,
-                X = (short)Math.Clamp(npc.X + 1, 1, WorldMap.Width),
-                Y = (short)Math.Clamp(npc.Y + 1, 1, WorldMap.Height), Weapon = npc.Weapon,
+                X = (short)Math.Clamp(npc.X + 1, 1, WorldSector.Width),
+                Y = (short)Math.Clamp(npc.Y + 1, 1, WorldSector.Height), Weapon = npc.Weapon,
                 Shield = npc.Shield, Helmet = npc.Helmet, Active = true
             }).ToArray();
             sprites.AddRange(new CharacterRenderService().Render(characters, resources.Bodies,
@@ -691,8 +691,8 @@ internal sealed class WorldRenderControl : Control
         {
             var groups = new ParticleGroupService();
             foreach (var group in map.ParticleGroups)
-                groups.Create((short)Math.Clamp(group.X + 1, 1, WorldMap.Width),
-                    (short)Math.Clamp(group.Y + 1, 1, WorldMap.Height), group.Type);
+                groups.Create((short)Math.Clamp(group.X + 1, 1, WorldSector.Width),
+                    (short)Math.Clamp(group.Y + 1, 1, WorldSector.Height), group.Type);
             sprites.AddRange(new ParticleRenderService().Render(groups.Groups, resources.Particles, 0f));
         }
         return sprites;
@@ -702,12 +702,12 @@ internal sealed class WorldRenderControl : Control
     /// Objects are stored in OBJInfo + ObjGrh and anchored to the bottom of the
     /// tile, so taller graphics extend upwards (VB6 RenderObject behaviour).
     /// </summary>
-    private static void AppendObjectSprites(WorldMap map, WorldEditorResourceCatalog resources, List<RenderSprite> sprites)
+    private static void AppendObjectSprites(WorldSector map, WorldEditorResourceCatalog resources, List<RenderSprite> sprites)
     {
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {
@@ -747,9 +747,9 @@ internal sealed class WorldRenderControl : Control
         {
             tile = _camera.ScreenToTile(screenX, screenY) ?? default;
             if (_map is null) return false;
-            return tile.X >= _map.CsmMapSize.XMin && tile.X <= _map.CsmMapSize.XMax &&
-                tile.Y >= _map.CsmMapSize.YMin && tile.Y <= _map.CsmMapSize.YMax &&
-                tile.X is >= 1 and <= WorldMap.Width && tile.Y is >= 1 and <= WorldMap.Height;
+            return tile.X >= _map.CsmSectorSize.XMin && tile.X <= _map.CsmSectorSize.XMax &&
+                tile.Y >= _map.CsmSectorSize.YMin && tile.Y <= _map.CsmSectorSize.YMax &&
+                tile.X is >= 1 and <= WorldSector.Width && tile.Y is >= 1 and <= WorldSector.Height;
         }
         var global = _camera.ScreenToGlobalTile(screenX, screenY);
         if (!_world.TryResolve(global.X, global.Y, out var location))
@@ -757,14 +757,14 @@ internal sealed class WorldRenderControl : Control
             tile = default;
             return false;
         }
-        if (!_world.Maps.TryGetValue(location.MapId, out var resolvedMap))
+        if (!_world.Maps.TryGetValue(location.SectorId, out var resolvedMap))
         {
             tile = default;
             return false;
         }
         _selectedGlobalTile = global;
         _selectedWorldMap = resolvedMap;
-        GlobalMapActivated?.Invoke(location.MapId);
+        GlobalMapActivated?.Invoke(location.SectorId);
         tile = (location.LocalX, location.LocalY);
         return true;
     }
@@ -783,7 +783,7 @@ internal sealed class WorldRenderControl : Control
     /// keeps the texture atlas and, in world mode, only rebuilds the edited
     /// map instead of every visible chunk.
     /// </summary>
-    public void RefreshAfterEdit(WorldMap map)
+    public void RefreshAfterEdit(WorldSector map)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (_worldResources is null) return;
@@ -806,9 +806,9 @@ internal sealed class WorldRenderControl : Control
         short? mapId = null;
         foreach (var placement in _world.Assembly.Placements)
         {
-            if (!_world.Maps.TryGetValue(placement.MapId, out var candidate)) continue;
+            if (!_world.Maps.TryGetValue(placement.SectorId, out var candidate)) continue;
             if (!ReferenceEquals(candidate, map)) continue;
-            mapId = placement.MapId;
+            mapId = placement.SectorId;
             break;
         }
         if (mapId is null) return;
@@ -1214,10 +1214,10 @@ internal sealed class WorldRenderControl : Control
             if (_selection is { } localSelection)
             {
                 var normalized = localSelection.Normalize();
-                var minX = Math.Max(normalized.StartX, (int)localMap.CsmMapSize.XMin);
-                var maxX = Math.Min(normalized.EndX, (int)localMap.CsmMapSize.XMax);
-                var minY = Math.Max(normalized.StartY, (int)localMap.CsmMapSize.YMin);
-                var maxY = Math.Min(normalized.EndY, (int)localMap.CsmMapSize.YMax);
+                var minX = Math.Max(normalized.StartX, (int)localMap.CsmSectorSize.XMin);
+                var maxX = Math.Min(normalized.EndX, (int)localMap.CsmSectorSize.XMax);
+                var minY = Math.Max(normalized.StartY, (int)localMap.CsmSectorSize.YMin);
+                var maxY = Math.Min(normalized.EndY, (int)localMap.CsmSectorSize.YMax);
                 for (var y = minY; y <= maxY; y++)
                 for (var x = minX; x <= maxX; x++)
                     localOverlays.Add(new(OverlayKind.Selection, x, y, 1, 1));
@@ -1237,7 +1237,7 @@ internal sealed class WorldRenderControl : Control
             {
                 if (placement.Chunk.X < bounds.MinX || placement.Chunk.X > bounds.MaxX ||
                     placement.Chunk.Y < bounds.MinY || placement.Chunk.Y > bounds.MaxY) continue;
-                if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
+                if (!world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
                 var hasWest = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
                 var hasNorth = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
                 var stitch = world.StitchShift(placement.Chunk);
@@ -1275,13 +1275,13 @@ internal sealed class WorldRenderControl : Control
         return 0;
     }
 
-    private static bool TryFindNearRoof(WorldMap map, int centerX, int centerY, out int roofTrigger)
+    private static bool TryFindNearRoof(WorldSector map, int centerX, int centerY, out int roofTrigger)
     {
         roofTrigger = 0;
-        var minX = Math.Max(map.CsmMapSize.XMin, (short)Math.Max(1, centerX - 1));
-        var maxX = Math.Min(map.CsmMapSize.XMax, (short)Math.Min(WorldMap.Width, centerX + 1));
-        var minY = Math.Max(map.CsmMapSize.YMin, (short)Math.Max(1, centerY - 1));
-        var maxY = Math.Min(map.CsmMapSize.YMax, (short)Math.Min(WorldMap.Height, centerY + 1));
+        var minX = Math.Max(map.CsmSectorSize.XMin, (short)Math.Max(1, centerX - 1));
+        var maxX = Math.Min(map.CsmSectorSize.XMax, (short)Math.Min(WorldSector.Width, centerX + 1));
+        var minY = Math.Max(map.CsmSectorSize.YMin, (short)Math.Max(1, centerY - 1));
+        var maxY = Math.Min(map.CsmSectorSize.YMax, (short)Math.Min(WorldSector.Height, centerY + 1));
         for (var y = minY; y <= maxY; y++)
         for (var x = minX; x <= maxX; x++)
         {

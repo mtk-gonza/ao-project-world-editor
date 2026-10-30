@@ -1,4 +1,37 @@
-# Formato `world.map`
+# Formatos runtime del mundo
+
+## Bundle autoritativo `world/`
+
+La salida productiva se guarda en `ao-project-resources/world` y es autosuficiente:
+
+```text
+world/bundle.aog       AOGBND01 versión 5
+world/floor-0.gmap     AOGMAP01 versión 4
+world/floor-1.gmap     AOGMAP01 versión 4
+world/floor-2.gmap     AOGMAP01 versión 4
+world/floor-3.gmap     AOGMAP01 versión 4
+maps/floor-*.png       previews generados, fuera del bundle
+```
+
+`bundle.aog` contiene pisos activos, placements, coordenadas de stitching,
+asignación `MapId -> Z` y metadatos completos por mapa: `MapInfo`, entorno,
+restricciones, niveles, `CsmSectorSize`, clima y flags.
+
+La versión 5 agrega los payloads originales de cada sector (`CSM`, y `INF`/`DAT`
+cuando existen) dentro del bundle. Son una sección de preservación; el runtime sigue
+usando los floors compilados.
+
+Cada `.gmap` contiene arrays completos por tile: ocho capas gráficas, animación
+visual persistida, luces y colores de esquinas, bloqueo, trigger, personaje, NPC,
+partículas, objetos, techo, ambiente, lluvia, nieve, niebla, agua y lava. También
+contiene NPCs, grupos de partículas, zonas de techo, perfiles ambientales y todas
+las salidas internas, entre pisos y externas.
+
+El cliente y el servidor cargan estos archivos directamente. Los CSM originales
+solo son entrada de generación/auditoría y no son necesarios para ejecutar el
+mundo generado.
+
+## Formato histórico `world.map`
 
 `world.map` es un snapshot binario propio del WORLD, no un `.map` legacy de un
 mapa individual.

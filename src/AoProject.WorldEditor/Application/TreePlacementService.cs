@@ -7,7 +7,7 @@ internal readonly record struct TreePlacementOptions(int Count, short[] ObjectIn
 /// <summary>Port of FrmArboles.Insertar_Click with bounded deterministic attempts.</summary>
 internal sealed class TreePlacementService
 {
-    public int Place(WorldMap map, IReadOnlyList<ObjectData> objects, TreePlacementOptions options)
+    public int Place(WorldSector map, IReadOnlyList<ObjectData> objects, TreePlacementOptions options)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(objects);
         if (options.BlockedValue is { } overrideMask && !BlockedMask.IsValid(overrideMask))
@@ -38,11 +38,11 @@ internal sealed class TreePlacementService
     }
 
     /// <summary>Equivalent to VB6 “Bloquear árboles, carteles, foros y yacimientos”.</summary>
-    public int BlockConfiguredObjects(WorldMap map, IReadOnlyList<ObjectData> objects)
+    public int BlockConfiguredObjects(WorldSector map, IReadOnlyList<ObjectData> objects)
     {
         var changed = 0;
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
         {
             var block = map.Blocks[x, y];
             var index = block.Object.Index;
@@ -56,10 +56,10 @@ internal sealed class TreePlacementService
         return changed;
     }
 
-    private static bool HasTreeNearby(WorldMap map, IReadOnlyList<ObjectData> objects, int x, int y)
+    private static bool HasTreeNearby(WorldSector map, IReadOnlyList<ObjectData> objects, int x, int y)
     {
-        for (var aroundX = Math.Max(1, x - 8); aroundX <= Math.Min(WorldMap.Width, x + 8); aroundX++)
-        for (var aroundY = Math.Max(1, y - 8); aroundY <= Math.Min(WorldMap.Height, y + 8); aroundY++)
+        for (var aroundX = Math.Max(1, x - 8); aroundX <= Math.Min(WorldSector.Width, x + 8); aroundX++)
+        for (var aroundY = Math.Max(1, y - 8); aroundY <= Math.Min(WorldSector.Height, y + 8); aroundY++)
         {
             var index = map.Blocks[aroundX, aroundY].Object.Index;
             if (index > 0 && index < objects.Count && objects[index] is { ObjectType: 4 }) return true;

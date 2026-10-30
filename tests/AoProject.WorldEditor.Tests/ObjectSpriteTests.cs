@@ -16,7 +16,7 @@ public sealed class ObjectSpriteTests
         graphics[900].PixelHeight = 64;
 
         Assert.Equal(900, objects[1].GraphicIndex);
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[5, 6].Object.Index = 1;
         map.Blocks[5, 6].Object.Amount = 1;
 

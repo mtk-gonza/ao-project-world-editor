@@ -28,24 +28,24 @@ internal static class GlobalResolvedWorldSnapshot
     public static byte[] Serialize(GlobalWorldDocument document,
         IReadOnlyList<EmbeddedImage>? images = null)
     {
-        var placements = document.Assembly.Placements.ToDictionary(item => item.MapId);
+        var placements = document.Assembly.Placements.ToDictionary(item => item.SectorId);
         var minChunkX = placements.Count == 0 ? 0 : placements.Values.Min(item => item.Chunk.X);
         var minChunkY = placements.Count == 0 ? 0 : placements.Values.Min(item => item.Chunk.Y);
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         writer.Write(Magic); writer.Write(Version);
-        writer.Write(document.Assembly.Width * GlobalChunkGeometry.WidthTiles + WorldMap.Width);
-        writer.Write(document.Assembly.Height * GlobalChunkGeometry.HeightTiles + WorldMap.Height);
+        writer.Write(document.Assembly.Width * GlobalChunkGeometry.WidthTiles + WorldSector.Width);
+        writer.Write(document.Assembly.Height * GlobalChunkGeometry.HeightTiles + WorldSector.Height);
 
-        var tiles = new List<(int X, int Y, MapBlock Block)>();
+        var tiles = new List<(int X, int Y, SectorTile Block)>();
         var occupied = new HashSet<(int X, int Y)>();
         foreach (var placement in placements.Values.OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X))
         {
-            if (!document.Maps.TryGetValue(placement.MapId, out var map)) continue;
+            if (!document.Maps.TryGetValue(placement.SectorId, out var map)) continue;
             var hasWest = placements.Values.Any(item => item.Chunk == new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
             var hasNorth = placements.Values.Any(item => item.Chunk == new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
-            for (var y = 1; y <= WorldMap.Height; y++)
-            for (var x = 1; x <= WorldMap.Width; x++)
+            for (var y = 1; y <= WorldSector.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
             {
                 if (!GlobalChunkGeometry.IsCoreTile(x, y, hasWest, hasNorth)) continue;
                 var global = document.GlobalTileForPlacement(placement, x, y, minChunkX, minChunkY);

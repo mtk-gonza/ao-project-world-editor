@@ -13,7 +13,7 @@ public sealed class MapImageCaptureTests
         Directory.CreateDirectory(Path.Combine(root, "Graficos"));
         try
         {
-            using var image = new MapImageCaptureService().Capture(new WorldMap(), [new GraphicData()], root);
+            using var image = new MapImageCaptureService().Capture(new WorldSector(), [new GraphicData()], root);
             Assert.Equal(3200, image.Width); Assert.Equal(3200, image.Height);
         }
         finally { Directory.Delete(root, true); }
@@ -32,7 +32,7 @@ public sealed class MapImageCaptureTests
         }
         try
         {
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Graphics[0].GraphicIndex = 2;
             var graphics = new List<GraphicData>
             {
@@ -66,7 +66,7 @@ public sealed class MapImageCaptureTests
                 bitmap.Save(Path.Combine(root, "Graficos", "2.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Graphics[0].GraphicIndex = 3;
             var graphics = new List<GraphicData>
             {
@@ -96,7 +96,7 @@ public sealed class MapImageCaptureTests
                 bitmap.Save(Path.Combine(root, "Graficos", "1.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Object.Index = 1;
             var graphics = new[]
             {
@@ -125,7 +125,7 @@ public sealed class MapImageCaptureTests
                 bitmap.Save(Path.Combine(root, "Graficos", "1.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].ParticleIndex = 1;
             var graphics = new[]
             {
@@ -157,7 +157,7 @@ public sealed class MapImageCaptureTests
                 bitmap.Save(Path.Combine(root, "Graficos", "1.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].NpcIndex = 1;
             var graphics = new[]
             {
@@ -197,7 +197,7 @@ public sealed class MapImageCaptureTests
                 auxiliary.Save(Path.Combine(root, "Graficos", "3.png"), System.Drawing.Imaging.ImageFormat.Png);
             }
 
-            var map = new WorldMap();
+            var map = new WorldSector();
             map.Blocks[1, 1].Graphics[0].GraphicIndex = 1;
             map.Blocks[1, 1].Graphics[1].GraphicIndex = 2;
             map.Blocks[1, 1].Graphics[4].GraphicIndex = 3;

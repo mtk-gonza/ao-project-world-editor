@@ -4,14 +4,14 @@ namespace AoProject.WorldEditor.Application;
 
 internal sealed class SurfacePlacementService
 {
-    public void PaintAt(WorldMap map, int x, int y, int layer, int graphic, int width, int height, bool blocked)
+    public void PaintAt(WorldSector map, int x, int y, int layer, int graphic, int width, int height, bool blocked)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (layer is < 0 or >= 4 || graphic < 0) throw new ArgumentOutOfRangeException(nameof(layer));
         if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
-        if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-            y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-            x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height)
+        if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+            y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+            x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height)
             throw new ArgumentOutOfRangeException(nameof(x));
 
         var block = map.Blocks[x, y];
@@ -20,7 +20,7 @@ internal sealed class SurfacePlacementService
         map.Info.Changed = true;
     }
 
-    public int AutoCompleteAt(WorldMap map, int startX, int startY, int layer, int graphic, int width, int height, bool blocked)
+    public int AutoCompleteAt(WorldSector map, int startX, int startY, int layer, int graphic, int width, int height, bool blocked)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (layer is < 0 or >= 4 || graphic < 0) throw new ArgumentOutOfRangeException(nameof(layer));
@@ -32,9 +32,9 @@ internal sealed class SurfacePlacementService
         {
             var x = startX + column;
             var y = startY + row;
-            if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-                y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-                x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height)
+            if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+                y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+                x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height)
                 continue;
 
             map.Blocks[x, y].Graphics[layer].GraphicIndex = graphic + row * width + column;
@@ -46,7 +46,7 @@ internal sealed class SurfacePlacementService
         return placed;
     }
 
-    public int Place(WorldMap map, SurfaceData surface, int startX, int startY, bool mosaic = false)
+    public int Place(WorldSector map, SurfaceData surface, int startX, int startY, bool mosaic = false)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(surface);
         if (surface.Layer is < 1 or > 4 || surface.Width == 0 || surface.Height == 0)
@@ -56,8 +56,8 @@ internal sealed class SurfacePlacementService
         for (var x = 0; x < surface.Width; x++)
         {
             var targetX = startX + x; var targetY = startY + y;
-            if (targetX < map.CsmMapSize.XMin || targetX > map.CsmMapSize.XMax ||
-                targetY < map.CsmMapSize.YMin || targetY > map.CsmMapSize.YMax) continue;
+            if (targetX < map.CsmSectorSize.XMin || targetX > map.CsmSectorSize.XMax ||
+                targetY < map.CsmSectorSize.YMin || targetY > map.CsmSectorSize.YMax) continue;
             map.Blocks[targetX, targetY].Graphics[surface.Layer - 1].GraphicIndex = mosaic
                 ? surface.GraphicIndex + ((targetY % surface.Height) * surface.Width) + (targetX % surface.Width)
                 : surface.GraphicIndex;

@@ -132,9 +132,9 @@ internal sealed class WorldRadarService
         canvas.Clear(Color.Black);
         canvas.InterpolationMode = InterpolationMode.NearestNeighbor;
         canvas.PixelOffsetMode = PixelOffsetMode.Half;
-        for (var index = 0; index < layout.MapIds.Count; index++)
+        for (var index = 0; index < layout.SectorIds.Count; index++)
         {
-            var mapId = layout.MapIds[index];
+            var mapId = layout.SectorIds[index];
             if (mapId <= 0 || !mapImages.TryGetValue(mapId, out var mapImage)) continue;
             var column = index % layout.Width;
             var row = index / layout.Width;
@@ -154,8 +154,8 @@ internal sealed class WorldRadarService
     {
         var layout = layouts.FirstOrDefault(item => item.WorldId == worldId);
         if (layout is null) return (-1, -1);
-        for (var index = 0; index < layout.MapIds.Count; index++)
-            if (layout.MapIds[index] == mapId) return (index % layout.Width, index / layout.Width);
+        for (var index = 0; index < layout.SectorIds.Count; index++)
+            if (layout.SectorIds[index] == mapId) return (index % layout.Width, index / layout.Width);
         return (-1, -1);
     }
 }

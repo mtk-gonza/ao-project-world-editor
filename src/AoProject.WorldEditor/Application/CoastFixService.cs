@@ -15,12 +15,12 @@ internal sealed class CoastFixService
 
     public static bool IsCoastGraphic(int graphicIndex) => CoastGraphics.Contains(graphicIndex);
 
-    public bool Fix(WorldMap map, int x, int y, int graphicIndex)
+    public bool Fix(WorldSector map, int x, int y, int graphicIndex)
     {
         ArgumentNullException.ThrowIfNull(map);
-        if (x < map.CsmMapSize.XMin || x > map.CsmMapSize.XMax ||
-            y < map.CsmMapSize.YMin || y > map.CsmMapSize.YMax ||
-            x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height) throw new ArgumentOutOfRangeException(nameof(x));
+        if (x < map.CsmSectorSize.XMin || x > map.CsmSectorSize.XMax ||
+            y < map.CsmSectorSize.YMin || y > map.CsmSectorSize.YMax ||
+            x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) throw new ArgumentOutOfRangeException(nameof(x));
         if (!IsCoastGraphic(graphicIndex)) return false;
         var block = map.Blocks[x, y];
         if (block.Graphics[1].GraphicIndex == 0) return false;
@@ -29,14 +29,14 @@ internal sealed class CoastFixService
         return true;
     }
 
-    public int FixSelection(WorldMap map, TileSelection selection)
+    public int FixSelection(WorldSector map, TileSelection selection)
     {
         var normalized = selection.Normalize();
         var fixedTiles = 0;
-        var minX = Math.Max(normalized.StartX, (int)map.CsmMapSize.XMin);
-        var maxX = Math.Min(normalized.EndX, (int)map.CsmMapSize.XMax);
-        var minY = Math.Max(normalized.StartY, (int)map.CsmMapSize.YMin);
-        var maxY = Math.Min(normalized.EndY, (int)map.CsmMapSize.YMax);
+        var minX = Math.Max(normalized.StartX, (int)map.CsmSectorSize.XMin);
+        var maxX = Math.Min(normalized.EndX, (int)map.CsmSectorSize.XMax);
+        var minY = Math.Max(normalized.StartY, (int)map.CsmSectorSize.YMin);
+        var maxY = Math.Min(normalized.EndY, (int)map.CsmSectorSize.YMax);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
             if (Fix(map, x, y, map.Blocks[x, y].Graphics[0].GraphicIndex)) fixedTiles++;

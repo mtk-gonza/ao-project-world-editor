@@ -7,7 +7,7 @@ namespace AoProject.WorldEditor.Application;
 /// <summary>Coordinates resource loading and the current editable map.</summary>
 internal sealed class WorldEditorSession
 {
-    private readonly CsmMapFileService _csmMaps = new();
+    private readonly SectorCsmFileService _csmMaps = new();
     private readonly MapEditingService _editing = new();
     private readonly MapBulkEditingService _bulk = new();
     private readonly MapCleanupService _cleanup = new();
@@ -29,7 +29,7 @@ internal sealed class WorldEditorSession
     private readonly SurfaceBorderPlacementService _surfaceBorders = new();
     private readonly SurfaceWholeMapService _surfaceWholeMap = new();
     private const int MaxMapsPerUndoSnapshot = 64;
-    private readonly LinkedList<WorldMapSnapshot> _bulkUndo = [];
+    private readonly LinkedList<WorldSectorSnapshot> _bulkUndo = [];
     private readonly LinkedList<GlobalWorldSnapshot> _globalUndo = [];
     private WorldEditorResourceCatalog? _resources;
     private readonly object _resourceSync = new();
@@ -45,7 +45,7 @@ internal sealed class WorldEditorSession
     public bool UseUndo { get; private set; } = true;
     /// <summary>True when the last global operation was too large to snapshot.</summary>
     public bool UndoOmitted { get; private set; }
-    public WorldMap? CurrentMap { get; private set; }
+    public WorldSector? CurrentMap { get; private set; }
     public string? CurrentMapPath { get; private set; }
     public GlobalWorldDocument? CurrentWorld { get; private set; }
 
@@ -84,7 +84,8 @@ internal sealed class WorldEditorSession
     {
         var bundle = CompileUnifiedWorldBundle(applyStitching);
         new UnifiedWorldBundleFileService().Save(bundle, directory);
-        new UnifiedWorldImageService().Save(bundle, Resources, Path.Combine(directory, "worldmap"));
+        var mapsDirectory = Path.Combine(Directory.GetParent(Path.GetFullPath(directory))?.FullName ?? directory, "maps");
+        new UnifiedWorldImageService().Save(bundle, Resources, mapsDirectory);
         SaveStitchAudits(directory);
         return bundle;
     }
@@ -193,7 +194,7 @@ internal sealed class WorldEditorSession
     public int CutGlobal(MapClipboardService clipboard, GlobalTileSelection selection)
     {
         var world = CurrentWorldRequired();
-        CaptureGlobalUndo(world.CollectMapIds(selection));
+        CaptureGlobalUndo(world.CollectSectorIds(selection));
         return clipboard.CutGlobal(world, selection);
     }
 
@@ -202,22 +203,22 @@ internal sealed class WorldEditorSession
         var world = CurrentWorldRequired();
         if (clipboard.ClipboardSize is not { } size)
             throw new InvalidOperationException("No hay un bloque copiado.");
-        CaptureGlobalUndo(world.CollectMapIds(globalX, globalY,
+        CaptureGlobalUndo(world.CollectSectorIds(globalX, globalY,
             globalX + size.Width - 1, globalY + size.Height - 1));
         return clipboard.PasteGlobal(world, globalX, globalY);
     }
 
-    private int ApplyGlobalSelection(GlobalTileSelection selection, Action<MapBlock> operation)
+    private int ApplyGlobalSelection(GlobalTileSelection selection, Action<SectorTile> operation)
     {
         if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo cargado.");
-        CaptureGlobalUndo(CurrentWorld.CollectMapIds(selection));
+        CaptureGlobalUndo(CurrentWorld.CollectSectorIds(selection));
         var normalized = selection.Normalize();
         var changed = 0;
         for (var y = normalized.StartY; y <= normalized.EndY; y++)
         for (var x = normalized.StartX; x <= normalized.EndX; x++)
         {
             if (!CurrentWorld.TryResolve(x, y, out var location)) continue;
-            if (!CurrentWorld.Maps.TryGetValue(location.MapId, out var map)) continue;
+            if (!CurrentWorld.Maps.TryGetValue(location.SectorId, out var map)) continue;
             var block = map.Blocks[location.LocalX, location.LocalY];
             operation(block);
             map.Info.Changed = true;
@@ -347,8 +348,8 @@ internal sealed class WorldEditorSession
                 throw new ArgumentOutOfRangeException(nameof(layer));
             if (fromGraphic == toGraphic) return 0;
             var changed = 0;
-            for (var x = (int)map.CsmMapSize.XMin; x <= map.CsmMapSize.XMax; x++)
-            for (var y = (int)map.CsmMapSize.YMin; y <= map.CsmMapSize.YMax; y++)
+            for (var x = (int)map.CsmSectorSize.XMin; x <= map.CsmSectorSize.XMax; x++)
+            for (var y = (int)map.CsmSectorSize.YMin; y <= map.CsmSectorSize.YMax; y++)
             {
                 if (!InDomain(map, x, y) || map.Blocks[x, y].Graphics[layer].GraphicIndex != fromGraphic) continue;
                 map.Blocks[x, y].Graphics[layer].GraphicIndex = toGraphic;
@@ -411,12 +412,12 @@ internal sealed class WorldEditorSession
         ExecuteBulk(map => _surfaceWholeMap.Place(map, layer, graphic, mosaic, mosaicWidth, mosaicHeight));
     public bool CanUndo => UseUndo && (_globalUndo.Count > 0 || _bulkUndo.Count > 0 || _editing.CanUndo);
 
-    private static bool InDomain(WorldMap map, int x, int y) =>
-        x >= map.CsmMapSize.XMin && x <= map.CsmMapSize.XMax &&
-        y >= map.CsmMapSize.YMin && y <= map.CsmMapSize.YMax &&
-        x is >= 1 and <= WorldMap.Width && y is >= 1 and <= WorldMap.Height;
+    private static bool InDomain(WorldSector map, int x, int y) =>
+        x >= map.CsmSectorSize.XMin && x <= map.CsmSectorSize.XMax &&
+        y >= map.CsmSectorSize.YMin && y <= map.CsmSectorSize.YMax &&
+        x is >= 1 and <= WorldSector.Width && y is >= 1 and <= WorldSector.Height;
 
-    private static void ValidateTile(WorldMap map, int x, int y)
+    private static void ValidateTile(WorldSector map, int x, int y)
     {
         if (!InDomain(map, x, y)) throw new ArgumentOutOfRangeException(nameof(x));
     }
@@ -432,7 +433,7 @@ internal sealed class WorldEditorSession
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         CurrentMap = Path.GetExtension(path).Equals(".csm", StringComparison.OrdinalIgnoreCase)
             ? _csmMaps.Load(path)
-            : new MapFileService().LoadV3(path);
+            : new LegacySectorFileService().LoadV3(path);
         CurrentMapPath = Path.GetFullPath(path);
         CurrentWorld = null;
         _editing.ClearHistory();
@@ -446,15 +447,15 @@ internal sealed class WorldEditorSession
         directory = Path.GetFullPath(directory);
         if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(directory);
 
-        var files = Directory.EnumerateFiles(directory, "*.csm", SearchOption.TopDirectoryOnly)
+        var files = Directory.EnumerateFiles(directory, "*.csm", SearchOption.AllDirectories)
             .SelectMany(path => IsGlobalWorldFileName(Path.GetFileName(path))
-                ? GlobalCsmArchiveService.ReadMapIds(path).Select(id => (Path: path, Id: id))
-                : [ (Path: path, Id: ParseMapId(path)) ])
+                ? GlobalCsmArchiveService.ReadSectorIds(path).Select(id => (Path: path, Id: id))
+                : [ (Path: path, Id: ParseSectorId(path)) ])
             .Where(item => item.Id > 0)
             .GroupBy(item => item.Id)
             .Select(group => group.First())
             .ToArray();
-        if (files.Length == 0) throw new InvalidOperationException("La carpeta no contiene mapas .csm con nombre numerico.");
+        if (files.Length == 0) throw new InvalidOperationException("La carpeta no contiene sectores con archivos CSM.");
 
         var loadErrors = files.Where(file => new FileInfo(file.Path).Length == 0)
             .Select(file => $"{Path.GetFileName(file.Path)}: archivo vacío").ToList();
@@ -474,7 +475,7 @@ internal sealed class WorldEditorSession
         {
             // No official layout: retain the old exhaustive path so border
             // exits can still assemble an unlisted/custom world.
-            var maps = new Dictionary<short, WorldMap>();
+            var maps = new Dictionary<short, WorldSector>();
             foreach (var file in validFiles)
             {
                 progress?.Report(new WorldLoadProgress(files.Length, maps.Count + loadErrors.Count + 1, Path.GetFileName(file.Path), null));
@@ -492,10 +493,11 @@ internal sealed class WorldEditorSession
         progress?.Report(new WorldLoadProgress(1, 1, "layout", null));
         CurrentWorld = new GlobalWorldDocument(assembly, paths, selectedRoot,
             (mapId, path) => _csmMaps.Load(path, mapId));
+        CurrentWorld.SourcePaths = files.ToDictionary(item => item.Id, item => item.Path);
         CurrentWorld.WorldLayouts = layouts;
         CurrentWorld.FloorAssemblies = layouts
             .Where(layout => layout.WorldId is >= 1 and <= 3)
-            .Select(layout => (FloorZ: layout.WorldId - 1,
+            .Select(layout => (FloorZ: 1 - layout.WorldId,
                 Assembly: MapsWorldDataService.BuildAssembly(layout, paths.Keys.ToArray())))
             .Where(item => item.Assembly is not null)
             .Select(item => (item.FloorZ, item.Assembly!))
@@ -514,6 +516,15 @@ internal sealed class WorldEditorSession
         _bulkUndo.Clear();
         _globalUndo.Clear();
         return CurrentWorld;
+    }
+
+    private static short ParseSectorId(string path)
+    {
+        var directory = new DirectoryInfo(Path.GetDirectoryName(path) ?? string.Empty);
+        var match = System.Text.RegularExpressions.Regex.Match(directory.Name, "^sector-(\\d+)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (match.Success && short.TryParse(match.Groups[1].Value, out var sectorId)) return sectorId;
+        return ParseLegacySectorId(path);
     }
 
     private string SourceResourcePath(params string[] parts)
@@ -577,7 +588,7 @@ internal sealed class WorldEditorSession
         fileName.Equals("world.csm", StringComparison.OrdinalIgnoreCase) ||
         fileName.Equals("mapaGlobal.csm", StringComparison.OrdinalIgnoreCase);
 
-    private static short ParseMapId(string path)
+    private static short ParseLegacySectorId(string path)
     {
         var name = Path.GetFileNameWithoutExtension(path);
         var digits = new string(name.Where(char.IsDigit).ToArray());
@@ -586,9 +597,9 @@ internal sealed class WorldEditorSession
 
     public void NewMap()
     {
-        CurrentMap = new WorldMap();
-        for (var x = 1; x <= WorldMap.Width; x++)
-        for (var y = 1; y <= WorldMap.Height; y++)
+        CurrentMap = new WorldSector();
+        for (var x = 1; x <= WorldSector.Width; x++)
+        for (var y = 1; y <= WorldSector.Height; y++)
             CurrentMap.Blocks[x, y].Graphics[0].GraphicIndex = 1;
         CurrentMap.Info.Name = "Nuevo Mapa";
         CurrentMap.Info.Music = "0";
@@ -628,17 +639,17 @@ internal sealed class WorldEditorSession
         if (!File.Exists(houseMapPath)) throw new FileNotFoundException("No existe el mapa de la casa.", houseMapPath);
         var source = Path.GetExtension(houseMapPath).Equals(".csm", StringComparison.OrdinalIgnoreCase)
             ? _csmMaps.Load(houseMapPath)
-            : new MapFileService().LoadV3(houseMapPath);
+            : new LegacySectorFileService().LoadV3(houseMapPath);
         return new MapRegionCopyService().Copy(source, new MapRegion(65, 23, 74, 30), map, x, y);
     });
     public void CutClipboard(MapClipboardService clipboard, TileSelection selection) => ExecuteBulk(map => clipboard.Cut(map, selection));
     public int ToggleSelectionBlocked(TileSelection selection) => ExecuteBulk(map =>
     {
         var normalized = selection.Normalize();
-        var minX = Math.Max(normalized.StartX, (int)map.CsmMapSize.XMin);
-        var maxX = Math.Min(normalized.EndX, (int)map.CsmMapSize.XMax);
-        var minY = Math.Max(normalized.StartY, (int)map.CsmMapSize.YMin);
-        var maxY = Math.Min(normalized.EndY, (int)map.CsmMapSize.YMax);
+        var minX = Math.Max(normalized.StartX, (int)map.CsmSectorSize.XMin);
+        var maxX = Math.Min(normalized.EndX, (int)map.CsmSectorSize.XMax);
+        var minY = Math.Max(normalized.StartY, (int)map.CsmSectorSize.YMin);
+        var maxY = Math.Min(normalized.EndY, (int)map.CsmSectorSize.YMax);
         var changed = 0;
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
@@ -653,10 +664,10 @@ internal sealed class WorldEditorSession
 
     public int ApplyBlockMask(TileSelection selection, byte mask) => ExecuteBulk(map =>    {
         var normalized = selection.Normalize();
-        var minX = Math.Max(normalized.StartX, (int)map.CsmMapSize.XMin);
-        var maxX = Math.Min(normalized.EndX, (int)map.CsmMapSize.XMax);
-        var minY = Math.Max(normalized.StartY, (int)map.CsmMapSize.YMin);
-        var maxY = Math.Min(normalized.EndY, (int)map.CsmMapSize.YMax);
+        var minX = Math.Max(normalized.StartX, (int)map.CsmSectorSize.XMin);
+        var maxX = Math.Min(normalized.EndX, (int)map.CsmSectorSize.XMax);
+        var minY = Math.Max(normalized.StartY, (int)map.CsmSectorSize.YMin);
+        var maxY = Math.Min(normalized.EndY, (int)map.CsmSectorSize.YMax);
         var changed = 0;
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
@@ -671,10 +682,10 @@ internal sealed class WorldEditorSession
     public void ClearSelectionGraphics(TileSelection selection) => ExecuteBulk(map =>
     {
         var normalized = selection.Normalize();
-        var minX = Math.Max(normalized.StartX, (int)map.CsmMapSize.XMin);
-        var maxX = Math.Min(normalized.EndX, (int)map.CsmMapSize.XMax);
-        var minY = Math.Max(normalized.StartY, (int)map.CsmMapSize.YMin);
-        var maxY = Math.Min(normalized.EndY, (int)map.CsmMapSize.YMax);
+        var minX = Math.Max(normalized.StartX, (int)map.CsmSectorSize.XMin);
+        var maxX = Math.Min(normalized.EndX, (int)map.CsmSectorSize.XMax);
+        var minY = Math.Max(normalized.StartY, (int)map.CsmSectorSize.YMin);
+        var maxY = Math.Min(normalized.EndY, (int)map.CsmSectorSize.YMax);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
             for (var layer = 0; layer < 4; layer++) map.Blocks[x, y].Graphics[layer].GraphicIndex = 0;
@@ -706,9 +717,9 @@ internal sealed class WorldEditorSession
     public int RemoveExits() => ExecuteBulk(map => _cleanup.RemoveExits(map));
     public MapOptimizationResult Optimize(MapOptimizationOptions options) =>
         ExecuteBulk(map => _optimization.Optimize(map, Resources.Objects, options));
-    public void ApplyMapInfo(MapInfoValues values) => ExecuteBulk(map => _mapInfo.Apply(map, values));
+    public void ApplyMapInfo(SectorInfoValues values) => ExecuteBulk(map => _mapInfo.Apply(map, values));
     public void SetMusic(string music) => ExecuteBulk(map =>
-        _mapInfo.Apply(map, new MapInfoValues(map.Info.Name, music, map.Info.MapVersion, map.Info.PlayerKilling,
+        _mapInfo.Apply(map, new SectorInfoValues(map.Info.Name, music, map.Info.MapVersion, map.Info.PlayerKilling,
             map.Info.MagicDisabled, map.Info.InvisibilityDisabled, map.Info.ResurrectionDisabled, map.Info.NoEncryptMap,
             map.Info.Terrain, map.Info.Zone, map.Info.Restriction, map.Info.Backup, map.Info.Light)));
     public int ApplyAdjacentTransfers(IReadOnlyList<AdjacentTransfer> transfers) =>
@@ -721,10 +732,10 @@ internal sealed class WorldEditorSession
         var fullPath = Path.GetFullPath(destinationPath);
         var destination = Path.GetExtension(fullPath).Equals(".csm", StringComparison.OrdinalIgnoreCase)
             ? _csmMaps.Load(fullPath)
-            : new MapFileService().LoadV3(fullPath);
+            : new LegacySectorFileService().LoadV3(fullPath);
         var copied = new MapRegionCopyService().Copy(source, region, destination, destinationX, destinationY);
         if (Path.GetExtension(fullPath).Equals(".csm", StringComparison.OrdinalIgnoreCase)) _csmMaps.Save(destination, fullPath);
-        else new MapFileService().SaveV3(destination, fullPath);
+        else new LegacySectorFileService().SaveV3(destination, fullPath);
         return copied;
     }
 
@@ -742,24 +753,24 @@ internal sealed class WorldEditorSession
             var path = Directory.EnumerateFiles(directory, $"mapa{map}.csm", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault() ?? Directory.EnumerateFiles(directory, $"map{map}.csm", SearchOption.TopDirectoryOnly).FirstOrDefault();
             if (path is null) { results.Add(new StitchResult(side, map, 0, false)); continue; }
-            var destination = Path.GetExtension(path).Equals(".csm", StringComparison.OrdinalIgnoreCase) ? _csmMaps.Load(path) : new MapFileService().LoadV3(path);
+            var destination = Path.GetExtension(path).Equals(".csm", StringComparison.OrdinalIgnoreCase) ? _csmMaps.Load(path) : new LegacySectorFileService().LoadV3(path);
             var copied = stitcher.CopySide(source, destination, side);
             if (Path.GetExtension(path).Equals(".csm", StringComparison.OrdinalIgnoreCase)) _csmMaps.Save(destination, path);
-            else new MapFileService().SaveV3(destination, path);
+            else new LegacySectorFileService().SaveV3(destination, path);
             results.Add(new StitchResult(side, map, copied, true));
         }
         return results;
     }
 
-    private void ExecuteBulk(Action<WorldMap> operation)
+    private void ExecuteBulk(Action<WorldSector> operation)
     {
         ExecuteBulk<int>(map => { operation(map); return 0; });
     }
 
-    private T ExecuteBulk<T>(Func<WorldMap, T> operation)
+    private T ExecuteBulk<T>(Func<WorldSector, T> operation)
     {
         var map = CurrentMapRequired();
-        var snapshot = WorldMapSnapshot.Capture(map);
+        var snapshot = WorldSectorSnapshot.Capture(map);
         var result = operation(map);
         if (UseUndo)
         {
@@ -776,9 +787,9 @@ internal sealed class WorldEditorSession
         if (Path.GetExtension(path).Equals(".csm", StringComparison.OrdinalIgnoreCase))
             _csmMaps.Save(map, path);
         else
-            new MapFileService().SaveV3(map, path);
+            new LegacySectorFileService().SaveV3(map, path);
         CurrentMapPath = Path.GetFullPath(path);
     }
 
-    private WorldMap CurrentMapRequired() => CurrentMap ?? throw new InvalidOperationException("No hay un mapa cargado.");
+    private WorldSector CurrentMapRequired() => CurrentMap ?? throw new InvalidOperationException("No hay un mapa cargado.");
 }

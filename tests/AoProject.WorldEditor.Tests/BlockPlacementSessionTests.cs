@@ -13,7 +13,7 @@ public sealed class BlockPlacementSessionTests
         var path = Path.Combine(Path.GetTempPath(), $"world-editor-{Guid.NewGuid():N}.csm");
         try
         {
-            new Infrastructure.CsmMapFileService().Save(new WorldMap(), path);
+            new Infrastructure.SectorCsmFileService().Save(new WorldSector(), path);
             session.LoadMap(path);
             var type = new BlockPresetType { Layer = 1, TilesX = 2, TilesY = 1 };
             var item = new BlockPreset { GraphicIndex = 700 };

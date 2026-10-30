@@ -9,7 +9,7 @@ public sealed class MapOptimizationTests
     [Fact]
     public void Optimization_applies_reference_cleanup_and_special_object_rules()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].NpcIndex = 4;
         map.Blocks[1, 1].TileExit.Map = 9;
         map.Blocks[1, 1].Trigger = 3;

@@ -12,8 +12,8 @@ public sealed class SelectionBlockingTests
         var root = Path.Combine(Path.GetTempPath(), "ao-block-sel-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
-            var path = Path.Combine(root, "mapa1.csm"); var map = new WorldMap(); map.Blocks[2, 2].Blocked = 0xF;
-            new Infrastructure.CsmMapFileService().Save(map, path);
+            var path = Path.Combine(root, "mapa1.csm"); var map = new WorldSector(); map.Blocks[2, 2].Blocked = 0xF;
+            new Infrastructure.SectorCsmFileService().Save(map, path);
             var session = new WorldEditorSession(root); session.LoadMap(path);
             var changed = session.ToggleSelectionBlocked(new TileSelection(2, 2, 3, 3));
             Assert.Equal(4, changed);

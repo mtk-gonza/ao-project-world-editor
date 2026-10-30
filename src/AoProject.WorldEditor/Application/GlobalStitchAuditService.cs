@@ -5,14 +5,14 @@ using AoProject.WorldEditor.Engine.Rendering;
 namespace AoProject.WorldEditor.Application;
 
 internal sealed record GlobalStitchAuditEntry(
-    short MapId,
+    short SectorId,
     int ChunkX,
     int ChunkY,
     int ShiftX,
     int ShiftY);
 
 internal sealed record StitchedCompileAuditEntry(
-    short MapId,
+    short SectorId,
     int ShiftX,
     int ShiftY,
     int WrittenTiles,
@@ -24,8 +24,8 @@ internal sealed record StitchedCompileAuditEntry(
     int MaxY);
 
 internal sealed record StitchedConflictAuditEntry(
-    short ExistingMapId,
-    short IncomingMapId,
+    short ExistingSectorId,
+    short IncomingSectorId,
     int ExistingLocalX,
     int ExistingLocalY,
     int IncomingLocalX,
@@ -36,16 +36,16 @@ internal sealed record StitchedConflictAuditEntry(
     string Resolution = "KeepExistingPlacement");
 
 internal sealed record ExtendedExitAuditEntry(
-    short SourceMapId,
+    short SourceSectorId,
     int SourceX,
     int SourceY,
-    short TargetMapId,
+    short TargetSectorId,
     int TargetX,
     int TargetY,
     string Classification);
 
 internal sealed record MapLevelAuditEntry(
-    short MapId,
+    short SectorId,
     int MetadataLevel,
     int ChunkX,
     int ChunkY,
@@ -65,11 +65,11 @@ internal sealed class GlobalStitchAuditService
             {
                 var x = shifts.Columns.GetValueOrDefault(item.Chunk);
                 var y = shifts.Rows.GetValueOrDefault(item.Chunk);
-                return new GlobalStitchAuditEntry(item.MapId, item.Chunk.X, item.Chunk.Y, x, y);
+                return new GlobalStitchAuditEntry(item.SectorId, item.Chunk.X, item.Chunk.Y, x, y);
             })
             .Where(item => item.ShiftX != 0 || item.ShiftY != 0)
             .OrderBy(item => item.ChunkY).ThenBy(item => item.ChunkX)
-            .ThenBy(item => item.MapId)
+            .ThenBy(item => item.SectorId)
             .ToArray();
     }
 
@@ -77,9 +77,9 @@ internal sealed class GlobalStitchAuditService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var builder = new StringBuilder()
-            .AppendLine("MapId\tChunkX\tChunkY\tShiftX\tShiftY");
+            .AppendLine("SectorId\tChunkX\tChunkY\tShiftX\tShiftY");
         foreach (var entry in entries)
-            builder.Append(entry.MapId).Append('\t').Append(entry.ChunkX).Append('\t')
+            builder.Append(entry.SectorId).Append('\t').Append(entry.ChunkX).Append('\t')
                 .Append(entry.ChunkY).Append('\t').Append(entry.ShiftX).Append('\t')
                 .Append(entry.ShiftY).AppendLine();
         File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
@@ -98,25 +98,25 @@ internal sealed class GlobalStitchAuditService
         var shifts = stitcher.ForAll(world.Assembly.Placements.Select(item => item.Chunk));
         var minChunkX = world.Assembly.Placements.Min(item => item.Chunk.X);
         var minChunkY = world.Assembly.Placements.Min(item => item.Chunk.Y);
-        var owners = new Dictionary<(int X, int Y), (short MapId, MapBlock Block)>();
-        var stats = world.Assembly.Placements.ToDictionary(item => item.MapId,
-            item => new MutableCompileAudit(item.MapId,
+        var owners = new Dictionary<(int X, int Y), (short SectorId, SectorTile Block)>();
+        var stats = world.Assembly.Placements.ToDictionary(item => item.SectorId,
+            item => new MutableCompileAudit(item.SectorId,
                 shifts.Columns.GetValueOrDefault(item.Chunk),
                 shifts.Rows.GetValueOrDefault(item.Chunk)));
 
         foreach (var placement in world.Assembly.Placements)
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
+            if (!world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
             var hasWest = world.Assembly.Placements.Any(item =>
                 item.Chunk.X == placement.Chunk.X - 1 && item.Chunk.Y == placement.Chunk.Y);
             var hasNorth = world.Assembly.Placements.Any(item =>
                 item.Chunk.X == placement.Chunk.X && item.Chunk.Y == placement.Chunk.Y - 1);
             var shiftX = shifts.Columns.GetValueOrDefault(placement.Chunk);
             var shiftY = shifts.Rows.GetValueOrDefault(placement.Chunk);
-            var stat = stats[placement.MapId];
+            var stat = stats[placement.SectorId];
 
-            for (var localY = 1; localY <= WorldMap.Height; localY++)
-            for (var localX = 1; localX <= WorldMap.Width; localX++)
+            for (var localY = 1; localY <= WorldSector.Height; localY++)
+            for (var localX = 1; localX <= WorldSector.Width; localX++)
             {
                 if (!GlobalChunkGeometry.IsCoreTile(localX, localY, hasWest, hasNorth)) continue;
                 var coordinate = (
@@ -130,7 +130,7 @@ internal sealed class GlobalStitchAuditService
                 }
                 else
                 {
-                    owners[coordinate] = (placement.MapId, block);
+                    owners[coordinate] = (placement.SectorId, block);
                     stat.WrittenTiles++;
                 }
                 stat.MinX = Math.Min(stat.MinX, coordinate.Item1);
@@ -140,16 +140,16 @@ internal sealed class GlobalStitchAuditService
             }
         }
 
-        return stats.Values.Select(item => item.ToRecord()).OrderBy(item => item.MapId).ToArray();
+        return stats.Values.Select(item => item.ToRecord()).OrderBy(item => item.SectorId).ToArray();
     }
 
     public void SaveCompactedMaterializationTsv(string path, IReadOnlyList<StitchedCompileAuditEntry> entries)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var builder = new StringBuilder().AppendLine(
-            "MapId\tShiftX\tShiftY\tWrittenTiles\tDuplicateTiles\tConflictingTiles\tMinX\tMaxX\tMinY\tMaxY");
+            "SectorId\tShiftX\tShiftY\tWrittenTiles\tDuplicateTiles\tConflictingTiles\tMinX\tMaxX\tMinY\tMaxY");
         foreach (var entry in entries)
-            builder.Append(entry.MapId).Append('\t').Append(entry.ShiftX).Append('\t')
+            builder.Append(entry.SectorId).Append('\t').Append(entry.ShiftX).Append('\t')
                 .Append(entry.ShiftY).Append('\t').Append(entry.WrittenTiles).Append('\t')
                 .Append(entry.DuplicateTiles).Append('\t').Append(entry.ConflictingTiles).Append('\t')
                 .Append(entry.MinX).Append('\t').Append(entry.MaxX).Append('\t')
@@ -165,20 +165,20 @@ internal sealed class GlobalStitchAuditService
         var shifts = stitcher.ForAll(world.Assembly.Placements.Select(item => item.Chunk));
         var minChunkX = world.Assembly.Placements.Min(item => item.Chunk.X);
         var minChunkY = world.Assembly.Placements.Min(item => item.Chunk.Y);
-        var owners = new Dictionary<(int X, int Y), (short MapId, int LocalX, int LocalY, MapBlock Block)>();
+        var owners = new Dictionary<(int X, int Y), (short SectorId, int LocalX, int LocalY, SectorTile Block)>();
         var conflicts = new List<StitchedConflictAuditEntry>();
 
         foreach (var placement in world.Assembly.Placements.OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X))
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
+            if (!world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
             var hasWest = world.Assembly.Placements.Any(item =>
                 item.Chunk.X == placement.Chunk.X - 1 && item.Chunk.Y == placement.Chunk.Y);
             var hasNorth = world.Assembly.Placements.Any(item =>
                 item.Chunk.X == placement.Chunk.X && item.Chunk.Y == placement.Chunk.Y - 1);
             var shiftX = shifts.Columns.GetValueOrDefault(placement.Chunk);
             var shiftY = shifts.Rows.GetValueOrDefault(placement.Chunk);
-            for (var localY = 1; localY <= WorldMap.Height; localY++)
-            for (var localX = 1; localX <= WorldMap.Width; localX++)
+            for (var localY = 1; localY <= WorldSector.Height; localY++)
+            for (var localX = 1; localX <= WorldSector.Width; localX++)
             {
                 if (!GlobalChunkGeometry.IsCoreTile(localX, localY, hasWest, hasNorth)) continue;
                 var coordinate = (
@@ -186,11 +186,11 @@ internal sealed class GlobalStitchAuditService
                     (placement.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles + localY - 1 - shiftY);
                 var block = map.Blocks[localX, localY];
                 if (owners.TryGetValue(coordinate, out var owner) && !Equivalent(owner.Block, block))
-                    conflicts.Add(new StitchedConflictAuditEntry(owner.MapId, placement.MapId,
+                    conflicts.Add(new StitchedConflictAuditEntry(owner.SectorId, placement.SectorId,
                         owner.LocalX, owner.LocalY, localX, localY,
                         coordinate.Item1, coordinate.Item2, DifferenceField(owner.Block, block)));
                 else
-                    owners[coordinate] = (placement.MapId, localX, localY, block);
+                    owners[coordinate] = (placement.SectorId, localX, localY, block);
             }
         }
         return conflicts;
@@ -200,9 +200,9 @@ internal sealed class GlobalStitchAuditService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var builder = new StringBuilder().AppendLine(
-            "ExistingMapId\tIncomingMapId\tExistingLocalX\tExistingLocalY\tIncomingLocalX\tIncomingLocalY\tGlobalX\tGlobalY\tField\tResolution");
+            "ExistingSectorId\tIncomingMapId\tExistingLocalX\tExistingLocalY\tIncomingLocalX\tIncomingLocalY\tGlobalX\tGlobalY\tField\tResolution");
         foreach (var entry in entries)
-            builder.Append(entry.ExistingMapId).Append('\t').Append(entry.IncomingMapId).Append('\t')
+            builder.Append(entry.ExistingSectorId).Append('\t').Append(entry.IncomingSectorId).Append('\t')
                 .Append(entry.ExistingLocalX).Append('\t').Append(entry.ExistingLocalY).Append('\t')
                 .Append(entry.IncomingLocalX).Append('\t').Append(entry.IncomingLocalY).Append('\t')
                 .Append(entry.GlobalX).Append('\t').Append(entry.GlobalY).Append('\t')
@@ -216,9 +216,9 @@ internal sealed class GlobalStitchAuditService
         var result = new List<ExtendedExitAuditEntry>();
         foreach (var placement in world.Assembly.Placements)
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
-            for (var y = 1; y <= WorldMap.Height; y++)
-            for (var x = 1; x <= WorldMap.Width; x++)
+            if (!world.Maps.TryGetValue(placement.SectorId, out var map)) continue;
+            for (var y = 1; y <= WorldSector.Height; y++)
+            for (var x = 1; x <= WorldSector.Width; x++)
             {
                 var exit = map.Blocks[x, y].TileExit;
                 if (exit.Map == 0) continue;
@@ -230,7 +230,7 @@ internal sealed class GlobalStitchAuditService
                             ? (exit.X is < 1 or > 100 ? "X-EXTENDIDA" : "Y-EXTENDIDA")
                             : string.Empty;
                 if (classification.Length == 0) continue;
-                result.Add(new ExtendedExitAuditEntry(placement.MapId, x, y,
+                result.Add(new ExtendedExitAuditEntry(placement.SectorId, x, y,
                     exit.Map, exit.X, exit.Y,
                     classification));
             }
@@ -242,10 +242,10 @@ internal sealed class GlobalStitchAuditService
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var builder = new StringBuilder().AppendLine(
-            "SourceMapId\tSourceX\tSourceY\tTargetMapId\tTargetX\tTargetY\tClassification");
+            "SourceSectorId\tSourceX\tSourceY\tTargetMapId\tTargetX\tTargetY\tClassification");
         foreach (var entry in entries)
-            builder.Append(entry.SourceMapId).Append('\t').Append(entry.SourceX).Append('\t')
-                .Append(entry.SourceY).Append('\t').Append(entry.TargetMapId).Append('\t')
+            builder.Append(entry.SourceSectorId).Append('\t').Append(entry.SourceX).Append('\t')
+                .Append(entry.SourceY).Append('\t').Append(entry.TargetSectorId).Append('\t')
                 .Append(entry.TargetX).Append('\t').Append(entry.TargetY).Append('\t')
                 .Append(entry.Classification).AppendLine();
         File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
@@ -255,11 +255,11 @@ internal sealed class GlobalStitchAuditService
     {
         ArgumentNullException.ThrowIfNull(world);
         return world.Assembly.Placements
-            .Where(item => world.Maps.ContainsKey(item.MapId))
+            .Where(item => world.Maps.ContainsKey(item.SectorId))
             .Select(item =>
             {
-                var map = world.Maps[item.MapId];
-                return new MapLevelAuditEntry(item.MapId, map.Info.Level,
+                var map = world.Maps[item.SectorId];
+                return new MapLevelAuditEntry(item.SectorId, map.Info.Level,
                     item.Chunk.X, item.Chunk.Y, map.Info.Name);
             })
             .OrderBy(item => item.MetadataLevel)
@@ -271,15 +271,15 @@ internal sealed class GlobalStitchAuditService
     public void SaveMapLevelsTsv(string path, IReadOnlyList<MapLevelAuditEntry> entries)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var builder = new StringBuilder().AppendLine("MapId\tMetadataLevel\tChunkX\tChunkY\tName");
+        var builder = new StringBuilder().AppendLine("SectorId\tMetadataLevel\tChunkX\tChunkY\tName");
         foreach (var entry in entries)
-            builder.Append(entry.MapId).Append('\t').Append(entry.MetadataLevel).Append('\t')
+            builder.Append(entry.SectorId).Append('\t').Append(entry.MetadataLevel).Append('\t')
                 .Append(entry.ChunkX).Append('\t').Append(entry.ChunkY).Append('\t')
                 .Append(entry.Name).AppendLine();
         File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
     }
 
-    private static bool Equivalent(MapBlock first, MapBlock second)
+    private static bool Equivalent(SectorTile first, SectorTile second)
     {
         if (first.Blocked != second.Blocked || first.Trigger != second.Trigger ||
             first.CharacterIndex != second.CharacterIndex || first.NpcIndex != second.NpcIndex ||
@@ -294,7 +294,7 @@ internal sealed class GlobalStitchAuditService
         return true;
     }
 
-    private static string DifferenceField(MapBlock first, MapBlock second)
+    private static string DifferenceField(SectorTile first, SectorTile second)
     {
         if (first.Blocked != second.Blocked) return "Blocked";
         if (first.Trigger != second.Trigger) return "Trigger";
@@ -313,7 +313,7 @@ internal sealed class GlobalStitchAuditService
 
     private sealed class MutableCompileAudit(short mapId, int shiftX, int shiftY)
     {
-        public short MapId { get; } = mapId;
+        public short SectorId { get; } = mapId;
         public int ShiftX { get; } = shiftX;
         public int ShiftY { get; } = shiftY;
         public int WrittenTiles { get; set; }
@@ -324,7 +324,7 @@ internal sealed class GlobalStitchAuditService
         public int MinY { get; set; } = int.MaxValue;
         public int MaxY { get; set; } = int.MinValue;
 
-        public StitchedCompileAuditEntry ToRecord() => new(MapId, ShiftX, ShiftY,
+        public StitchedCompileAuditEntry ToRecord() => new(SectorId, ShiftX, ShiftY,
             WrittenTiles, DuplicateTiles, ConflictingTiles,
             MinX == int.MaxValue ? 0 : MinX, MaxX == int.MinValue ? 0 : MaxX,
             MinY == int.MaxValue ? 0 : MinY, MaxY == int.MinValue ? 0 : MaxY);

@@ -9,7 +9,7 @@ public sealed class SurfaceBorderTests
     [Fact]
     public void Border_surface_clears_entities_and_keeps_inner_map_untouched()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].NpcIndex = 4; map.Blocks[1, 1].Object.Index = 3; map.Blocks[1, 1].TileExit.Map = 8;
         map.Blocks[20, 20].Graphics[1].GraphicIndex = 77;
         var count = new SurfaceBorderPlacementService().Place(map, 1, 500, true, 2, 2, true);
@@ -24,7 +24,7 @@ public sealed class SurfaceBorderTests
     [Fact]
     public void Whole_surface_uses_csm_map_size_bounds()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(5, 2, 4, 3) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(5, 2, 4, 3) };
         var count = new SurfaceWholeMapService().Place(map, 0, 700, false, 1, 1);
 
         Assert.Equal(8, count);

@@ -9,7 +9,7 @@ public sealed class MapBoundaryCleanupTests
     [Fact]
     public void Removing_borders_restores_base_graphic_and_clears_border_payloads_only()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[1, 1].Graphics[0].GraphicIndex = 88; map.Blocks[1, 1].NpcIndex = 2; map.Blocks[1, 1].Trigger = 3;
         map.Blocks[20, 20].Graphics[0].GraphicIndex = 77;
         var count = new MapCleanupService().RemoveBorders(map);

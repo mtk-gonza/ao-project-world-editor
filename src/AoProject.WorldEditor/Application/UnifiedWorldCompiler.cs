@@ -8,6 +8,7 @@ internal sealed record UnifiedWorldCompileResult(
     int WrittenTiles,
     int MergedTiles,
     int InternalExits,
+    int CrossFloorExits,
     int ExternalExits,
     int Npcs,
     int Objects,
@@ -43,7 +44,7 @@ internal sealed class UnifiedWorldCompiler
         else if (floorAssignments is not null)
         {
             floorAssemblies = world.Assembly.Placements
-                .GroupBy(item => floorAssignments.GetValueOrDefault(item.MapId))
+                .GroupBy(item => floorAssignments.GetValueOrDefault(item.SectorId))
                 .Select(group => (group.Key, new GlobalWorldAssembly
                 {
                     Width = world.Assembly.Width,
@@ -57,19 +58,21 @@ internal sealed class UnifiedWorldCompiler
         {
             floorAssemblies = [(0, world.Assembly)];
         }
+        floorAssemblies = AddVirtualSpecialSourceMaps(world, floorAssemblies);
         var exitPlacements = floorAssemblies.SelectMany(item => item.Assembly.Placements)
-            .GroupBy(item => item.MapId).Select(group => group.First()).ToArray();
-        var floorByMap = exitPlacements.ToDictionary(item => item.MapId,
-            item => floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == item.MapId)).FloorZ);
+            .GroupBy(item => item.SectorId).Select(group => group.First()).ToArray();
+        var availableFloorZs = floorAssemblies.Select(item => item.FloorZ).ToHashSet();
+        var floorByMap = exitPlacements.ToDictionary(item => item.SectorId,
+            item => floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.SectorId == item.SectorId)).FloorZ);
         foreach (var floorAssembly in floorAssemblies)
         {
             var sourceAssembly = floorAssembly.Assembly;
             var floorZ = floorAssembly.Item1;
             // A WORLDMAP may use the same filler map more than once. The source
-            // catalog is keyed by MapId, so keep one deterministic placement for
+            // catalog is keyed by SectorId, so keep one deterministic placement for
             // compilation while preserving the official layout dimensions.
             var placementsForFloor = sourceAssembly.Placements
-                .GroupBy(item => item.MapId)
+                .GroupBy(item => item.SectorId)
                 .Select(group => group.First())
                 .ToArray();
             var assembly = new GlobalWorldAssembly
@@ -80,39 +83,73 @@ internal sealed class UnifiedWorldCompiler
                 Placements = placementsForFloor
             };
             var floorWorld = new GlobalWorldDocument(assembly, world.Maps, world.Paths,
-                placementsForFloor.First().MapId);
+                placementsForFloor.First().SectorId);
             bundle.Add(Compile(floorWorld, resources, exitPlacements,
-                placementsForFloor, floorZ, floorByMap, stitchByChunk, applyStitching).Map);
+                placementsForFloor, floorZ, floorByMap, stitchByChunk, applyStitching,
+                availableFloorZs).Map);
         }
         var allPlacements = floorAssemblies.SelectMany(item => item.Assembly.Placements)
-            .GroupBy(item => item.MapId).Select(group => group.First()).ToArray();
+            .GroupBy(item => item.SectorId).Select(group => group.First()).ToArray();
         bundle.SetPlacements(allPlacements.Select(placement =>
             applyStitching && stitchByChunk.TryGetValue(placement.Chunk, out var stitch)
                 ? placement with { StitchX = stitch.Item1, StitchY = stitch.Item2 }
                 : placement));
-        bundle.SetMapFloors(allPlacements.Select(item =>
-            new KeyValuePair<short, int>(item.MapId,
-                floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == item.MapId)).FloorZ)));
+        bundle.SetSectorFloors(allPlacements.Select(item =>
+            new KeyValuePair<short, int>(item.SectorId,
+                floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.SectorId == item.SectorId)).FloorZ)));
         foreach (var placement in allPlacements)
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var source)) continue;
-            var metadata = new UnifiedWorldMapMetadata
+            if (!world.Maps.TryGetValue(placement.SectorId, out var source)) continue;
+            var metadata = new UnifiedWorldSectorMetadata
             {
-                MapId = placement.MapId,
-                FloorZ = floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.MapId == placement.MapId)).FloorZ,
-                MapSize = source.CsmMapSize
+                SectorId = placement.SectorId,
+                FloorZ = floorAssemblies.First(floor => floor.Assembly.Placements.Any(p => p.SectorId == placement.SectorId)).FloorZ,
+                MapSize = source.CsmSectorSize
             };
             CopyMapInfo(metadata.Info, source.Info);
             metadata.Environment.BaseLight = source.Environment.BaseLight;
             metadata.Environment.Rain = source.Environment.Rain;
             metadata.Environment.Snow = source.Environment.Snow;
             metadata.Environment.Fog = source.Environment.Fog;
-            bundle.MapMetadata.Add(metadata);
+            bundle.SectorMetadata.Add(metadata);
+        }
+        foreach (var source in world.SourcePaths.OrderBy(item => item.Key))
+        {
+            var infPath = Path.ChangeExtension(source.Value, ".inf");
+            var datPath = Path.ChangeExtension(source.Value, ".dat");
+            bundle.SectorSources.Add(new UnifiedWorldSectorSource(
+                source.Key,
+                Path.GetFileName(source.Value),
+                File.Exists(source.Value) ? File.ReadAllBytes(source.Value) : [],
+                File.Exists(infPath) ? File.ReadAllBytes(infPath) : [],
+                File.Exists(datPath) ? File.ReadAllBytes(datPath) : []));
         }
         return bundle;
     }
 
-    private static void CopyMapInfo(MapInfo target, MapInfo source)
+    private static IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> AddVirtualSpecialSourceMaps(
+        GlobalWorldDocument world,
+        IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> floorAssemblies)
+    {
+        // CSMs outside mapsworlddata.dat remain preserved in SourcePaths and in
+        // bundle v5, but must not be appended to the playable surface. Doing so
+        // created an artificial extra column at Global X=1438 and rendered the
+        // legacy special-area building as if it were part of Z=0.
+        return floorAssemblies;
+    }
+
+    private static bool ContainsVirtualSpecialExit(WorldSector map)
+    {
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        {
+            var target = map.Blocks[x, y]?.TileExit.Map ?? 0;
+            if (target is >= 3000 and <= 3004) return true;
+        }
+        return false;
+    }
+
+    private static void CopyMapInfo(SectorInfo target, SectorInfo source)
     {
         target.Music = source.Music; target.MusicNumberHigh = source.MusicNumberHigh;
         target.MusicNumberLow = source.MusicNumberLow; target.Name = source.Name;
@@ -127,20 +164,21 @@ internal sealed class UnifiedWorldCompiler
 
     public UnifiedWorldCompileResult Compile(GlobalWorldDocument world,
         WorldEditorResourceCatalog? resources = null,
-        IReadOnlyList<GlobalMapPlacement>? exitPlacements = null,
-        IReadOnlyList<GlobalMapPlacement>? coordinatePlacements = null,
+        IReadOnlyList<GlobalSectorPlacement>? exitPlacements = null,
+        IReadOnlyList<GlobalSectorPlacement>? coordinatePlacements = null,
         int? forcedFloorZ = null,
         IReadOnlyDictionary<short, int>? floorAssignments = null,
         IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
-        bool applyStitching = false)
+        bool applyStitching = false,
+        IReadOnlySet<int>? availableFloorZs = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var placements = world.Assembly.Placements
-            .OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X).ThenBy(item => item.MapId)
+            .OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X).ThenBy(item => item.SectorId)
             .ToArray();
         if (placements.Length == 0) throw new InvalidDataException("El mundo no contiene mapas.");
         var occupiedChunks = placements.Select(item => item.Chunk).ToHashSet();
-        var exitPlacementByMap = (exitPlacements ?? placements).ToDictionary(item => item.MapId);
+        var exitPlacementByMap = (exitPlacements ?? placements).ToDictionary(item => item.SectorId);
 
         var coordinateSource = coordinatePlacements is { Count: > 0 } ? coordinatePlacements : placements;
         var minChunkX = coordinateSource.Min(item => item.Chunk.X);
@@ -148,29 +186,29 @@ internal sealed class UnifiedWorldCompiler
         var maxChunkX = coordinateSource.Max(item => item.Chunk.X);
         var maxChunkY = coordinateSource.Max(item => item.Chunk.Y);
         var floorValues = placements.Select(item =>
-            floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : forcedFloorZ ?? 0)
+            floorAssignments is not null && floorAssignments.TryGetValue(item.SectorId, out var z) ? z : forcedFloorZ ?? 0)
             .Distinct().ToArray();
         if (floorValues.Length > 1)
             throw new InvalidDataException("La compilación de un .gmap debe contener un único piso Z.");
         var floorZ = forcedFloorZ ?? floorValues.SingleOrDefault();
         var maxStitchedX = applyStitching
             ? coordinateSource.Max(item =>
-                (item.Chunk.X - minChunkX) * GlobalChunkGeometry.WidthTiles + WorldMap.Width -
+                (item.Chunk.X - minChunkX) * GlobalChunkGeometry.WidthTiles + WorldSector.Width -
                 (stitchByChunk?.GetValueOrDefault(item.Chunk).Item1 ?? 0))
-            : (maxChunkX - minChunkX + 1) * GlobalChunkGeometry.WidthTiles + WorldMap.Width;
+            : (maxChunkX - minChunkX + 1) * GlobalChunkGeometry.WidthTiles + WorldSector.Width;
         var maxStitchedY = applyStitching
             ? coordinateSource.Max(item =>
-                (item.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles + WorldMap.Height -
+                (item.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles + WorldSector.Height -
                 (stitchByChunk?.GetValueOrDefault(item.Chunk).Item2 ?? 0))
-            : (maxChunkY - minChunkY + 1) * GlobalChunkGeometry.HeightTiles + WorldMap.Height;
+            : (maxChunkY - minChunkY + 1) * GlobalChunkGeometry.HeightTiles + WorldSector.Height;
         if (applyStitching)
         {
             foreach (var sourceEntry in world.Maps)
             {
                 if (!exitPlacementByMap.ContainsKey(sourceEntry.Key)) continue;
                 var source = sourceEntry.Value;
-                for (var exitY = 1; exitY <= WorldMap.Height; exitY++)
-                for (var exitX = 1; exitX <= WorldMap.Width; exitX++)
+                for (var exitY = 1; exitY <= WorldSector.Height; exitY++)
+                for (var exitX = 1; exitX <= WorldSector.Width; exitX++)
                 {
                     var block = source.Blocks[exitX, exitY];
                     if (block is null) continue;
@@ -190,11 +228,12 @@ internal sealed class UnifiedWorldCompiler
         }
         var map = new UnifiedWorldMap(checked(maxStitchedX), checked(maxStitchedY), floorZ);
         var owners = new Dictionary<int, TileOwner>();
-        var roofIds = new Dictionary<(short MapId, short Trigger), int>();
+        var roofIds = new Dictionary<(short SectorId, short Trigger), int>();
         var nextRoofId = 1;
         var written = 0;
         var merged = 0;
         var internalExits = 0;
+        var crossFloorExits = 0;
         var externalExits = 0;
         var npcs = 0;
         var objects = 0;
@@ -203,8 +242,8 @@ internal sealed class UnifiedWorldCompiler
 
         foreach (var placement in placements)
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var source))
-                throw new InvalidDataException($"El mapa {placement.MapId} no pudo materializarse.");
+            if (!world.Maps.TryGetValue(placement.SectorId, out var source))
+                throw new InvalidDataException($"El mapa {placement.SectorId} no pudo materializarse.");
 
             var hasWest = occupiedChunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
             var hasNorth = occupiedChunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
@@ -222,8 +261,8 @@ internal sealed class UnifiedWorldCompiler
                 source.Environment.Fog, environment.Music, environment.Zone,
                 environment.Restriction, environment.Safety, floorZ, source.Info.Level));
 
-            for (var localY = 1; localY <= WorldMap.Height; localY++)
-            for (var localX = 1; localX <= WorldMap.Width; localX++)
+            for (var localY = 1; localY <= WorldSector.Height; localY++)
+            for (var localX = 1; localX <= WorldSector.Width; localX++)
             {
                 if (!GlobalChunkGeometry.IsCoreTile(localX, localY, hasWest, hasNorth)) continue;
                 var global = RawGlobalTile(placement, localX, localY, minChunkX, minChunkY,
@@ -244,10 +283,11 @@ internal sealed class UnifiedWorldCompiler
                         merged++;
                         continue;
                     }
-                    var duplicateExit = AppendExit(map, offset, gx, gy, sourceBlock, floorZ,
+                    var duplicateExit = AppendExit(map, offset, gx, gy, localX, localY, sourceBlock, placement, floorZ,
                         world, exitPlacementByMap, minChunkX, minChunkY, floorAssignments,
-                        stitchByChunk, applyStitching);
+                        stitchByChunk, applyStitching, availableFloorZs);
                     if (duplicateExit == UnifiedWorldExitKind.Internal) internalExits++;
+                    if (duplicateExit == UnifiedWorldExitKind.CrossFloor) crossFloorExits++;
                     if (duplicateExit == UnifiedWorldExitKind.External) externalExits++;
                     if (applyStitching && IsSeamDuplicate(owner, placement, localX, localY))
                         MergeSeamTile(map, offset, sourceBlock, source.Environment);
@@ -255,12 +295,12 @@ internal sealed class UnifiedWorldCompiler
                         (applyStitching && IsSeamDuplicate(owner, placement, localX, localY)))
                         merged++;
                     else
-                        AddConflict(map, gx, gy, owner.MapId, placement.MapId,
+                        AddConflict(map, gx, gy, owner.SectorId, placement.SectorId,
                             DifferenceField(owner.Block, owner.Environment, sourceBlock, source.Environment),
                             owner.LocalX, owner.LocalY, localX, localY, placement.Chunk, floorZ);
                     continue;
                 }
-                owners[offset] = new TileOwner(placement.MapId, placement.Chunk, localX, localY, sourceBlock, source.Environment);
+                owners[offset] = new TileOwner(placement.SectorId, placement.Chunk, localX, localY, sourceBlock, source.Environment);
                 CopyTile(map, offset, sourceBlock, source.Environment);
                 written++;
 
@@ -285,7 +325,7 @@ internal sealed class UnifiedWorldCompiler
 
                 if (sourceBlock.Graphics[3].GraphicIndex > 0 && sourceBlock.Trigger > 0)
                 {
-                    var key = (placement.MapId, sourceBlock.Trigger);
+                    var key = (placement.SectorId, sourceBlock.Trigger);
                     if (!roofIds.TryGetValue(key, out var roofId))
                     {
                         roofId = nextRoofId++;
@@ -302,18 +342,20 @@ internal sealed class UnifiedWorldCompiler
                     };
                 }
 
-                var exitKind = AppendExit(map, offset, gx, gy, sourceBlock, floorZ,
-                    world, exitPlacementByMap, minChunkX, minChunkY, floorAssignments);
+                var exitKind = AppendExit(map, offset, gx, gy, localX, localY, sourceBlock, placement, floorZ,
+                    world, exitPlacementByMap, minChunkX, minChunkY, floorAssignments,
+                    stitchByChunk, applyStitching, availableFloorZs);
                 if (exitKind == UnifiedWorldExitKind.Internal) internalExits++;
+                if (exitKind == UnifiedWorldExitKind.CrossFloor) crossFloorExits++;
                 if (exitKind == UnifiedWorldExitKind.External) externalExits++;
             }
         }
 
-        return new UnifiedWorldCompileResult(map, written, merged, internalExits, externalExits,
+        return new UnifiedWorldCompileResult(map, written, merged, internalExits, crossFloorExits, externalExits,
             npcs, objects, particles, lights, map.RoofZones.Count, map.Conflicts);
     }
 
-    private static void CopyTile(UnifiedWorldMap target, int offset, MapBlock source, MapEnvironment environment)
+    private static void CopyTile(UnifiedWorldMap target, int offset, SectorTile source, MapEnvironment environment)
     {
         target.Blocked[offset] = source.Blocked;
         target.Trigger[offset] = source.Trigger;
@@ -334,6 +376,8 @@ internal sealed class UnifiedWorldCompiler
         target.Rain[offset] = environment.Rain;
         target.Snow[offset] = environment.Snow;
         target.Fog[offset] = environment.Fog;
+        target.Water[offset] = IsWater(source);
+        target.Lava[offset] = IsLava(source.Graphics[0].GraphicIndex);
         for (var layer = 0; layer < 8; layer++)
             target.GraphicIndices[target.GraphicOffset(offset, layer)] = source.Graphics[layer].GraphicIndex;
         for (var corner = 0; corner < 4; corner++)
@@ -350,7 +394,7 @@ internal sealed class UnifiedWorldCompiler
     /// directional blocking masks so either source cannot erase gameplay data.
     /// </summary>
     private static void MergeSeamTile(UnifiedWorldMap target, int offset,
-        MapBlock source, MapEnvironment environment)
+        SectorTile source, MapEnvironment environment)
     {
         target.Blocked[offset] |= source.Blocked;
         if (target.Trigger[offset] == 0) target.Trigger[offset] = source.Trigger;
@@ -371,6 +415,8 @@ internal sealed class UnifiedWorldCompiler
         if (target.Rain[offset] == 0) target.Rain[offset] = environment.Rain;
         if (target.Snow[offset] == 0) target.Snow[offset] = environment.Snow;
         if (target.Fog[offset] == 0) target.Fog[offset] = environment.Fog;
+        target.Water[offset] |= IsWater(source);
+        target.Lava[offset] |= IsLava(source.Graphics[0].GraphicIndex);
         for (var layer = 0; layer < 8; layer++)
         {
             var graphicOffset = target.GraphicOffset(offset, layer);
@@ -385,7 +431,7 @@ internal sealed class UnifiedWorldCompiler
         }
     }
 
-    private static (int X, int Y) RawGlobalTile(GlobalMapPlacement placement, int localX, int localY,
+    private static (int X, int Y) RawGlobalTile(GlobalSectorPlacement placement, int localX, int localY,
         int minChunkX, int minChunkY,
         IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
         bool applyStitching = false)
@@ -396,11 +442,13 @@ internal sealed class UnifiedWorldCompiler
     }
 
     private static UnifiedWorldExitKind? AppendExit(UnifiedWorldMap map, int offset, int gx, int gy,
-        MapBlock sourceBlock, int floorZ, GlobalWorldDocument world,
-        IReadOnlyDictionary<short, GlobalMapPlacement> placements, int minChunkX, int minChunkY,
+        int sourceX, int sourceY, SectorTile sourceBlock, GlobalSectorPlacement sourcePlacement,
+        int floorZ, GlobalWorldDocument world,
+        IReadOnlyDictionary<short, GlobalSectorPlacement> placements, int minChunkX, int minChunkY,
         IReadOnlyDictionary<short, int>? floorAssignments,
         IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
-        bool applyStitching = false)
+        bool applyStitching = false,
+        IReadOnlySet<int>? availableFloorZs = null)
     {
         var exit = sourceBlock.TileExit;
         // VB6 uses negative map ids for special destinations (for example
@@ -414,14 +462,31 @@ internal sealed class UnifiedWorldCompiler
                 stitchByChunk, applyStitching);
             var targetZ = floorAssignments is not null && floorAssignments.TryGetValue(exit.Map, out var assignedTargetZ)
                 ? assignedTargetZ : floorZ;
+            if (targetZ == floorZ && IsPhysicalSectorSeam(sourcePlacement, targetPlacement,
+                    sourceX, sourceY, exit))
+                return null;
             candidate = new UnifiedWorldExit(targetZ == floorZ ? UnifiedWorldExitKind.Internal : UnifiedWorldExitKind.CrossFloor,
                 gx, gy, target.X, target.Y, SourceZ: floorZ, TargetZ: targetZ);
         }
         else
         {
-            candidate = new UnifiedWorldExit(UnifiedWorldExitKind.External, gx, gy, -1, -1,
-                exit.Map, exit.X, exit.Y, SourceZ: floorZ,
-                ExternalZ: IsSpecialExternalMap(exit.Map) ? -1 : floorZ);
+            // The original data has ten exits from map 266 to 3000..3004.
+            // Those IDs are not maps: the VB6 server rejects them because they
+            // are above NumMaps. Their coordinates are valid, however, so the
+            // unified world promotes them to virtual destinations on Z=-1 when
+            // that floor exists. No CSM is invented and the legacy coordinates
+            // are converted from 1-based to the runtime's 0-based contract.
+            if (IsVirtualSpecialFloorExit(exit) && availableFloorZs?.Contains(-1) == true && floorZ != -1)
+            {
+                candidate = new UnifiedWorldExit(UnifiedWorldExitKind.CrossFloor, gx, gy,
+                    exit.X - 1, exit.Y - 1, SourceZ: floorZ, TargetZ: -1);
+            }
+            else
+            {
+                candidate = new UnifiedWorldExit(UnifiedWorldExitKind.External, gx, gy, -1, -1,
+                    exit.Map, exit.X, exit.Y, SourceZ: floorZ,
+                    ExternalZ: IsSpecialExternalMap(exit.Map) ? -1 : floorZ);
+            }
         }
         if (!map.Exits.Contains(candidate)) map.Exits.Add(candidate);
         var reference = map.Exits.IndexOf(candidate) + 1;
@@ -429,11 +494,48 @@ internal sealed class UnifiedWorldCompiler
         return candidate.Kind;
     }
 
-    private static bool IsSeamDuplicate(TileOwner owner, GlobalMapPlacement placement, int localX, int localY) =>
+    private static bool IsSeamDuplicate(TileOwner owner, GlobalSectorPlacement placement, int localX, int localY) =>
         (owner.LocalX == GlobalChunkGeometry.CoreMaxX && localX == GlobalChunkGeometry.CoreMinX + 1) ||
         (owner.LocalY == GlobalChunkGeometry.CoreMaxY && localY == GlobalChunkGeometry.CoreMinY + 1);
 
     private static bool IsSpecialExternalMap(short mapId) => mapId < 0 || mapId >= 3000;
+
+    private static bool IsVirtualSpecialFloorExit(WorldPosition exit) =>
+        exit.Map is >= 3000 and <= 3004 &&
+        exit.X is >= 1 and <= WorldSector.Width &&
+        exit.Y is >= 1 and <= WorldSector.Height;
+
+    private static bool IsWater(SectorTile block) =>
+        (IsWaterGraphic(block.Graphics[0].GraphicIndex) && block.Graphics[1].GraphicIndex == 0) ||
+        block.Trigger is 8 or 11 or 16 or 18;
+
+    private static bool IsWaterGraphic(int graphic) =>
+        graphic is >= 1505 and <= 1520 or
+        >= 124 and <= 139 or
+        >= 24223 and <= 24238 or
+        >= 24303 and <= 24318 or
+        >= 468 and <= 483 or
+        >= 44668 and <= 44683 or
+        >= 24143 and <= 24158 or
+        >= 12628 and <= 12643 or
+        >= 2948 and <= 2963;
+
+    private static bool IsLava(int graphic) =>
+        graphic is >= 16101 and <= 16116 or >= 26767 and <= 26782;
+
+    private static bool IsPhysicalSectorSeam(GlobalSectorPlacement source, GlobalSectorPlacement target,
+        int sourceX, int sourceY, WorldPosition exit)
+    {
+        var dx = target.Chunk.X - source.Chunk.X;
+        var dy = target.Chunk.Y - source.Chunk.Y;
+        var horizontalWest = (dx == -1 || Math.Abs(dx) == 18) && dy == 0 &&
+            sourceX == GlobalChunkGeometry.CoreMinX && exit.X == 87;
+        var horizontalEast = (dx == 1 || Math.Abs(dx) == 18) && dy == 0 &&
+            sourceX == GlobalChunkGeometry.CoreMaxX && exit.X == 14;
+        return horizontalEast || horizontalWest ||
+               (dx == 0 && dy == 1 && sourceY == GlobalChunkGeometry.CoreMaxY && exit.Y == 11) ||
+               (dx == 0 && dy == -1 && sourceY == GlobalChunkGeometry.CoreMinY && exit.Y == 90);
+    }
 
     private static void AddConflict(UnifiedWorldMap target, int x, int y, short firstMap, short secondMap,
         string field, int firstLocalX, int firstLocalY, int secondLocalX, int secondLocalY,
@@ -445,8 +547,8 @@ internal sealed class UnifiedWorldCompiler
             $"({secondChunk.X},{secondChunk.Y}); los datos persistentes difieren."));
     }
 
-    private static string DifferenceField(MapBlock first, MapEnvironment firstEnvironment,
-        MapBlock second, MapEnvironment secondEnvironment)
+    private static string DifferenceField(SectorTile first, MapEnvironment firstEnvironment,
+        SectorTile second, MapEnvironment secondEnvironment)
     {
         if (first.Blocked != second.Blocked) return "Blocked";
         if (first.Trigger != second.Trigger) return "Trigger";
@@ -466,8 +568,8 @@ internal sealed class UnifiedWorldCompiler
         return "Unknown";
     }
 
-    private static bool TilesEquivalent(MapBlock first, MapEnvironment firstEnvironment,
-        MapBlock second, MapEnvironment secondEnvironment)
+    private static bool TilesEquivalent(SectorTile first, MapEnvironment firstEnvironment,
+        SectorTile second, MapEnvironment secondEnvironment)
     {
         if (first.Blocked != second.Blocked || first.Trigger != second.Trigger ||
             first.CharacterIndex != second.CharacterIndex || first.NpcIndex != second.NpcIndex ||
@@ -493,6 +595,6 @@ internal sealed class UnifiedWorldCompiler
         first.Speed == second.Speed && first.Started == second.Started && first.Loops == second.Loops &&
         first.Angle == second.Angle;
 
-    private sealed record TileOwner(short MapId, GlobalChunkCoordinate Chunk, int LocalX, int LocalY,
-        MapBlock Block, MapEnvironment Environment);
+    private sealed record TileOwner(short SectorId, GlobalChunkCoordinate Chunk, int LocalX, int LocalY,
+        SectorTile Block, MapEnvironment Environment);
 }

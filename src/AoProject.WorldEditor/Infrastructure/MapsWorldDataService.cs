@@ -5,7 +5,7 @@ namespace AoProject.WorldEditor.Infrastructure;
 
 internal sealed class MapsWorldDataService
 {
-    internal sealed record WorldLayout(int WorldId, int Width, int Height, IReadOnlyList<short> MapIds);
+    internal sealed record WorldLayout(int WorldId, int Width, int Height, IReadOnlyList<short> SectorIds);
     public IReadOnlyList<int> IgnoredWorldIds { get; private set; } = [];
 
     public IReadOnlyList<WorldLayout> Load(string path)
@@ -55,7 +55,7 @@ internal sealed class MapsWorldDataService
 
     public static short ChooseRoot(WorldLayout layout, IReadOnlyCollection<short> availableMaps)
     {
-        var ids = layout.MapIds.Where(id => id > 0 && availableMaps.Contains(id)).ToArray();
+        var ids = layout.SectorIds.Where(id => id > 0 && availableMaps.Contains(id)).ToArray();
         if (ids.Length == 0) return 0;
         var repeated = ids.GroupBy(id => id).Where(group => group.Count() > 1)
             .Select(group => group.Key).ToHashSet();
@@ -66,7 +66,7 @@ internal sealed class MapsWorldDataService
 
     public static GlobalWorldAssembly? BuildAssembly(
         IReadOnlyList<WorldLayout> layouts,
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         short rootMap)
         => BuildAssembly(layouts, maps.Keys.ToArray(), rootMap);
 
@@ -75,19 +75,19 @@ internal sealed class MapsWorldDataService
         IReadOnlyCollection<short> availableMaps,
         short rootMap)
     {
-        var layout = layouts.FirstOrDefault(item => item.MapIds.Contains(rootMap));
+        var layout = layouts.FirstOrDefault(item => item.SectorIds.Contains(rootMap));
         return layout is null ? null : BuildAssembly(layout, availableMaps);
     }
 
     public static GlobalWorldAssembly? BuildAssembly(
         WorldLayout layout, IReadOnlyCollection<short> availableMaps)
     {
-        var placements = new List<GlobalMapPlacement>();
-        for (var index = 0; index < layout.MapIds.Count; index++)
+        var placements = new List<GlobalSectorPlacement>();
+        for (var index = 0; index < layout.SectorIds.Count; index++)
         {
-            var mapId = layout.MapIds[index];
+            var mapId = layout.SectorIds[index];
             if (mapId <= 0 || !availableMaps.Contains(mapId)) continue;
-            // Repeated ids (filler, e.g. 300 in WORLDMAP2) share one WorldMap
+            // Repeated ids (filler, e.g. 300 in WORLDMAP2) share one WorldSector
             // instance: editing one cell changes every copy.
             placements.Add(new(mapId, new(index % layout.Width, index / layout.Width), $"world-{layout.WorldId}"));
         }

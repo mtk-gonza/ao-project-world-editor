@@ -9,7 +9,7 @@ public sealed class SelectedEntityRemovalTests
     [Fact]
     public void Removing_one_entity_kind_preserves_the_other_payloads()
     {
-        var map = new WorldMap(); var block = map.Blocks[5, 6];
+        var map = new WorldSector(); var block = map.Blocks[5, 6];
         block.Object.Index = 2; block.Object.Amount = 1; block.NpcIndex = 3; block.Trigger = 4; block.TileExit.Map = 8;
         var service = new MapEntityEditingService();
         service.SetObject(map, new[] { new ObjectData(), new ObjectData(), new ObjectData { GraphicIndex = 90 } }, 5, 6, 0);

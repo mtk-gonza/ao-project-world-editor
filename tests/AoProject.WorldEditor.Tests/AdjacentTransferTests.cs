@@ -9,7 +9,7 @@ public sealed class AdjacentTransferTests
     [Fact]
     public void Adjacent_transfers_skip_fully_blocked_tiles_and_set_reference_destinations()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[20, 10].Blocked = 0xF;
         var transfer = new AdjacentTransfer(true, 42, 20, 1, true, 10, 19, 21);
 

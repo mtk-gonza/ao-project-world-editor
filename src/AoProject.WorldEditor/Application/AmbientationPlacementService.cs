@@ -4,7 +4,7 @@ namespace AoProject.WorldEditor.Application;
 
 internal sealed class AmbientationPlacementService
 {
-    public int Place(WorldMap map, Ambientation ambientiation, int count, int layer, bool blocked, int seed = 0)
+    public int Place(WorldSector map, Ambientation ambientiation, int count, int layer, bool blocked, int seed = 0)
     {
         ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(ambientiation);
         if (count <= 0) return 0;

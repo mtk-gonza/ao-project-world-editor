@@ -121,7 +121,7 @@ archivo perdia esas descripciones.
 
 ## ADR-WM-010: tipos y encoding exactos del CSM
 
-**Decision:** el CSM usa strings ANSI/Latin1 y `Trigger` int16. `CsmMapSize
+**Decision:** el CSM usa strings ANSI/Latin1 y `Trigger` int16. `CsmSectorSize
 0,0,0,0` se normaliza a 100x100. El writer trunca el archivo; los bytes sobrantes de
 un guardado VB6 anterior se ignoran y se reportan como Info.
 
@@ -508,15 +508,15 @@ coordenadas externas 1-based con indices globales zero-based.
 ## ADR-WM-024: fuentes originales y bundle generado
 
 **Decision:** `reference\\Recursos` es fuente read-only. Los artefactos generados se
-escriben en `ao-project-resources\\world.floors` y no se crea configuracion artificial
+escriben en `ao-project-resources\\world` y no se crea configuracion artificial
 en `reference\\Recursos\\init`. La asignacion de pisos se calcula durante la
 importacion; no depende de `world-floors.json`.
 
-La reconstruccion de `world.floors` parte de `reference\\Recursos\\Mapas\\*.csm` y
+La reconstruccion de `world` parte de `reference\\Recursos\\Mapas\\*.csm` y
 del layout oficial `reference\\Recursos\\init\\mapsworlddata.dat`. El antiguo
 `ao-project-resources\\world\\world.csm` no es una entrada del pipeline nuevo.
 
-El bundle productivo actual contiene `bundle.aog` v4 y los floors compilados con
+El bundle productivo actual contiene `bundle.aog` v5 y los floors compilados con
 stitching fisico. Antes de reemplazarlo se conserva una copia en una ruta temporal de
 backup. Las auditorias TSV se distribuyen junto al bundle para hacer reproducible la
 generacion y revisar seams, niveles, salidas y teleports.
@@ -538,21 +538,25 @@ compilacion porque el catalogo fuente esta indexado por `MapId`.
 ## ADR-WM-026: mapas especiales como salidas externas
 
 **Decision:** `TileExit.Map` no positivo no se interpreta automaticamente como un
-placement. `Map=0` significa ausencia de salida; `Map=-1`, `Map=-2` y `Map=3000..3004`
-se conservan como salidas externas.
+placement. `Map=0` significa ausencia de salida. `Map=-1` y `Map=-2` se conservan
+como salidas externas dinamicas (`ReturnPos`), mientras que `Map=3000..3004` se
+adapta durante la compilacion a una salida `CrossFloor` virtual hacia `Z=-1`.
 
 Para esas salidas:
 
-- `ExternalMapId` conserva el ID original.
-- `ExternalX/ExternalY` conservan las coordenadas VB6 originales `1..100`.
-- Las coordenadas globales del destino quedan en `(-1,-1)` porque no pertenecen al
-  mundo compacto.
-- `ExternalZ=-1` por la politica actual de destino especial.
+- Para `-1/-2`, `ExternalMapId` conserva el ID original, `ExternalX/ExternalY`
+  conservan las coordenadas VB6 y las coordenadas globales quedan en `(-1,-1)`.
+- Para `3000..3004`, el destino global es `(ExternalX-1, ExternalY-1)` en `Z=-1`;
+  no se conserva `ExternalMapId` en la salida compilada para que cliente y servidor
+  resuelvan el `CrossFloor` y no intenten abrir un mapa externo inexistente.
 - El mapa de origen conserva su piso normal (`SourceZ=0` salvo asignacion explicita).
 
 La auditoria de los 843 CSM originales encontro 1.184 salidas a `-1`, 2 a `-2` y 10
-a `3000..3004`. La semantica exacta de esos IDs aun debe confirmarse contra el codigo
-VB6 de rutas/teleports antes de inferir que representan un subterraneo real.
+a `3000..3004`. El servidor VB6 rechaza estos ultimos por superar `NumMaps`; sus
+coordenadas validas se adaptan al piso virtual `Z=-1` sin crear CSM inexistentes.
+Como el origen de esas diez salidas es el CSM desconectado `mapa266.csm`, el
+compilador conserva su payload fuente, pero no lo agrega como placement visible
+al final de `Z=0`.
 
 ## ADR-WM-027: compactacion fisica experimental promovida a runtime
 
@@ -563,10 +567,63 @@ seam se conserva el placement existente (`KeepExistingPlacement`) porque todos l
 
 El resultado actual fue validado con:
 
-- WorldEditor: 365/365 tests.
-- Cliente: 784/784 tests.
-- Servidor: 646/646 tests.
+- WorldEditor: 368/368 tests.
+- Cliente: 797/797 tests.
+- Servidor: build sin errores; queda 1 fallo preexistente de paridad de PacketId
+  (esperado 224, actual 220).
 
-La reserva adicional para referencias legacy permanece documentada como deuda: debe
-reemplazarse por una normalizacion semantica cuando se confirme el contrato de los
-destinos especiales.
+El contrato de referencias legacy queda materializado en el bundle: los destinos
+externos conservan sus coordenadas e identificadores sin requerir los CSM originales.
+
+## ADR-WM-028: bundle runtime v5 y cierre de destinos externos
+
+**Decision:** `world` se distribuye como `AOGBND01` version 5. Cada floor usa `AOGMAP01` version 4.
+El cliente y el servidor leen el bundle sin reabrir CSM durante el runtime y seleccionan
+floors por `TargetZ`.
+
+La configuración de generación del bundle contiene cuatro pisos:
+
+- `Z=0`: únicamente el layout oficial `WORLDMAP1`; `mapa266.csm` queda preservado
+  fuera de la geometría jugable.
+- `Z=-1`: layout oficial `WORLDMAP2`.
+- `Z=-2`: layout oficial `WORLDMAP3`.
+- `Z=-3`: CSM positivos existentes sin placement oficial, en una grilla determinista.
+
+La importacion del piso `Z=-3` es transitiva: si uno de esos CSM apunta a otro CSM
+positivo existente, el destino tambien se incorpora. Los destinos positivos que no
+tienen CSM permanecen externos; `Map=-1/-2` siguen siendo `ReturnPos` dinamicos.
+
+Las salidas legacy que solo unen sectores fisicamente adyacentes tambien se eliminan
+del `.gmap`: ya no deben provocar un cambio de mapa dentro del mundo unico. La regla
+incluye las cuatro uniones cardinales y el wrap horizontal oficial. Se conservan los
+portales internos no adyacentes, los `CrossFloor` y las salidas externas.
+
+Validacion del bundle generado:
+
+- 799 placements, sin la columna artificial `virtual-special` fuera del layout oficial.
+- Las salidas de borde de sector no permanecen como `TileExit` runtime; las uniones
+  fisicas se resuelven por coordenadas globales.
+- Todos los `CrossFloor` tienen `TargetZ` valido y coordenadas dentro del floor destino.
+- No quedan destinos positivos externos sin resolver.
+- El unico ID externo restante es `Map=-1`, intencionalmente dinamico.
+- WorldEditor: 368/368 tests.
+- Cliente y servidor: aplicaciones compiladas correctamente; las soluciones completas
+  mantienen tests legacy que aún llaman APIs de carga CSM retiradas.
+
+## ADR-WM-029: bundle autosuficiente y contrato completo por sector
+
+**Decision:** la generación del mundo transporta toda la información necesaria para
+ejecutar los mapas, sin depender de `Mapas/*.csm`, `.dat` o `.inf` originales.
+
+- `AOGMAP01` v4 conserva todos los arrays de `MapBlock`, incluidos agua, lava,
+  colores, luces, entidades, techo, ambiente y teleports.
+- `AOGBND01` v5 conserva todos los campos de `SectorInfo`, `MapEnvironment`,
+  `CsmSectorSize`, placements, pisos y offsets de stitching por `SectorId`.
+- `AOGBND01` v5 embebe además los payloads originales CSM y los INF/DAT cuando
+  existen, permitiendo auditar la fuente sin acceder a `reference/Recursos`.
+- Los teleports externos conservan `ExternalMapId`, coordenadas legacy y piso; los
+  destinos globales se resuelven a `TileExit` en el servidor cuando corresponde.
+- Los PNG son derivados visuales y viven en `ao-project-resources/maps`; no son
+  fuente de datos de juego.
+- `reference/Recursos` permanece intacto y solo se usa como fuente de importación y
+  auditoría.

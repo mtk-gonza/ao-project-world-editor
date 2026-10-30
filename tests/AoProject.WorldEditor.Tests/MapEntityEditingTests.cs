@@ -9,7 +9,7 @@ public sealed class MapEntityEditingTests
     [Fact]
     public void Entity_editing_updates_object_npc_trigger_and_transfer_payloads()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var objects = new ObjectData[2]; objects[1] = new ObjectData { GraphicIndex = 88 };
         var npcs = new NpcData[2]; npcs[1] = new NpcData();
         var service = new MapEntityEditingService();

@@ -67,30 +67,30 @@ internal sealed class CharacterListService
         var entry = _characters[index - 1];
         entry.Heading = heading;
         var (dx, dy) = Delta(heading);
-        entry.X = (short)Math.Clamp(entry.X + dx, 1, WorldMap.Width);
-        entry.Y = (short)Math.Clamp(entry.Y + dy, 1, WorldMap.Height);
+        entry.X = (short)Math.Clamp(entry.X + dx, 1, WorldSector.Width);
+        entry.Y = (short)Math.Clamp(entry.Y + dy, 1, WorldSector.Height);
     }
 
     public void MoveCharbyPos(int index, short x, short y)
     {
         if (index < 1 || index > _characters.Count) return;
-        if (x is < 1 or > WorldMap.Width || y is < 1 or > WorldMap.Height) return;
+        if (x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) return;
         var entry = _characters[index - 1];
         entry.X = x; entry.Y = y;
     }
 
     public bool Check(int index) => index >= 1 && index <= _characters.Count && _characters[index - 1].Active;
 
-    public int RefreshAll(WorldMap map, IReadOnlyList<NpcData> npcs)
+    public int RefreshAll(WorldSector map, IReadOnlyList<NpcData> npcs)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(npcs);
         _characters.Clear();
         var created = 0;
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         for (var x = minX; x <= maxX; x++)
         for (var y = minY; y <= maxY; y++)
         {

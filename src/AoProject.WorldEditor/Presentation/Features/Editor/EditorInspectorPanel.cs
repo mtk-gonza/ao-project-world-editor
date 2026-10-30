@@ -41,9 +41,9 @@ internal sealed class EditorInspectorPanel : Panel
         parent.Controls.Add(button);
     }
 
-    public void ShowTile(WorldMap map, int x, int y)
+    public void ShowTile(WorldSector map, int x, int y)
     {
-        if (x < 1 || x > WorldMap.Width || y < 1 || y > WorldMap.Height) { ShowEmpty(); return; }
+        if (x < 1 || x > WorldSector.Width || y < 1 || y > WorldSector.Height) { ShowEmpty(); return; }
         var block = map.Blocks[x, y];
         var graphics = string.Join(", ", block.Graphics.Select((graphic, index) => $"C{index + 1}:{graphic.GraphicIndex}"));
         _details.Text = $"Local: {x},{y}\r\n" +

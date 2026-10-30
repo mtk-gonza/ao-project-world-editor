@@ -61,8 +61,8 @@ internal readonly record struct GlobalMapLink(
     short TargetX,
     short TargetY);
 
-internal readonly record struct GlobalMapPlacement(
-    short MapId,
+internal readonly record struct GlobalSectorPlacement(
+    short SectorId,
     GlobalChunkCoordinate Chunk,
     string LevelId,
     int StitchX = 0,
@@ -78,7 +78,7 @@ internal readonly record struct GlobalWorldConflict(
 
 internal sealed class GlobalWorldAssembly
 {
-    public IReadOnlyList<GlobalMapPlacement> Placements { get; init; } = [];
+    public IReadOnlyList<GlobalSectorPlacement> Placements { get; init; } = [];
     public IReadOnlyList<GlobalMapLink> Links { get; init; } = [];
     public IReadOnlyList<GlobalWorldConflict> Conflicts { get; init; } = [];
     /// <summary>Official grid width in maps (0 when inferred/unavailable).</summary>

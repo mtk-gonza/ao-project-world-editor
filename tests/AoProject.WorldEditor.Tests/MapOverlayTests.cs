@@ -25,7 +25,7 @@ public sealed class MapOverlayTests
     [Fact]
     public void Overlay_geometry_reports_enabled_tile_annotations()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[4, 5].Blocked = 0xF;
         map.Blocks[4, 5].Trigger = 2;
         map.Blocks[4, 5].Light.Range = 10;
@@ -44,7 +44,7 @@ public sealed class MapOverlayTests
     public void Grid_overlay_can_be_clipped_to_the_visible_rect()
     {
         var options = new WorldRenderOptions { ShowGrid = true };
-        var overlays = MapOverlayGeometry.Build(new WorldMap(), options, (5, 5), (MinX: 4, MaxX: 6, MinY: 10, MaxY: 12));
+        var overlays = MapOverlayGeometry.Build(new WorldSector(), options, (5, 5), (MinX: 4, MaxX: 6, MinY: 10, MaxY: 12));
 
         var grid = overlays.Where(overlay => overlay.Kind == OverlayKind.Grid).ToArray();
         Assert.Equal(9, grid.Length);
@@ -58,7 +58,7 @@ public sealed class MapOverlayTests
     public void Clip_outside_the_map_produces_no_tile_overlays()
     {
         var options = new WorldRenderOptions { ShowGrid = true, ShowBlocked = true };
-        var overlays = MapOverlayGeometry.Build(new WorldMap(), options, null,
+        var overlays = MapOverlayGeometry.Build(new WorldSector(), options, null,
             (MinX: 500, MaxX: 600, MinY: 500, MaxY: 600));
 
         Assert.DoesNotContain(overlays, overlay => overlay.Kind == OverlayKind.Grid);
@@ -68,9 +68,9 @@ public sealed class MapOverlayTests
     [Fact]
     public void Grid_overlay_is_one_annotation_per_map_tile()
     {
-        var overlays = MapOverlayGeometry.Build(new WorldMap(), new WorldRenderOptions { ShowGrid = true });
+        var overlays = MapOverlayGeometry.Build(new WorldSector(), new WorldRenderOptions { ShowGrid = true });
 
-        Assert.Equal(WorldMap.Width * WorldMap.Height, overlays.Count(overlay => overlay.Kind == OverlayKind.Grid));
+        Assert.Equal(WorldSector.Width * WorldSector.Height, overlays.Count(overlay => overlay.Kind == OverlayKind.Grid));
         Assert.All(overlays.Where(overlay => overlay.Kind == OverlayKind.Grid), overlay =>
         {
             Assert.Equal(1, overlay.Width);
@@ -93,7 +93,7 @@ public sealed class MapOverlayTests
     [Fact]
     public void Selection_overlay_geometry_uses_one_tile_box()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         var overlays = MapOverlayGeometry.Build(map, new WorldRenderOptions(), (4, 5));
 
         var selection = Assert.Single(overlays.Where(overlay => overlay.Kind == OverlayKind.Selection));
@@ -106,7 +106,7 @@ public sealed class MapOverlayTests
     [Fact]
     public void Overlay_geometry_respects_the_effective_csm_domain()
     {
-        var map = new WorldMap { CsmMapSize = new CsmMapSize(3, 2, 4, 2) };
+        var map = new WorldSector { CsmSectorSize = new CsmSectorSize(3, 2, 4, 2) };
         map.Blocks[10, 10].Blocked = 0xF;
         var overlays = MapOverlayGeometry.Build(map, new WorldRenderOptions { ShowGrid = true, ShowBlocked = true });
 

@@ -7,9 +7,9 @@ namespace AoProject.WorldEditor.Application;
 /// </summary>
 internal sealed class GlobalWorldSnapshot
 {
-    private readonly IReadOnlyDictionary<short, WorldMapSnapshot> _maps;
+    private readonly IReadOnlyDictionary<short, WorldSectorSnapshot> _maps;
 
-    private GlobalWorldSnapshot(IReadOnlyDictionary<short, WorldMapSnapshot> maps) => _maps = maps;
+    private GlobalWorldSnapshot(IReadOnlyDictionary<short, WorldSectorSnapshot> maps) => _maps = maps;
 
     public int MapCount => _maps.Count;
 
@@ -17,10 +17,10 @@ internal sealed class GlobalWorldSnapshot
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(mapIds);
-        var snapshots = new Dictionary<short, WorldMapSnapshot>();
+        var snapshots = new Dictionary<short, WorldSectorSnapshot>();
         foreach (var mapId in mapIds.Distinct())
             if (world.Maps.TryGetValue(mapId, out var map))
-                snapshots[mapId] = WorldMapSnapshot.Capture(map);
+                snapshots[mapId] = WorldSectorSnapshot.Capture(map);
         return new GlobalWorldSnapshot(snapshots);
     }
 

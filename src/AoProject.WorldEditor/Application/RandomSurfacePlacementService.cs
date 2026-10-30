@@ -6,7 +6,7 @@ internal readonly record struct RandomSurfaceOptions(int Count, int Layer, int G
 
 internal sealed class RandomSurfacePlacementService
 {
-    public int Place(WorldMap map, RandomSurfaceOptions options)
+    public int Place(WorldSector map, RandomSurfaceOptions options)
     {
         ArgumentNullException.ThrowIfNull(map);
         if (options.Count <= 0) return 0;
@@ -14,10 +14,10 @@ internal sealed class RandomSurfacePlacementService
         if (options.Mosaic && (options.MosaicWidth <= 0 || options.MosaicHeight <= 0)) throw new ArgumentOutOfRangeException(nameof(options));
         var random = options.Seed == 0 ? Random.Shared : new Random(options.Seed);
         var placed = 0;
-        var minX = Math.Clamp((int)map.CsmMapSize.XMin, 1, WorldMap.Width);
-        var maxX = Math.Clamp((int)map.CsmMapSize.XMax, 1, WorldMap.Width);
-        var minY = Math.Clamp((int)map.CsmMapSize.YMin, 1, WorldMap.Height);
-        var maxY = Math.Clamp((int)map.CsmMapSize.YMax, 1, WorldMap.Height);
+        var minX = Math.Clamp((int)map.CsmSectorSize.XMin, 1, WorldSector.Width);
+        var maxX = Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width);
+        var minY = Math.Clamp((int)map.CsmSectorSize.YMin, 1, WorldSector.Height);
+        var maxY = Math.Clamp((int)map.CsmSectorSize.YMax, 1, WorldSector.Height);
         if (minX > maxX || minY > maxY) return 0;
         for (var i = 0; i < options.Count; i++)
         {
@@ -31,7 +31,7 @@ internal sealed class RandomSurfacePlacementService
             for (var dx = 0; dx < options.MosaicWidth; dx++)
             {
                 var tx = x + dx; var ty = y + dy;
-                if (tx is < 1 or > WorldMap.Width || ty is < 1 or > WorldMap.Height) continue;
+                if (tx is < 1 or > WorldSector.Width || ty is < 1 or > WorldSector.Height) continue;
                 Set(map, tx, ty, options.Layer, options.GraphicIndex + dy * options.MosaicWidth + dx, options.Blocked);
                 placed++;
             }
@@ -40,7 +40,7 @@ internal sealed class RandomSurfacePlacementService
         return placed;
     }
 
-    private static void Set(WorldMap map, int x, int y, int layer, int graphic, bool blocked)
+    private static void Set(WorldSector map, int x, int y, int layer, int graphic, bool blocked)
     {
         map.Blocks[x, y].Graphics[layer].GraphicIndex = graphic;
         map.Blocks[x, y].Blocked = blocked ? (byte)0xF : (byte)0;

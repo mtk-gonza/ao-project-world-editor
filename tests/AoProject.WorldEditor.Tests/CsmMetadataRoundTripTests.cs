@@ -9,7 +9,7 @@ public sealed class CsmMetadataRoundTripTests
     [Fact]
     public void Save_writes_light_then_particle_counts_but_particle_then_light_payload()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[2, 3].Light.Range = 120;
         map.Blocks[2, 3].Light.Color = 0x112233;
         map.Blocks[4, 5].ParticleIndex = 7;
@@ -17,7 +17,7 @@ public sealed class CsmMetadataRoundTripTests
 
         try
         {
-            var service = new CsmMapFileService();
+            var service = new SectorCsmFileService();
             service.Save(map, path);
             var bytes = File.ReadAllBytes(path);
             using var reader = new BinaryReader(new MemoryStream(bytes));
@@ -40,9 +40,9 @@ public sealed class CsmMetadataRoundTripTests
         var path = Path.Combine(Path.GetTempPath(), $"ao-world-editor-{Guid.NewGuid():N}.csm");
         try
         {
-            var source = new WorldMap
+            var source = new WorldSector
             {
-                CsmMapSize = new CsmMapSize(99, 2, 98, 3)
+                CsmSectorSize = new CsmSectorSize(99, 2, 98, 3)
             };
             source.Info.Name = "mapa";
             source.Info.Backup = 1;
@@ -66,11 +66,11 @@ public sealed class CsmMetadataRoundTripTests
             source.Blocks[9, 10].Light.Range = 105;
             source.Blocks[9, 10].Light.Color = 0x000000FF;
 
-            var service = new CsmMapFileService();
+            var service = new SectorCsmFileService();
             service.Save(source, path);
             var loaded = service.Load(path);
 
-            Assert.Equal(source.CsmMapSize, loaded.CsmMapSize);
+            Assert.Equal(source.CsmSectorSize, loaded.CsmSectorSize);
             Assert.Equal(source.Info.Name, loaded.Info.Name);
             Assert.Equal(source.Info.MusicNumberHigh, loaded.Info.MusicNumberHigh);
             Assert.Equal(source.Info.MusicNumberLow, loaded.Info.MusicNumberLow);
@@ -100,12 +100,12 @@ public sealed class CsmMetadataRoundTripTests
         var path = Path.Combine(Path.GetTempPath(), $"ao-empty-size-{Guid.NewGuid():N}.csm");
         try
         {
-            var map = new WorldMap { CsmMapSize = new CsmMapSize(0, 0, 0, 0) };
-            new CsmMapFileService().Save(map, path);
+            var map = new WorldSector { CsmSectorSize = new CsmSectorSize(0, 0, 0, 0) };
+            new SectorCsmFileService().Save(map, path);
 
-            var loaded = new CsmMapFileService().Load(path);
+            var loaded = new SectorCsmFileService().Load(path);
 
-            Assert.Equal(CsmMapSize.Default, loaded.CsmMapSize);
+            Assert.Equal(CsmSectorSize.Default, loaded.CsmSectorSize);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

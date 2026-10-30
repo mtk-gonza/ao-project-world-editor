@@ -32,7 +32,7 @@ public sealed class RenderPipelineRealityTests
         var mapPath = Path.Combine(root, "Mapas", "mapa1.csm");
         if (!File.Exists(mapPath)) return;
 
-        var map = new CsmMapFileService().Load(mapPath);
+        var map = new SectorCsmFileService().Load(mapPath);
         for (var y = 41; y <= 44; y++)
         {
             var filled = Enumerable.Range(1, 100).Count(x => map.Blocks[x, y].Graphics[0].GraphicIndex != 0);
@@ -51,7 +51,7 @@ public sealed class RenderPipelineRealityTests
         if (!File.Exists(mapPath)) return;
 
         var catalog = WorldEditorResourceCatalog.Load(root);
-        var map = new CsmMapFileService().Load(mapPath);
+        var map = new SectorCsmFileService().Load(mapPath);
         var characters = new CharacterListService();
         var created = characters.RefreshAll(map, catalog.Npcs);
         var sprites = new CharacterRenderService().Render(characters.Characters, catalog.Bodies, catalog.Heads);
@@ -68,7 +68,7 @@ public sealed class RenderPipelineRealityTests
     [Fact]
     public void Overlay_kinds_are_marked_and_separate_from_tiles()
     {
-        var map = new WorldMap();
+        var map = new WorldSector();
         map.Blocks[5, 5].Graphics[0].GraphicIndex = 10;
         map.Blocks[5, 5].NpcIndex = 1;
         var overlays = MapOverlayGeometry.Build(map, new WorldRenderOptions { ShowNpcs = false });

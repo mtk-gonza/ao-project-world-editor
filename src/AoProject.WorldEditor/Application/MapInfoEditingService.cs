@@ -2,7 +2,7 @@ using AoProject.WorldEditor.Domain;
 
 namespace AoProject.WorldEditor.Application;
 
-internal readonly record struct MapInfoValues(
+internal readonly record struct SectorInfoValues(
     string Name,
     string Music,
     short MapVersion,
@@ -19,7 +19,7 @@ internal readonly record struct MapInfoValues(
 
 internal sealed class MapInfoEditingService
 {
-    public void Apply(WorldMap map, MapInfoValues values)
+    public void Apply(WorldSector map, SectorInfoValues values)
     {
         ArgumentNullException.ThrowIfNull(map);
         map.Info.Name = values.Name.Trim();

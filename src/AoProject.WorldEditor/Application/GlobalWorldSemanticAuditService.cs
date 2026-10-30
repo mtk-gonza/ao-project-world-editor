@@ -6,7 +6,7 @@ namespace AoProject.WorldEditor.Application;
 internal sealed record GlobalSemanticAuditIssue(
     string Code,
     AuditSeverity Severity,
-    short MapId,
+    short SectorId,
     int LocalX,
     int LocalY,
     int GlobalX,
@@ -38,38 +38,38 @@ internal sealed class GlobalWorldSemanticAuditService
         var byChunk = placements.GroupBy(item => item.Chunk).ToDictionary(group => group.Key, group => group.ToList());
         var minChunkX = placements.Count == 0 ? 0 : placements.Min(item => item.Chunk.X);
         var minChunkY = placements.Count == 0 ? 0 : placements.Min(item => item.Chunk.Y);
-        var occupied = new Dictionary<(int X, int Y), (short MapId, int LocalX, int LocalY)>();
+        var occupied = new Dictionary<(int X, int Y), (short SectorId, int LocalX, int LocalY)>();
 
         if (placements.Count == 0)
             Add(issues, "WORLD-EMPTY", AuditSeverity.Error, 0, 0, 0, 0, 0, "El ensamblado no contiene sectores.");
-        if (placements.Select(item => item.MapId).Distinct().Count() != placements.Count)
+        if (placements.Select(item => item.SectorId).Distinct().Count() != placements.Count)
             Add(issues, "WORLD-DUPLICATE-MAP", AuditSeverity.Error, 0, 0, 0, 0, 0, "Hay mapId duplicados en los placements.");
         if (byChunk.Any(pair => pair.Value.Count > 1))
             Add(issues, "WORLD-DUPLICATE-CHUNK", AuditSeverity.Error, 0, 0, 0, 0, 0, "Hay más de un mapa en el mismo chunk global.");
 
         foreach (var placement in placements)
         {
-            if (!world.Maps.TryGetValue(placement.MapId, out var map))
+            if (!world.Maps.TryGetValue(placement.SectorId, out var map))
             {
-                Add(issues, "WORLD-MISSING-MAP", AuditSeverity.Error, placement.MapId, 0, 0, 0, 0, "El placement no tiene mapa materializado.");
+                Add(issues, "WORLD-MISSING-MAP", AuditSeverity.Error, placement.SectorId, 0, 0, 0, 0, "El placement no tiene mapa materializado.");
                 continue;
             }
-            if (!map.CsmMapSize.IsValid)
-                Add(issues, "WORLD-BOUNDS", AuditSeverity.Error, placement.MapId, 0, 0, 0, 0, "CsmMapSize inválido.");
-            AuditMetadata(placement.MapId, map, issues);
+            if (!map.CsmSectorSize.IsValid)
+                Add(issues, "WORLD-BOUNDS", AuditSeverity.Error, placement.SectorId, 0, 0, 0, 0, "CsmSectorSize inválido.");
+            AuditMetadata(placement.SectorId, map, issues);
 
             var hasWest = byChunk.ContainsKey(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
             var hasNorth = byChunk.ContainsKey(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
-            for (var localY = 1; localY <= WorldMap.Height; localY++)
-            for (var localX = 1; localX <= WorldMap.Width; localX++)
+            for (var localY = 1; localY <= WorldSector.Height; localY++)
+            for (var localX = 1; localX <= WorldSector.Width; localX++)
             {
                 if (!GlobalChunkGeometry.IsCoreTile(localX, localY, hasWest, hasNorth)) continue;
                 var global = world.GlobalTileForPlacement(placement, localX, localY, minChunkX, minChunkY);
                 var globalX = global.X;
                 var globalY = global.Y;
-                if (!occupied.TryAdd((globalX, globalY), (placement.MapId, localX, localY)))
-                    Add(issues, "WORLD-OVERLAP", AuditSeverity.Error, placement.MapId, localX, localY, globalX, globalY, "Dos mapas ocupan la misma coordenada global.");
-                AuditBlock(world, catalog, placement.MapId, map, localX, localY, globalX, globalY, issues);
+                if (!occupied.TryAdd((globalX, globalY), (placement.SectorId, localX, localY)))
+                    Add(issues, "WORLD-OVERLAP", AuditSeverity.Error, placement.SectorId, localX, localY, globalX, globalY, "Dos mapas ocupan la misma coordenada global.");
+                AuditBlock(world, catalog, placement.SectorId, map, localX, localY, globalX, globalY, issues);
             }
         }
 
@@ -77,7 +77,7 @@ internal sealed class GlobalWorldSemanticAuditService
             AuditExits(world, placement, minChunkX, minChunkY, occupied, issues);
 
         foreach (var layoutIssue in new GlobalWorldLayoutValidator().Validate(world.Assembly, world.Maps, world.RootMap))
-            Add(issues, "WORLD-LAYOUT", AuditSeverity.Error, layoutIssue.MapId, 0, 0, 0, 0, layoutIssue.Message);
+            Add(issues, "WORLD-LAYOUT", AuditSeverity.Error, layoutIssue.SectorId, 0, 0, 0, 0, layoutIssue.Message);
 
         if (!string.IsNullOrWhiteSpace(globalCsmPath))
             AuditResolvedSnapshot(globalCsmPath, globalInfPath, world, placements, minChunkX, minChunkY, occupied, issues);
@@ -86,8 +86,8 @@ internal sealed class GlobalWorldSemanticAuditService
     }
 
     private static void AuditResolvedSnapshot(string csmPath, string? infPath, GlobalWorldDocument world,
-        IReadOnlyList<GlobalMapPlacement> placements, int minChunkX, int minChunkY,
-        IReadOnlyDictionary<(int X, int Y), (short MapId, int LocalX, int LocalY)> occupied,
+        IReadOnlyList<GlobalSectorPlacement> placements, int minChunkX, int minChunkY,
+        IReadOnlyDictionary<(int X, int Y), (short SectorId, int LocalX, int LocalY)> occupied,
         List<GlobalSemanticAuditIssue> issues)
     {
         if (!GlobalCsmArchiveService.TryReadInfEntry(csmPath, "__global_resolved_world.bin", out var payload, infPath))
@@ -103,18 +103,18 @@ internal sealed class GlobalWorldSemanticAuditService
             return;
         }
 
-        var expectedWidth = world.Assembly.Width * GlobalChunkGeometry.WidthTiles + WorldMap.Width;
-        var expectedHeight = world.Assembly.Height * GlobalChunkGeometry.HeightTiles + WorldMap.Height;
+        var expectedWidth = world.Assembly.Width * GlobalChunkGeometry.WidthTiles + WorldSector.Width;
+        var expectedHeight = world.Assembly.Height * GlobalChunkGeometry.HeightTiles + WorldSector.Height;
         if (snapshot.Width != expectedWidth || snapshot.Height != expectedHeight)
             Add(issues, "SNAPSHOT-DIMENSIONS", AuditSeverity.Error, 0, 0, 0, 0, 0,
                 $"Dimensiones {snapshot.Width}x{snapshot.Height} != esperado {expectedWidth}x{expectedHeight}.");
 
-        var placementByMap = placements.ToDictionary(item => item.MapId);
-        var expected = new Dictionary<(int X, int Y), (short MapId, int LocalX, int LocalY, MapBlock Block)>();
+        var placementByMap = placements.ToDictionary(item => item.SectorId);
+        var expected = new Dictionary<(int X, int Y), (short SectorId, int LocalX, int LocalY, SectorTile Block)>();
         foreach (var tile in occupied)
         {
-            if (!world.Maps.TryGetValue(tile.Value.MapId, out var map)) continue;
-            expected[tile.Key] = (tile.Value.MapId, tile.Value.LocalX, tile.Value.LocalY, map.Blocks[tile.Value.LocalX, tile.Value.LocalY]);
+            if (!world.Maps.TryGetValue(tile.Value.SectorId, out var map)) continue;
+            expected[tile.Key] = (tile.Value.SectorId, tile.Value.LocalX, tile.Value.LocalY, map.Blocks[tile.Value.LocalX, tile.Value.LocalY]);
         }
         var actual = new Dictionary<(int X, int Y), GlobalResolvedWorldSnapshot.ResolvedTile>();
         foreach (var tile in snapshot.Tiles)
@@ -131,7 +131,7 @@ internal sealed class GlobalWorldSemanticAuditService
         {
             if (!actual.TryGetValue(pair.Key, out var tile))
             {
-                Add(issues, "SNAPSHOT-MISSING-TILE", AuditSeverity.Error, pair.Value.MapId, pair.Value.LocalX, pair.Value.LocalY,
+                Add(issues, "SNAPSHOT-MISSING-TILE", AuditSeverity.Error, pair.Value.SectorId, pair.Value.LocalX, pair.Value.LocalY,
                     pair.Key.X, pair.Key.Y, "Falta el tile en el snapshot resuelto.");
                 continue;
             }
@@ -140,14 +140,14 @@ internal sealed class GlobalWorldSemanticAuditService
     }
 
     private static void CompareResolvedTile(GlobalWorldDocument world, int globalX, int globalY,
-        (short MapId, int LocalX, int LocalY, MapBlock Block) expected,
+        (short SectorId, int LocalX, int LocalY, SectorTile Block) expected,
         GlobalResolvedWorldSnapshot.ResolvedTile actual,
-        IReadOnlyDictionary<short, GlobalMapPlacement> placements, int minChunkX, int minChunkY,
+        IReadOnlyDictionary<short, GlobalSectorPlacement> placements, int minChunkX, int minChunkY,
         List<GlobalSemanticAuditIssue> issues)
     {
         var block = expected.Block;
         void Mismatch(string field, object source, object output) => Add(issues, "SNAPSHOT-MISMATCH", AuditSeverity.Error,
-            expected.MapId, expected.LocalX, expected.LocalY, globalX, globalY, $"{field}: fuente={source}, snapshot={output}.");
+            expected.SectorId, expected.LocalX, expected.LocalY, globalX, globalY, $"{field}: fuente={source}, snapshot={output}.");
         if (block.Blocked != actual.Blocked) Mismatch("Blocked", block.Blocked, actual.Blocked);
         if (block.Trigger != actual.Trigger) Mismatch("Trigger", block.Trigger, actual.Trigger);
         if (block.CharacterIndex != actual.CharacterIndex) Mismatch("CharacterIndex", block.CharacterIndex, actual.CharacterIndex);
@@ -196,7 +196,7 @@ internal sealed class GlobalWorldSemanticAuditService
     }
 
     private static void AuditBlock(GlobalWorldDocument world, WorldEditorResourceCatalog? catalog, short mapId,
-        WorldMap map, int x, int y, int globalX, int globalY, List<GlobalSemanticAuditIssue> issues)
+        WorldSector map, int x, int y, int globalX, int globalY, List<GlobalSemanticAuditIssue> issues)
     {
         var block = map.Blocks[x, y];
         if (!BlockedMask.IsValid(block.Blocked))
@@ -228,7 +228,7 @@ internal sealed class GlobalWorldSemanticAuditService
         }
     }
 
-    private static void AuditMetadata(short mapId, WorldMap map, List<GlobalSemanticAuditIssue> issues)
+    private static void AuditMetadata(short mapId, WorldSector map, List<GlobalSemanticAuditIssue> issues)
     {
         var info = map.Info;
         if (info.MusicNumberHigh < 0 || info.MusicNumberLow < 0)
@@ -256,12 +256,12 @@ internal sealed class GlobalWorldSemanticAuditService
             Add(issues, "META-LIGHT", AuditSeverity.Warning, mapId, 0, 0, 0, 0, $"Luz ambiental fuera de rango: {map.Environment.BaseLight}.");
     }
 
-    private static void AuditExits(GlobalWorldDocument world, GlobalMapPlacement placement, int minChunkX, int minChunkY,
-        IReadOnlyDictionary<(int X, int Y), (short MapId, int LocalX, int LocalY)> occupied, List<GlobalSemanticAuditIssue> issues)
+    private static void AuditExits(GlobalWorldDocument world, GlobalSectorPlacement placement, int minChunkX, int minChunkY,
+        IReadOnlyDictionary<(int X, int Y), (short SectorId, int LocalX, int LocalY)> occupied, List<GlobalSemanticAuditIssue> issues)
     {
-        if (!world.Maps.TryGetValue(placement.MapId, out var map)) return;
-        for (var y = 1; y <= WorldMap.Height; y++)
-        for (var x = 1; x <= WorldMap.Width; x++)
+        if (!world.Maps.TryGetValue(placement.SectorId, out var map)) return;
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
         {
             var exit = map.Blocks[x, y].TileExit;
             var sourceGlobal = world.GlobalTileForPlacement(placement, x, y, minChunkX, minChunkY);
@@ -270,25 +270,25 @@ internal sealed class GlobalWorldSemanticAuditService
             if (exit.Map == 0)
             {
                 if (exit.X != 0 || exit.Y != 0)
-                    Add(issues, "EXIT-DANGLING", AuditSeverity.Warning, placement.MapId, x, y, sourceGlobalX, sourceGlobalY, "Salida sin mapa con coordenadas residuales.");
+                    Add(issues, "EXIT-DANGLING", AuditSeverity.Warning, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, "Salida sin mapa con coordenadas residuales.");
                 continue;
             }
-            if (exit.X is < 1 or > WorldMap.Width || exit.Y is < 1 or > WorldMap.Height)
+            if (exit.X is < 1 or > WorldSector.Width || exit.Y is < 1 or > WorldSector.Height)
             {
-                Add(issues, "EXIT-LOCAL-RANGE", AuditSeverity.Error, placement.MapId, x, y, sourceGlobalX, sourceGlobalY, $"Destino fuera de rango: {exit.Map},{exit.X},{exit.Y}.");
+                Add(issues, "EXIT-LOCAL-RANGE", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"Destino fuera de rango: {exit.Map},{exit.X},{exit.Y}.");
                 continue;
             }
-            if (!world.Assembly.Placements.FirstOrDefault(item => item.MapId == exit.Map).Equals(default(GlobalMapPlacement)))
+            if (!world.Assembly.Placements.FirstOrDefault(item => item.SectorId == exit.Map).Equals(default(GlobalSectorPlacement)))
             {
-                var target = world.Assembly.Placements.First(item => item.MapId == exit.Map);
+                var target = world.Assembly.Placements.First(item => item.SectorId == exit.Map);
                 var targetGlobal = world.GlobalTileForPlacement(target, exit.X, exit.Y, minChunkX, minChunkY);
                 var globalX = targetGlobal.X;
                 var globalY = targetGlobal.Y;
                 if (!occupied.ContainsKey((globalX, globalY)))
-                    Add(issues, "EXIT-GLOBAL-TARGET", AuditSeverity.Error, placement.MapId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta a una coordenada global no ocupada: destino={globalX},{globalY}.");
+                    Add(issues, "EXIT-GLOBAL-TARGET", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta a una coordenada global no ocupada: destino={globalX},{globalY}.");
             }
             else if (exit.Map > 0)
-                Add(issues, "EXIT-MISSING-MAP", AuditSeverity.Error, placement.MapId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta al mapa inexistente {exit.Map}.");
+                Add(issues, "EXIT-MISSING-MAP", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta al mapa inexistente {exit.Map}.");
         }
     }
 

@@ -12,7 +12,7 @@ internal sealed class WorldLayoutAuditService
     // projections of the same data, not a bug.
     public string Export(
         IReadOnlyList<MapsWorldDataService.WorldLayout> layouts,
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         IReadOnlyList<GraphicData> graphics,
         string directory)
     {
@@ -27,20 +27,20 @@ internal sealed class WorldLayoutAuditService
         var exported = 0;
         foreach (var layout in layouts)
         {
-            using var image = new Bitmap(layout.Width * WorldMap.Width, layout.Height * WorldMap.Height,
+            using var image = new Bitmap(layout.Width * WorldSector.Width, layout.Height * WorldSector.Height,
                 PixelFormat.Format32bppArgb);
             using var canvas = Graphics.FromImage(image);
             canvas.Clear(Color.Black);
             var missing = new List<string>();
             var empty = 0;
-            for (var index = 0; index < layout.MapIds.Count; index++)
+            for (var index = 0; index < layout.SectorIds.Count; index++)
             {
-                var mapId = layout.MapIds[index];
+                var mapId = layout.SectorIds[index];
                 if (mapId <= 0) { empty++; continue; }
                 if (!maps.TryGetValue(mapId, out var map)) { missing.Add(mapId.ToString()); continue; }
                 using var mini = service.Create(map, graphics, auditOptions);
-                canvas.DrawImageUnscaled(mini, (index % layout.Width) * WorldMap.Width,
-                    (index / layout.Width) * WorldMap.Height);
+                canvas.DrawImageUnscaled(mini, (index % layout.Width) * WorldSector.Width,
+                    (index / layout.Width) * WorldSector.Height);
             }
             image.Save(Path.Combine(directory, $"worldmap{layout.WorldId}-audit.png"), ImageFormat.Png);
             report.AppendLine($"WORLDMAP{layout.WorldId}: {layout.Width}x{layout.Height}; " +

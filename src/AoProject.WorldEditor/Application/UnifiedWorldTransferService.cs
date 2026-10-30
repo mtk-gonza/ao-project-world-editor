@@ -15,12 +15,12 @@ internal sealed record UnifiedWorldResolvedTransfer(
     UnifiedWorldTransferKind Kind,
     UnifiedWorldPosition Source,
     UnifiedWorldPosition? Target,
-    short ExternalMapId,
+    short ExternalSectorId,
     short ExternalX,
     short ExternalY,
     int ExternalZ);
 
-/// <summary>Runtime-facing resolver for global transfers, independent of legacy MapId coordinates.</summary>
+/// <summary>Runtime-facing resolver for global transfers, independent of legacy SectorId coordinates.</summary>
 internal sealed class UnifiedWorldTransferService
 {
     public UnifiedWorldResolvedTransfer? Resolve(UnifiedWorldBundle bundle, UnifiedWorldPosition source)
@@ -43,6 +43,6 @@ internal sealed class UnifiedWorldTransferService
             ? new UnifiedWorldPosition(exit.TargetX, exit.TargetY, exit.TargetZ)
             : null;
         return new UnifiedWorldResolvedTransfer(kind, source, target,
-            exit.ExternalMapId, exit.ExternalX, exit.ExternalY, exit.ExternalZ);
+            exit.ExternalSectorId, exit.ExternalX, exit.ExternalY, exit.ExternalZ);
     }
 }

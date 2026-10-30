@@ -12,13 +12,14 @@ internal sealed class GlobalWorldDocument
     private IReadOnlyDictionary<GlobalChunkCoordinate, int>? _stitchRows;
     public GlobalWorldDocument(
         GlobalWorldAssembly assembly,
-        IReadOnlyDictionary<short, WorldMap> maps,
+        IReadOnlyDictionary<short, WorldSector> maps,
         IReadOnlyDictionary<short, string> paths,
         short rootMap)
     {
         Assembly = assembly;
         Maps = maps;
         Paths = paths;
+        SourcePaths = paths;
         RootMap = rootMap;
         _pinnedMaps.Add(rootMap);
     }
@@ -27,18 +28,21 @@ internal sealed class GlobalWorldDocument
         GlobalWorldAssembly assembly,
         IReadOnlyDictionary<short, string> paths,
         short rootMap,
-        Func<short, string, WorldMap> loader)
+        Func<short, string, WorldSector> loader)
     {
         Assembly = assembly;
         Paths = paths;
+        SourcePaths = paths;
         RootMap = rootMap;
         _pinnedMaps.Add(rootMap);
-        Maps = new LazyWorldMapCatalog(paths, loader);
+        Maps = new LazyWorldSectorCatalog(paths, loader);
     }
 
     public GlobalWorldAssembly Assembly { get; private set; }
-    public IReadOnlyDictionary<short, WorldMap> Maps { get; }
+    public IReadOnlyDictionary<short, WorldSector> Maps { get; }
     public IReadOnlyDictionary<short, string> Paths { get; }
+    /// <summary>All discovered source payloads, including invalid/empty inputs preserved for audit.</summary>
+    public IReadOnlyDictionary<short, string> SourcePaths { get; set; }
     public short RootMap { get; private set; }
     public IReadOnlyList<MapsWorldDataService.WorldLayout> WorldLayouts { get; set; } = [];
     public IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> FloorAssemblies { get; set; } = [];
@@ -61,17 +65,17 @@ internal sealed class GlobalWorldDocument
         }
     }
 
-    public int LoadedMapCount => Maps is LazyWorldMapCatalog lazy ? lazy.LoadedCount : Maps.Count;
+    public int LoadedMapCount => Maps is LazyWorldSectorCatalog lazy ? lazy.LoadedCount : Maps.Count;
 
     public void TrimLoadedMaps(IEnumerable<short> keepIds)
     {
         if (KeepAllLoaded) return;
-        if (Maps is LazyWorldMapCatalog lazy) lazy.Trim(keepIds.Concat(_pinnedMaps));
+        if (Maps is LazyWorldSectorCatalog lazy) lazy.Trim(keepIds.Concat(_pinnedMaps));
     }
 
     public void MarkMapUnavailable(short mapId)
     {
-        if (Maps is LazyWorldMapCatalog lazy) lazy.MarkUnavailable(mapId);
+        if (Maps is LazyWorldSectorCatalog lazy) lazy.MarkUnavailable(mapId);
     }
 
     public void PinMap(short mapId) => _pinnedMaps.Add(mapId);
@@ -79,7 +83,7 @@ internal sealed class GlobalWorldDocument
     /// <summary>
     /// Keeps only the root and the map being edited. Pinning every map that was
     /// ever clicked would defeat the lazy cache when panning across the world.
-    /// Changed maps are kept by <see cref="LazyWorldMapCatalog.Trim"/> anyway.
+    /// Changed maps are kept by <see cref="LazyWorldSectorCatalog.Trim"/> anyway.
     /// </summary>
     public void SetActiveMap(short mapId)
     {
@@ -92,28 +96,28 @@ internal sealed class GlobalWorldDocument
     /// Maps currently materialized in memory. Used by save/undo paths so they
     /// never force a full-world load just to inspect <c>Changed</c>.
     /// </summary>
-    public IEnumerable<(short MapId, WorldMap Map)> LoadedMaps =>
-        Maps is LazyWorldMapCatalog lazy
+    public IEnumerable<(short SectorId, WorldSector Map)> LoadedMaps =>
+        Maps is LazyWorldSectorCatalog lazy
             ? lazy.LoadedEntries
             : Maps.Select(item => (item.Key, item.Value));
 
     /// <summary>Distinct maps touched by a global rectangle.</summary>
-    public IReadOnlyCollection<short> CollectMapIds(GlobalTileSelection selection)
+    public IReadOnlyCollection<short> CollectSectorIds(GlobalTileSelection selection)
     {
         var normalized = selection.Normalize();
-        return CollectMapIds(normalized.StartX, normalized.StartY, normalized.EndX, normalized.EndY);
+        return CollectSectorIds(normalized.StartX, normalized.StartY, normalized.EndX, normalized.EndY);
     }
 
-    public IReadOnlyCollection<short> CollectMapIds(int startX, int startY, int endX, int endY)
+    public IReadOnlyCollection<short> CollectSectorIds(int startX, int startY, int endX, int endY)
     {
         var chunks = Assembly.Placements.Select(item => item.Chunk).ToHashSet();
         var ids = new HashSet<short>();
         foreach (var placement in Assembly.Placements)
         {
-            if (!Maps.ContainsKey(placement.MapId)) continue;
+            if (!Maps.ContainsKey(placement.SectorId)) continue;
             var (left, top, right, bottom) = GlobalBounds(placement, chunks);
             if (endX < left || startX > right || endY < top || startY > bottom) continue;
-            ids.Add(placement.MapId);
+            ids.Add(placement.SectorId);
         }
         return ids;
     }
@@ -124,10 +128,10 @@ internal sealed class GlobalWorldDocument
         var chunks = Assembly.Placements.Select(item => item.Chunk).ToHashSet();
         foreach (var placement in Assembly.Placements)
         {
-            if (!Maps.ContainsKey(placement.MapId)) continue;
+            if (!Maps.ContainsKey(placement.SectorId)) continue;
             var (left, top, right, bottom) = GlobalBounds(placement, chunks);
             if (globalX < left || globalX > right || globalY < top || globalY > bottom) continue;
-            location = new GlobalTileLocation(placement.MapId,
+            location = new GlobalTileLocation(placement.SectorId,
                 globalX - placement.Chunk.X * GlobalChunkGeometry.WidthTiles + shifts.Columns.GetValueOrDefault(placement.Chunk) + 1,
                 globalY - placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + shifts.Rows.GetValueOrDefault(placement.Chunk) + 1);
             return true;
@@ -168,7 +172,7 @@ internal sealed class GlobalWorldDocument
     }
 
     private (int Left, int Top, int Right, int Bottom) GlobalBounds(
-        GlobalMapPlacement placement, HashSet<GlobalChunkCoordinate> chunks)
+        GlobalSectorPlacement placement, HashSet<GlobalChunkCoordinate> chunks)
     {
         var shifts = EnsureStitching();
         var shiftX = shifts.Columns.GetValueOrDefault(placement.Chunk);
@@ -188,9 +192,9 @@ internal sealed class GlobalWorldDocument
 
     public bool TryGetGlobalTile(short mapId, int localX, int localY, out (int X, int Y) global)
     {
-        var placement = Assembly.Placements.FirstOrDefault(item => item.MapId == mapId);
-        if (placement.MapId != mapId || !Maps.ContainsKey(mapId) ||
-            localX is < 1 or > WorldMap.Width || localY is < 1 or > WorldMap.Height)
+        var placement = Assembly.Placements.FirstOrDefault(item => item.SectorId == mapId);
+        if (placement.SectorId != mapId || !Maps.ContainsKey(mapId) ||
+            localX is < 1 or > WorldSector.Width || localY is < 1 or > WorldSector.Height)
         {
             global = default;
             return false;
@@ -210,7 +214,7 @@ internal sealed class GlobalWorldDocument
         // Guarantee the round trip: hidden border tiles belong to the neighbour
         // and must not be reported as this map.
         if (!TryResolve(globalX, globalY, out var resolved) ||
-            resolved.MapId != mapId || resolved.LocalX != localX || resolved.LocalY != localY)
+            resolved.SectorId != mapId || resolved.LocalX != localX || resolved.LocalY != localY)
         {
             global = default;
             return false;
@@ -219,7 +223,7 @@ internal sealed class GlobalWorldDocument
         return true;
     }
 
-    public (int X, int Y) GlobalTileForPlacement(GlobalMapPlacement placement,
+    public (int X, int Y) GlobalTileForPlacement(GlobalSectorPlacement placement,
         int localX, int localY, int minChunkX = 0, int minChunkY = 0)
     {
         var shifts = EnsureStitching();
@@ -246,7 +250,7 @@ internal sealed class GlobalWorldDocument
             var stitcher = new WorldBorderStitcher(Assembly.Placements, mapId =>
             {
                 if (!Paths.TryGetValue(mapId, out var path)) return null;
-                try { return WorldBorderStitcher.Sample(new CsmMapFileService().Load(path, mapId)); }
+                try { return WorldBorderStitcher.Sample(new SectorCsmFileService().Load(path, mapId)); }
                 catch { return null; }
             });
             var result = stitcher.ForAll(Assembly.Placements.Select(item => item.Chunk));
@@ -257,39 +261,39 @@ internal sealed class GlobalWorldDocument
     }
 }
 
-internal sealed class LazyWorldMapCatalog : IReadOnlyDictionary<short, WorldMap>
+internal sealed class LazyWorldSectorCatalog : IReadOnlyDictionary<short, WorldSector>
 {
     private readonly object _sync = new();
     private readonly IReadOnlyDictionary<short, string> _paths;
-    private readonly Func<short, string, WorldMap> _loader;
-    private readonly Dictionary<short, WorldMap> _cache = [];
+    private readonly Func<short, string, WorldSector> _loader;
+    private readonly Dictionary<short, WorldSector> _cache = [];
     private readonly HashSet<short> _unavailable = [];
 
-    public LazyWorldMapCatalog(IReadOnlyDictionary<short, string> paths, Func<short, string, WorldMap> loader)
+    public LazyWorldSectorCatalog(IReadOnlyDictionary<short, string> paths, Func<short, string, WorldSector> loader)
     {
         _paths = paths; _loader = loader;
     }
 
-    public LazyWorldMapCatalog(IReadOnlyDictionary<short, string> paths, Func<string, WorldMap> loader)
+    public LazyWorldSectorCatalog(IReadOnlyDictionary<short, string> paths, Func<string, WorldSector> loader)
         : this(paths, (_, path) => loader(path)) { }
 
-    public WorldMap this[short key] => Get(key);
+    public WorldSector this[short key] => Get(key);
     public IEnumerable<short> Keys => _paths.Keys;
-    public IEnumerable<WorldMap> Values => _paths.Keys.Select(Get);
+    public IEnumerable<WorldSector> Values => _paths.Keys.Select(Get);
     public int Count => _paths.Count;
     public int LoadedCount { get { lock (_sync) return _cache.Count; } }
-    public IEnumerable<(short MapId, WorldMap Map)> LoadedEntries
+    public IEnumerable<(short SectorId, WorldSector Map)> LoadedEntries
     {
         get { lock (_sync) return _cache.Select(pair => (pair.Key, pair.Value)).ToArray(); }
     }
     public bool ContainsKey(short key) => _paths.ContainsKey(key) && !_unavailable.Contains(key);
-    public bool TryGetValue(short key, out WorldMap value)
+    public bool TryGetValue(short key, out WorldSector value)
     {
         if (!_paths.ContainsKey(key) || _unavailable.Contains(key)) { value = null!; return false; }
         value = Get(key); return true;
     }
-    public IEnumerator<KeyValuePair<short, WorldMap>> GetEnumerator() =>
-        _paths.Keys.Select(key => new KeyValuePair<short, WorldMap>(key, Get(key))).GetEnumerator();
+    public IEnumerator<KeyValuePair<short, WorldSector>> GetEnumerator() =>
+        _paths.Keys.Select(key => new KeyValuePair<short, WorldSector>(key, Get(key))).GetEnumerator();
     System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 
     public void Trim(IEnumerable<short> keepIds)
@@ -312,7 +316,7 @@ internal sealed class LazyWorldMapCatalog : IReadOnlyDictionary<short, WorldMap>
         }
     }
 
-    private WorldMap Get(short key)
+    private WorldSector Get(short key)
     {
         lock (_sync)
         {
@@ -326,4 +330,4 @@ internal sealed class LazyWorldMapCatalog : IReadOnlyDictionary<short, WorldMap>
     }
 }
 
-internal readonly record struct GlobalTileLocation(short MapId, int LocalX, int LocalY);
+internal readonly record struct GlobalTileLocation(short SectorId, int LocalX, int LocalY);

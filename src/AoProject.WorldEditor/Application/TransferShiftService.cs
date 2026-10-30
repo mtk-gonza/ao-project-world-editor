@@ -10,7 +10,7 @@ internal readonly record struct TransferShift(
 
 internal sealed class TransferShiftService
 {
-    public int Shift(WorldMap map, TransferShift shift)
+    public int Shift(WorldSector map, TransferShift shift)
     {
         ArgumentNullException.ThrowIfNull(map);
         Validate(shift);
@@ -21,7 +21,7 @@ internal sealed class TransferShiftService
         return moved;
     }
 
-    private static bool Move(WorldMap map, int sourceX, int sourceY, int destinationX, int destinationY, int destinationCoordinate, bool horizontal, ref int moved)
+    private static bool Move(WorldSector map, int sourceX, int sourceY, int destinationX, int destinationY, int destinationCoordinate, bool horizontal, ref int moved)
     {
         var source = map.Blocks[sourceX, sourceY];
         if (source.TileExit.Map == 0) return false;

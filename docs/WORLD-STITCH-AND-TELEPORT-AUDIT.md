@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-10-29  
 **Estado:** pipeline runtime implementado desde los mapas originales; pendiente únicamente la validación visual final
-**Alcance:** WorldEditor, mapas originales VB6, bundle `world.floors`, cliente y servidor
+**Alcance:** WorldEditor, mapas originales VB6, bundle `world`, cliente y servidor
 
 ## 1. Fuentes originales y artefactos generados
 
@@ -25,14 +25,14 @@ La carpeta `reference\Recursos` no debe recibir archivos generados. El archivo a
 El resultado runtime se genera únicamente en:
 
 ```text
-D:\projects\PERSONAL\ao-project\ao-project-resources\world.floors
+D:\projects\PERSONAL\ao-project\ao-project-resources\world
 ```
 
 La asignación de pisos se mantiene en memoria cuando no existe un manifiesto. La asignación efectiva se serializa en `bundle.aog`.
 
 La fuente canonica para regenerar el runtime es `reference\\Recursos\\Mapas`. El
 directorio `ao-project-resources\\world` pertenece al flujo legacy/intermedio y no se
-usa para reconstruir `world.floors`.
+usa para reconstruir `world`.
 
 ## 2. Mapas disponibles
 
@@ -71,7 +71,7 @@ Clasificaciones utilizadas:
 Informe:
 
 ```text
-world.floors\loose-map-teleport-audit.tsv
+world\loose-map-teleport-audit.tsv
 ```
 
 Resultados:
@@ -116,14 +116,17 @@ pisos no se infiere desde ese campo ni desde un JSON: se deriva de los layouts
 oficiales durante la importación (`WORLDMAP1=Z0`, `WORLDMAP2=Z-1`,
 `WORLDMAP3=Z-2`).
 
-Los destinos especiales `Map=-1`, `Map=-2` y los destinos raros `3000..` no son placements normales del assembly. Se conservan como salidas externas con `ExternalZ=-1`.
+Los destinos especiales `Map=-1` y `Map=-2` no son placements normales y se
+conservan como salidas externas dinámicas. Los destinos `3000..3004` tampoco son
+placements, pero se adaptan a coordenadas virtuales del piso `Z=-1` durante la
+compilación.
 
 ## 6. Auditoría de stitching
 
 Informe:
 
 ```text
-world.floors\stitch-audit.tsv
+world\stitch-audit.tsv
 ```
 
 Resultados sobre el assembly normal:
@@ -144,7 +147,7 @@ Los desplazamientos son acumulativos por columna y fila. No se trata de un offse
 Informe:
 
 ```text
-world.floors\stitch-compile-audit.tsv
+world\stitch-compile-audit.tsv
 ```
 
 La simulación aplica los offsets sin modificar los mapas originales ni el bundle runtime.
@@ -163,7 +166,7 @@ Resultados:
 Informe detallado:
 
 ```text
-world.floors\stitch-conflict-audit.tsv
+world\stitch-conflict-audit.tsv
 ```
 
 Distribución de campos en conflicto:
@@ -202,7 +205,7 @@ La política experimental es conservar el placement existente, normalmente el ma
 Resolution=KeepExistingPlacement
 ```
 
-## 8. Bundle v3 y offsets
+## 8. Bundle v5 y offsets
 
 ### 8.1 Contrato único de coordenadas
 
@@ -253,6 +256,12 @@ El tile de origen se ubica globalmente aplicando stitching. En cambio, `External
 
 Para una salida interna hacia un mapa presente en el assembly, el compilador calcula el destino global con el placement del mapa destino. Si ambos mapas están en el mismo piso se clasifica como `Internal`; si el piso cambia se clasifica como `CrossFloor`.
 
+Durante la materializacion final, una salida `Internal` solo se conserva si es un
+portal no adyacente. Las salidas canonicas de union entre sectores vecinos (`88 -> 14`,
+`13 -> 87`, `91 -> 11` y `10 -> 90`) se eliminan del `.gmap`, porque el movimiento
+continua directamente por las coordenadas globales. Tambien se limpia la union de
+wrap horizontal entre los extremos de `WORLDMAP1`.
+
 Para una salida externa, los campos de destino global se mantienen en `(-1,-1)` y la información válida es:
 
 ```text
@@ -272,7 +281,7 @@ Los mapas especiales detectados en los CSM originales son:
 |---:|---:|---|
 | `-1` | 1.184 | Salida externa, `ExternalZ=-1` |
 | `-2` | 2 | Salida externa, `ExternalZ=-1` |
-| `3000..3004` | 10 | Salida externa, `ExternalZ=-1` |
+| `3000..3004` | 10 | Salida virtual `CrossFloor` hacia `Z=-1`, conservando `X/Y` |
 
 Estos valores no representan placements normales del assembly de 418 mapas. Se preservan sin descartarlos porque forman parte de la semántica original del cliente/servidor VB6.
 
@@ -285,11 +294,27 @@ ExternalX/Y:  coordenadas VB6 originales
 ExternalZ:    -1
 ```
 
-Los valores `3000..3004` tampoco se convierten automáticamente en mapas `3000..3004` del mundo compacto: al no existir como placements disponibles, se conservan como identificadores externos. La semántica exacta de esos identificadores aún debe confirmarse en el código VB6 original.
+Los valores `3000..3004` no son mapas disponibles: coinciden con constantes de cuerpos
+(`man_human_naked_body` a `man_dwarf_naked_body`) y el servidor VB6 los rechaza al
+exigir `DestinationMap <= NumMaps`. Como sus coordenadas de destino sí son válidas,
+la generación de `world` los adapta a destinos virtuales del piso `Z=-1`:
+`TargetX = TileExit.X - 1` y `TargetY = TileExit.Y - 1`. No se inventa ningún CSM
+para el destino.
 
-Un `Map=0` se considera ausencia de salida y se descarta. Un mapa positivo que no sea especial y no exista en el conjunto disponible se registra como destino ausente, no como piso negativo.
+Los destinos negativos `-1/-2` no se transforman: en VB6 representan `ReturnPos`,
+una posición dinámica guardada por personaje. Sus `TileExit.X/Y` (`1,1`) no son un
+destino real y deben permanecer como salidas externas dinámicas.
 
-`bundle.aog` versión 3 agrega por placement:
+El mapa fuente `266` tampoco pertenece a los placements oficiales. Sus diez salidas
+se conservan en los datos fuente embebidos, pero el CSM no se agrega como placement
+visible al final del `floor 0`: hacerlo creaba una columna artificial fuera del
+layout oficial y mostraba contenido especial como si fuera superficie jugable.
+
+Un `Map=0` se considera ausencia de salida y se descarta. Un mapa positivo que no
+exista como CSM permanece externo; los CSM positivos existentes sin placement oficial
+se incorporan transitivamente al piso virtual `Z=-3`.
+
+`bundle.aog` version 4 agrega por placement:
 
 ```text
 StitchX
@@ -298,9 +323,9 @@ StitchY
 
 Compatibilidad implementada:
 
-- WorldEditor escribe y lee v2/v3.
-- Cliente acepta v1/v2/v3 y conserva `StitchOffsets`.
-- Servidor acepta v1/v2/v3 y expone `Metadata.StitchOffsets`.
+- WorldEditor escribe y lee v2/v3/v4.
+- Cliente acepta v1/v2/v3/v4 y conserva `StitchOffsets`.
+- Servidor acepta v1/v2/v3/v4 y expone `Metadata.StitchOffsets`.
 - Cliente y servidor aplican offsets en conversiones local/global.
 - El servidor usa offsets en `GlobalCoordinateAdapter`.
 - El cliente usa offsets en `TryToGlobal`, `TryToLegacy` y `ProjectMap`.
@@ -322,7 +347,7 @@ El comando de carga `Cargar mapas originales (/Mapas)...` usa este mismo pipelin
 2. aplica `mapsworlddata.dat` para construir los placements oficiales;
 3. calcula acoples y offsets acumulados;
 4. separa por pisos;
-5. genera `world.floors` en v3;
+5. genera `world` en v4;
 6. abre por defecto el piso `Z=0` en el render del editor.
 
 Se agregó un modo separado para automatización:
@@ -337,8 +362,8 @@ Este modo:
 - ajusta dimensiones del `.gmap`;
 - ajusta destinos internos;
 - conserva el tile existente en conflictos de seam;
-- conserva teleports especiales como salidas externas;
-- genera directamente `ao-project-resources\\world.floors`.
+- conserva `-1/-2` como salidas externas dinámicas y adapta `3000..3004` a `Z=-1`;
+- genera directamente `ao-project-resources\\world`.
 - el editor muestra inicialmente `Z=0` y permite cambiar con Piso anterior/siguiente.
 
 El bundle experimental más reciente se generó correctamente en:
@@ -415,22 +440,25 @@ loose-map-teleport-audit.tsv
 WorldEditor:
 
 ```text
-362/362 pruebas correctas
+368/368 pruebas correctas
 ```
 
 Cliente:
 
 ```text
-784/784 pruebas correctas
+797/797 pruebas correctas
 ```
 
 Servidor:
 
 ```text
-646/646 pruebas correctas
+build correcto; queda 1 fallo preexistente de paridad de PacketId
+(esperado 224, actual 220)
 ```
 
-Las advertencias del servidor son preexistentes; no hubo errores de compilación.
+Las advertencias y el fallo de paridad del servidor son preexistentes; no hubo errores
+de compilacion. El bundle v5 fue cargado estructuralmente por los lectores de cliente
+y servidor, con floors `Z=0,-1,-2,-3`.
 
 ## 13. Estado actual
 
@@ -439,18 +467,17 @@ Completado:
 - auditoría de stitching del assembly;
 - auditoría VB6 de teleports sobre los 843 mapas originales;
 - identificación de destinos `-1`, `-2` y `3000..3004`;
-- preservación de teleports especiales en el compilador;
+- preservación de `-1/-2` como ReturnPos y adaptación de `3000..3004` a `CrossFloor Z=-1`;
 - soporte de offsets v3 en editor, cliente y servidor;
 - modo experimental de compactación física;
 - pruebas de compatibilidad y regresión.
 
 Pendiente antes de producción:
 
-1. Confirmar semántica VB6 exacta de `Map=-1`, `Map=-2` y `3000..3004`.
-2. Resolver si esos destinos deben ser pisos reales `Z=-1` o rutas externas especiales.
-3. Normalizar las salidas especiales sin reservar una banda excesiva.
-4. Cargar el bundle experimental directamente en cliente y servidor en una prueba runtime.
-5. Validar radar, movimiento, round-trip local/global y una unión con offset máximo.
-6. Recién entonces regenerar `ao-project-resources\world.floors` como artefacto definitivo.
+1. Cargar el bundle regenerado directamente en cliente y servidor en una prueba runtime.
+2. Validar radar, movimiento, round-trip local/global y una unión con offset máximo.
+3. Confirmar visualmente que el destino virtual `Z=-1` coincide con la política del
+   cliente/servidor nuevos.
+4. Recién entonces regenerar `ao-project-resources\world` como artefacto definitivo.
 
 No se realizó commit ni push.

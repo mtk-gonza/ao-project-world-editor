@@ -10,9 +10,9 @@ public sealed class LazyWorldMapCatalogTests
     public void Catalog_loads_a_map_only_when_requested()
     {
         var loads = 0;
-        var catalog = new LazyWorldMapCatalog(
+        var catalog = new LazyWorldSectorCatalog(
             new Dictionary<short, string> { [1] = "1.csm", [2] = "2.csm" },
-            _ => { loads++; return new WorldMap(); });
+            _ => { loads++; return new WorldSector(); });
 
         Assert.Equal(0, loads);
         _ = catalog[2];
@@ -24,9 +24,9 @@ public sealed class LazyWorldMapCatalogTests
     [Fact]
     public void Trim_keeps_modified_maps_and_discards_clean_maps()
     {
-        var catalog = new LazyWorldMapCatalog(
+        var catalog = new LazyWorldSectorCatalog(
             new Dictionary<short, string> { [1] = "1.csm", [2] = "2.csm" },
-            _ => new WorldMap());
+            _ => new WorldSector());
         var first = catalog[1];
         var second = catalog[2];
         second.Info.Changed = true;

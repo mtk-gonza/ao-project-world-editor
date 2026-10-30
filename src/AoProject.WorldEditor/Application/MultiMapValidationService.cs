@@ -15,7 +15,7 @@ internal sealed class MultiMapValidationService
         var maps = Directory.EnumerateFiles(directory, "*.csm", SearchOption.TopDirectoryOnly).OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
         foreach (var path in maps)
         {
-            var issues = validator.Validate(new CsmMapFileService().Load(path), objects, npcs);
+            var issues = validator.Validate(new SectorCsmFileService().Load(path), objects, npcs);
             output.AppendLine().AppendLine().Append(Path.GetFileName(path)).Append(" (issues: ").Append(issues.Count).Append(')');
             foreach (var issue in issues) output.Append(issue.X).Append(", ").Append(issue.Y).Append(" :::: ").AppendLine(issue.Message);
         }
