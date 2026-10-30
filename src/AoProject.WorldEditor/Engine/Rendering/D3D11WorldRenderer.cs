@@ -190,6 +190,9 @@ internal sealed class D3D11WorldRenderer : IWorldRenderer
         _vertexBuffer = CreateVertexBuffer(_vertexCapacity);
         _constantBuffer = _device.CreateBuffer(new BufferDescription(
             32, BindFlags.ConstantBuffer, ResourceUsage.Dynamic, CpuAccessFlags.Write));
+        // Keep the legacy renderer's pixel-exact atlas sampling for detail view.
+        // The global overview uses the pre-rendered floor PNG instead of
+        // minifying atlas graphics through this sampler.
         _sampler = _device.CreateSamplerState(SamplerDescription.PointClamp);
         _rasterizer = _device.CreateRasterizerState(new RasterizerDescription
         {

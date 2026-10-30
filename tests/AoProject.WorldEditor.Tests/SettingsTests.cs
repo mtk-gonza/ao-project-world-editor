@@ -19,12 +19,16 @@ public sealed class SettingsTests
             settings.ShowParticles = true;
             settings.ShowLights = true;
             settings.ShowRoofFade = false;
+            settings.ZoomPercent = 175;
+            settings.PaletteTab = 5;
             settings.Save(target);
             var loaded = WorldEditorSettings.Load(target);
             Assert.Equal(settings.MaxGraphics, loaded.MaxGraphics);
             Assert.True(loaded.ShowParticles);
             Assert.True(loaded.ShowLights);
             Assert.False(loaded.ShowRoofFade);
+            Assert.Equal(175, loaded.ZoomPercent);
+            Assert.Equal(5, loaded.PaletteTab);
         }
         finally { File.Delete(target); }
     }

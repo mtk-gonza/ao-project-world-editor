@@ -20,4 +20,15 @@ public sealed class BlockPlacementTests
         Assert.Equal(502, map.Blocks[10, 21].Graphics[1].GraphicIndex);
         Assert.Equal(503, map.Blocks[11, 21].Graphics[1].GraphicIndex);
     }
+
+    [Fact]
+    public void Placement_materializes_the_preset_mask_without_changing_graphics()
+    {
+        var map = new WorldMap();
+        var item = new BlockPreset { GraphicIndex = 500, DefaultBlockedMask = BlockedMask.AllSides };
+        new BlockPlacementService().Place(map, new BlockPresetType { Layer = 1, TilesX = 1, TilesY = 1 }, item, 2, 3);
+
+        Assert.Equal((byte)15, map.Blocks[2, 3].Blocked);
+        Assert.Equal(500, map.Blocks[2, 3].Graphics[0].GraphicIndex);
+    }
 }

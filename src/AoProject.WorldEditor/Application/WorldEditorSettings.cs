@@ -33,6 +33,8 @@ internal sealed class WorldEditorSettings
     public int ClientHeight { get; init; } = 30;
     public int ClientWidth { get; init; } = 40;
     public bool ShowFrame { get; init; }
+    public int ZoomPercent { get; set; } = 100;
+    public int PaletteTab { get; set; }
 
     public void ApplyTo(WorldRenderOptions options)
     {
@@ -70,7 +72,9 @@ internal sealed class WorldEditorSettings
              ShowNpcs = Flag(ini, "MOSTRAR", "NPCs", true), ShowParticles = Flag(ini, "MOSTRAR", "Particulas", false),
               ShowLights = Flag(ini, "MOSTRAR", "Luces", false), ShowRoofFade = Flag(ini, "MOSTRAR", "FundidoTechos", true), AlphaRoofs = Flag(ini, "MOSTRAR", "AlphaTechos", false), ScreenTilesX = Value(ini, "MOSTRAR", "PantallaX", 14),
             ScreenTilesY = Value(ini, "MOSTRAR", "PantallaY", 16), ClientHeight = Value(ini, "MOSTRAR", "ClienteHeight", 30),
-            ClientWidth = Value(ini, "MOSTRAR", "ClienteWidth", 40), ShowFrame = Flag(ini, "MOSTRAR", "Marco", false)
+             ClientWidth = Value(ini, "MOSTRAR", "ClienteWidth", 40), ShowFrame = Flag(ini, "MOSTRAR", "Marco", false),
+             ZoomPercent = Math.Clamp(Value(ini, "MOSTRAR", "Zoom", 100), 25, 400),
+             PaletteTab = Math.Max(0, Value(ini, "MOSTRAR", "Paleta", 0))
         };
     }
 
@@ -87,7 +91,7 @@ internal sealed class WorldEditorSettings
             $"Bloqueos={(ShowBlocked ? 1 : 0)}", $"Translados={(ShowTransfers ? 1 : 0)}", $"Objetos={(ShowObjects ? 1 : 0)}",
               $"NPCs={(ShowNpcs ? 1 : 0)}", $"Particulas={(ShowParticles ? 1 : 0)}", $"Luces={(ShowLights ? 1 : 0)}", $"FundidoTechos={(ShowRoofFade ? 1 : 0)}", $"AlphaTechos={(AlphaRoofs ? 1 : 0)}",
              $"PantallaX={ScreenTilesX}", $"PantallaY={ScreenTilesY}",
-            $"ClienteHeight={ClientHeight}", $"ClienteWidth={ClientWidth}", $"Marco={(ShowFrame ? 1 : 0)}"
+              $"ClienteHeight={ClientHeight}", $"ClienteWidth={ClientWidth}", $"Marco={(ShowFrame ? 1 : 0)}", $"Zoom={ZoomPercent}", $"Paleta={PaletteTab}"
         });
     }
 

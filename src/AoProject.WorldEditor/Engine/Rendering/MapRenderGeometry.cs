@@ -67,6 +67,37 @@ internal sealed class MapRenderGeometry
         return new MapRenderGeometry { Tiles = tiles };
     }
 
+    /// <summary>Builds render input directly from the compiled single-map grid.</summary>
+    public static MapRenderGeometry Build(UnifiedWorldMap map, WorldRenderOptions options)
+        => Build(map, options, 0, map.Width - 1, 0, map.Height - 1);
+
+    /// <summary>Builds only the tile rectangle currently visible on screen.</summary>
+    public static MapRenderGeometry Build(UnifiedWorldMap map, WorldRenderOptions options,
+        int minX, int maxX, int minY, int maxY)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        var tiles = new List<MapTileQuad>();
+        minX = Math.Clamp(minX, 0, map.Width - 1);
+        maxX = Math.Clamp(maxX, minX, map.Width - 1);
+        minY = Math.Clamp(minY, 0, map.Height - 1);
+        maxY = Math.Clamp(maxY, minY, map.Height - 1);
+        for (var y = minY; y <= maxY; y++)
+        for (var x = minX; x <= maxX; x++)
+        {
+            var offset = map.Offset(x, y);
+            for (var layer = 0; layer < 8; layer++)
+            {
+                if (!options.IsLayerVisible(layer)) continue;
+                var graphic = map.GraphicIndices[map.GraphicOffset(offset, layer)];
+                if (graphic <= 0) continue;
+                tiles.Add(new MapTileQuad(x, y, layer, graphic,
+                    x * TilePixels, y * TilePixels,
+                    layer == 3 ? map.Trigger[offset] : 0));
+            }
+        }
+        return new MapRenderGeometry { Tiles = tiles };
+    }
+
     public static MapRenderGeometry Combine(
         IEnumerable<(WorldMap Map, GlobalChunkCoordinate Chunk)> maps,
         WorldRenderOptions options)

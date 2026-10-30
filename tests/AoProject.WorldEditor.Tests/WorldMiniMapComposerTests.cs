@@ -40,20 +40,20 @@ public sealed class WorldMiniMapComposerTests
             var files = composer.Save(Path.Combine(root, "worldmap"));
             Assert.Equal(4, files.Count);
 
-            using var world1 = new Bitmap(Path.Combine(root, "worldmap", "worldmap1.png"));
-            using var world2 = new Bitmap(Path.Combine(root, "worldmap", "worldmap2.png"));
-            Assert.Equal(200, world1.Width);
-            Assert.Equal(100, world1.Height);
+            using var world1 = new Bitmap(Path.Combine(root, "worldmap", "world.png"));
+            using var world2 = new Bitmap(Path.Combine(root, "worldmap", "world-2.png"));
+            Assert.Equal(150, world1.Width);
+            Assert.Equal(81, world1.Height);
             Assert.True(world1.GetPixel(0, 0).B > 0xF0);
-            Assert.True(world1.GetPixel(100, 0).G > 0xF0);
+            Assert.True(world1.GetPixel(75, 0).G > 0xF0);
             Assert.True(world1.GetPixel(50, 50).G < 0x08);
             // WORLDMAP2 uses map 1 in the first cell and leaves the second empty.
             Assert.True(world2.GetPixel(0, 0).B > 0xF0);
-            Assert.True(world2.GetPixel(150, 50).R < 0x08);
+            Assert.True(world2.GetPixel(149, 50).R < 0x08);
 
-            using var preview = new Bitmap(Path.Combine(root, "worldmap", "worldmap1-preview.png"));
-            Assert.Equal(50, preview.Width);
-            Assert.Equal(25, preview.Height);
+            using var preview = new Bitmap(Path.Combine(root, "worldmap", "world-preview.png"));
+            Assert.Equal(38, preview.Width);
+            Assert.Equal(20, preview.Height);
         }
         finally
         {
@@ -84,9 +84,9 @@ public sealed class WorldMiniMapComposerTests
             Assert.True(composer.Add(7, map, graphics, null));
             composer.Save(Path.Combine(root, "worldmap"));
 
-            using var image = new Bitmap(Path.Combine(root, "worldmap", "worldmap1.png"));
+            using var image = new Bitmap(Path.Combine(root, "worldmap", "world.png"));
             Assert.True(image.GetPixel(0, 0).G > 0xF0);
-            Assert.True(image.GetPixel(100, 0).G > 0xF0);
+            Assert.True(image.GetPixel(75, 0).G > 0xF0);
         }
         finally
         {

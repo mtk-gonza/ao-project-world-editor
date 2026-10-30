@@ -2,6 +2,7 @@ using AoProject.WorldEditor.Application;
 using AoProject.WorldEditor.Infrastructure;
 using AoProject.WorldEditor.Infrastructure.Runtime;
 using AoProject.WorldEditor.Presentation.Features.World;
+using AoProject.WorldEditor.Presentation.Features.Editor;
 using AoProject.WorldEditor.Domain;
 
 namespace AoProject.WorldEditor.Presentation.Forms;
@@ -27,17 +28,37 @@ internal sealed class MainForm : Form
     private int _mosaicWidth = 1;
     private int _mosaicHeight = 1;
     private bool _terrainPresetSelected;
+    private int _brushSize = 1;
+    private string _brushShape = "Cuadrado";
+    private string _activeTool = "Selector";
+    private short _selectedObject;
+    private short _selectedNpc;
+    private short _selectedTrigger;
+    private int _selectedParticle;
     private bool _terrainBlocked;
     private bool _autoCompleteSurfaces;
     private bool _insertBlocking;
     private bool _removeBlocking;
+    private bool _globalSaveInProgress;
     private readonly System.Windows.Forms.Timer _radarTimer;
     private readonly WorldSidebar _sidebar = new();
+    private readonly EditorPalettePanel _palette = new();
+    private readonly EditorInspectorPanel _inspector = new();
+    private readonly ToolStripLabel _coordinates = new("Global: — | Local: — | Capa: —");
+    private readonly ToolStripComboBox _layerSelector = new() { Name = "activeLayer", Width = 82, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ToolStripComboBox _toolSelector = new() { Name = "activeTool", Width = 92, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly NumericUpDown _toolbarBrushSize = new() { Minimum = 1, Maximum = 20, Value = 1, Width = 48 };
+    private readonly ComboBox _toolbarBrushShape = new() { Width = 84, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly WorldRadarControl _radarView;
     private bool _radarEnabled;
     private bool _radarDirty = true;
     private int _radarX = int.MinValue;
     private int _radarY = int.MinValue;
+    private UnifiedWorldMap? _compiledUnifiedWorld;
+    private UnifiedWorldBundle? _compiledUnifiedBundle;
+    private IReadOnlyDictionary<int, string>? _previewFloorImages;
+    private int? _previewFloorZ;
+    private bool _compileFloorsAfterWorldLoad;
 
     public MainForm()
     {
@@ -57,12 +78,17 @@ internal sealed class MainForm : Form
         _radarView = _sidebar.Radar;
         _miniMap = _sidebar.MiniMap;
         _radarView.TileClicked += (dx, dy) => CenterFromRadar(dx, dy);
-        _renderControl.ViewChanged += () => _miniMap.Invalidate();
+        _renderControl.ViewChanged += () =>
+        {
+            _miniMap.Invalidate();
+            if (_renderControl.SelectedTile is { } selected) UpdateCoordinateBar(selected.X, selected.Y);
+        };
         // Re-crop when a minimap finishes building, so the radar fills in while
         // the world image is composed instead of waiting for the camera to move.
         _miniMap.WorldImageChanged += () => _radarDirty = true;
         _renderControl.MapBound += (map, resources) =>
         {
+            _inspector.ClearHistory();
             _miniMap.SetLocalMap(map, resources, () => _renderControl.SelectedTile, _renderControl.CenterOnTile);
             _radarDirty = true;
         };
@@ -71,6 +97,7 @@ internal sealed class MainForm : Form
         if (Environment.GetEnvironmentVariable("AO_RADAR") == "1")
         {
             _radarEnabled = true;
+            _sidebar.SetRadarVisible(true);
             _radarTimer.Start();
         }
         _renderControl.GlobalMapActivated += mapId =>
@@ -78,15 +105,71 @@ internal sealed class MainForm : Form
             if (_session.ActivateWorldMap(mapId))
                 _status.Text = $"Editando mapa {mapId} desde la vista global";
         };
+        _palette.LayerSelected += layer =>
+        {
+            _renderControl.SelectedLayer = layer;
+            if (_layerSelector.SelectedIndex != layer) _layerSelector.SelectedIndex = layer;
+            _status.Text = $"Capa activa: {layer + 1}";
+        };
+        _palette.TerrainPresetSelected += graphic =>
+        {
+            _renderControl.SelectedGraphicIndex = graphic;
+            _terrainPresetSelected = true;
+            _status.Text = $"Terreno seleccionado: grafico {graphic}";
+        };
+        _palette.ActionSelected += HandlePaletteAction;
+        _palette.ObjectSelected += index => { _selectedObject = index; _status.Text = $"Objeto seleccionado: {index}"; };
+        _palette.NpcSelected += index => { _selectedNpc = index; _status.Text = $"NPC seleccionado: {index}"; };
+        _palette.TriggerSelected += index => { _selectedTrigger = index; _status.Text = $"Trigger seleccionado: {index}"; };
+        _palette.GraphicSelected += graphic =>
+        {
+            _renderControl.SelectedGraphicIndex = graphic;
+            _terrainPresetSelected = false;
+            _status.Text = $"GRH seleccionado: {graphic}";
+        };
+        _palette.SurfaceSelected += surface =>
+        {
+            _renderControl.SelectedGraphicIndex = surface.GraphicIndex;
+            _renderControl.SelectedLayer = Math.Clamp(surface.Layer - 1, 0, 3);
+            _terrainPresetSelected = true;
+            _terrainBlocked = surface.Blocked;
+            _mosaicEnabled = surface.Width > 1 || surface.Height > 1;
+            _mosaicWidth = Math.Max(1, (int)surface.Width);
+            _mosaicHeight = Math.Max(1, (int)surface.Height);
+            _status.Text = $"Superficie seleccionada: {surface.Name} (GRH {surface.GraphicIndex})";
+        };
+        _palette.ParticleSelected += index => { _selectedParticle = index; _status.Text = $"Partícula seleccionada: {index}"; };
+        _palette.LightSelected += (range, color) => PlacePaletteLight(range, color);
+        _palette.TransferSelected += (map, x, y) => PlacePaletteTransfer(map, x, y);
+        _palette.GlobalTransferSelected += PlaceGlobalPaletteTransfer;
+        _palette.BrushSizeChanged += size =>
+        {
+            _brushSize = size;
+            if ((int)_toolbarBrushSize.Value != size) _toolbarBrushSize.Value = size;
+            _status.Text = $"Tamaño de brush: {size}";
+        };
+        _palette.BrushShapeChanged += shape =>
+        {
+            _brushShape = shape;
+            if (_toolbarBrushShape.SelectedItem as string != shape) _toolbarBrushShape.SelectedItem = shape;
+            _status.Text = $"Forma de brush: {shape}";
+        };
+        _palette.TabChanged += index => _settings.PaletteTab = index;
+        _inspector.ActionRequested += HandleInspectorAction;
         _settings.ApplyTo(_renderControl.RenderOptions);
+        _renderControl.SetZoom(_settings.ZoomPercent / 100f);
+        _palette.SelectTab(_settings.PaletteTab);
         _autoSaveTimer = new System.Windows.Forms.Timer();
         _autoSaveTimer.Tick += (_, _) => AutoSaveTick();
 
         var menu = new MenuStrip();
         var file = new ToolStripMenuItem("Archivo");
         file.DropDownItems.Add(new ToolStripMenuItem("Nuevo mapa", null, NewMap));
-        var open = new ToolStripMenuItem("Abrir mapa...", null, OpenMap);
-        var openWorld = new ToolStripMenuItem("Abrir mundo completo...", null, OpenWorld);
+         var open = new ToolStripMenuItem("Abrir mapa...", null, OpenMap);
+         var openWorld = new ToolStripMenuItem("Abrir mundo completo...", null, OpenWorld);
+         var openOriginalMaps = new ToolStripMenuItem("Cargar mapas originales (/Mapas)...", null, OpenOriginalMaps);
+         var openUnified = new ToolStripMenuItem("Abrir mapa único (*.gmap)...", null, OpenUnifiedWorld);
+         var openBundle = new ToolStripMenuItem("Abrir bundle de pisos...", null, OpenUnifiedWorldBundle);
         var switchWorld = new ToolStripMenuItem("Cambiar mundo/nivel...", null, SwitchWorldLevel);
         var save = new ToolStripMenuItem("Guardar mapa...", null, SaveMap);
         var saveAs = new ToolStripMenuItem("Guardar mapa como...", null, SaveMapAs);
@@ -111,11 +194,19 @@ internal sealed class MainForm : Form
             layers.DropDownItems.Add(new ToolStripMenuItem($"Capa {layer + 1}", null,
                 (_, _) => _renderControl.SelectedLayer = selectedLayer));
         }
-        file.DropDownItems.Add(open);
-        file.DropDownItems.Add(openWorld);
+         file.DropDownItems.Add(open);
+          file.DropDownItems.Add(openOriginalMaps);
+          file.DropDownItems.Add(openWorld);
+         file.DropDownItems.Add(openUnified);
+         file.DropDownItems.Add(openBundle);
+         file.DropDownItems.Add(new ToolStripMenuItem("Piso anterior", null, (_, _) => ChangeUnifiedFloor(-1)));
+         file.DropDownItems.Add(new ToolStripMenuItem("Piso siguiente", null, (_, _) => ChangeUnifiedFloor(1)));
         file.DropDownItems.Add(switchWorld);
-        file.DropDownItems.Add(save);
-        file.DropDownItems.Add(saveAs);
+         file.DropDownItems.Add(save);
+         file.DropDownItems.Add(new ToolStripMenuItem("Guardar WORLD como world.csm...", null, SaveGlobalWorldAs));
+         file.DropDownItems.Add(new ToolStripMenuItem("Compilar mapa único global (*.gmap)...", null, SaveUnifiedWorldAs));
+         file.DropDownItems.Add(new ToolStripMenuItem("Compilar pisos globales...", null, SaveUnifiedWorldBundleAs));
+         file.DropDownItems.Add(saveAs);
         file.DropDownItems.Add(reopen);
         menu.Items.Add(file);
         menu.Items.Add(edit);
@@ -138,6 +229,7 @@ internal sealed class MainForm : Form
                 _radarEnabled = value;
                 if (value)
                 {
+                    _sidebar.SetRadarVisible(true);
                     _radarDirty = true;
                     _radarTimer.Start();
                     UpdateRadar();
@@ -190,6 +282,10 @@ internal sealed class MainForm : Form
         tools.DropDownItems.Add(new ToolStripMenuItem("Validar layout oficial del mundo", null, ValidateWorldLayout));
         tools.DropDownItems.Add(new ToolStripMenuItem("Precargar mundo (memoria)...", null, PreloadWorldInteractive));
         tools.DropDownItems.Add(new ToolStripMenuItem("Auditoría completa (mapas + coordenadas)...", null, RunFullAudit));
+         tools.DropDownItems.Add(new ToolStripMenuItem("Auditar world.csm/.dat/.inf...", null, RunGlobalArchiveAudit));
+         tools.DropDownItems.Add(new ToolStripMenuItem("Auditar bloqueos globales...", null, RunGlobalBlockingAudit));
+         tools.DropDownItems.Add(new ToolStripMenuItem("Generar informe de conflictos del mapa global...", null, GenerateUnifiedWorldConflictReport));
+        tools.DropDownItems.Add(new ToolStripMenuItem("Corregir bloqueos en copia...", null, CorrectGlobalBlockingCopy));
         tools.DropDownItems.Add(new ToolStripMenuItem("Generar salidas auxiliares del mundo...", null, GenerateWorldOutputs));
         tools.DropDownItems.Add(new ToolStripMenuItem("Exportar auditoría visual de mundos...", null, ExportWorldLayoutAudit));
         tools.DropDownItems.Add(new ToolStripMenuItem("Mundos especiales...", null, ShowSpecialWorlds));
@@ -210,6 +306,8 @@ internal sealed class MainForm : Form
         tools.DropDownItems.Add(new ToolStripMenuItem("Superficie en bordes...", null, PlaceSurfaceBorders));
         tools.DropDownItems.Add(new ToolStripMenuItem("Superficie en todo el mapa...", null, PlaceSurfaceWholeMap));
         tools.DropDownItems.Add(new ToolStripMenuItem("Árboles al azar...", null, PlaceRandomTrees));
+        tools.DropDownItems.Add(new ToolStripMenuItem("Bloquear árboles, carteles, foros y yacimientos", null,
+            (_, _) => Destructive("aplicar bloqueos de objetos configurados", () => _ = _session.BlockConfiguredObjects())));
         var terrain = new ToolStripMenuItem("Terrenos");
         terrain.DropDownItems.Add(new ToolStripMenuItem("Pasto", null, (_, _) => ApplyTerrainPreset(0)));
         terrain.DropDownItems.Add(new ToolStripMenuItem("Agua", null, (_, _) => ApplyTerrainPreset(137)));
@@ -261,12 +359,15 @@ internal sealed class MainForm : Form
         edit.DropDownItems.Add(new ToolStripMenuItem("Insertar trigger en tile seleccionado...", null, SetSelectedTrigger));
         edit.DropDownItems.Add(new ToolStripMenuItem("Insertar traslado en tile seleccionado...", null, SetSelectedTransfer));
 
-        _renderControl.TileClicked += PlaceGraphic;
-        _renderControl.TileRightClicked += InspectTile;
+        _renderControl.TileClicked += HandleTileClicked;
+        _renderControl.TileDragged += HandleTileDragged;
+        _renderControl.TileGestureCompleted += HandleTileGestureCompleted;
+        _renderControl.TileRightClicked += (x, y) => { InspectTile(x, y); if (_session.CurrentMap is not null) _inspector.ShowTile(_session.CurrentMap, x, y); UpdateCoordinateBar(x, y); };
         _renderControl.TileDoubleClicked += NavigateTransfer;
         _renderControl.SelectionChanged += selection => _status.Text = $"Selección: {selection.StartX},{selection.StartY} - {selection.EndX},{selection.EndY}";
         _renderControl.TileEraseRequested += EraseGraphic;
         _renderControl.UndoRequested += UndoEdit;
+        var toolbar = CreateEditorToolbar();
         var status = new StatusStrip();
         status.Items.Add(_status);
         MainMenuStrip = menu;
@@ -274,58 +375,415 @@ internal sealed class MainForm : Form
         // status (bottom), sidebar (right), render (fill).
         Controls.Add(_renderControl);
         Controls.Add(_sidebar);
+        Controls.Add(_inspector);
+        Controls.Add(_palette);
         Controls.Add(status);
+        Controls.Add(toolbar);
         Controls.Add(menu);
-        if (!string.IsNullOrWhiteSpace(_settings.LastMap) && File.Exists(_settings.LastMap))
-        {
-            try
-            {
-                _session.LoadMap(_settings.LastMap);
-                _renderControl.SetMap(_session.CurrentMap!, _session.Resources);
-                _status.Text = $"Mapa recuperado: {Path.GetFileName(_settings.LastMap)}";
-                UpdateTitle();
-            }
-            catch (Exception error)
-            {
-                try
-                {
-                    File.WriteAllText(EditorPaths.LogFile("startup-error.log"), error.ToString());
-                }
-                catch { }
-                _settings.LastMap = string.Empty;
-            }
-        }
         Shown += (_, _) =>
         {
-            var world = Environment.GetEnvironmentVariable("AO_WORLD");
-            if (int.TryParse(world, out var worldId) && worldId > 0)
-            {
-                try { OpenWorldAt(worldId); }
-                catch (Exception error) { LogStartupError(error); }
-                return;
-            }
-            _renderControl.CenterOnTile(Math.Clamp(_settings.LastX, 1, WorldMap.Width),
-                Math.Clamp(_settings.LastY, 1, WorldMap.Height));
+            // Startup is intentionally empty: the user must choose a map or WORLD
+            // explicitly from File > Open. Do not restore LastMap or auto-open the
+            // conventional world/world.csm, even when it exists.
+            _ = WarmResourcesAsync();
         };
         FormClosed += (_, _) =>
         {
             if (_renderControl.SelectedTile is { } tile) { _settings.LastX = tile.X; _settings.LastY = tile.Y; }
+            _settings.ZoomPercent = (int)Math.Round(_renderControl.Zoom * 100f);
             _settings.UpdateFrom(_renderControl.RenderOptions); _settings.Save(_settingsPath); _audioPlayback.Dispose();
         };
+    }
+
+    private async Task WarmResourcesAsync()
+    {
+        try
+        {
+            _status.Text = "Cargando catalogo de recursos en segundo plano...";
+            var resources = await Task.Run(() => _session.Resources);
+            if (IsDisposed) return;
+            _palette.ConfigureResources(resources.Graphics, resources.Surfaces,
+                resources.Objects, resources.Npcs, resources.Triggers, resources.Particles);
+            if (_session.CurrentMap is null && _session.CurrentWorld is null)
+                _status.Text = "Listo. Abra un mapa o un WORLD desde Archivo.";
+        }
+        catch (Exception error)
+        {
+            LogStartupError(error);
+            _status.Text = "No se pudo cargar el catalogo de recursos.";
+        }
+    }
+
+    private ToolStrip CreateEditorToolbar()
+    {
+        var toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, BackColor = Color.FromArgb(32, 37, 45) };
+        var zoomOut = new ToolStripButton("−");
+        var zoomReset = new ToolStripButton("100%");
+        var zoomIn = new ToolStripButton("+");
+        zoomOut.Click += (_, _) => _renderControl.SetZoom(_renderControl.Zoom / 1.1f);
+        zoomReset.Click += (_, _) => _renderControl.SetZoom(1f);
+        zoomIn.Click += (_, _) => _renderControl.SetZoom(_renderControl.Zoom * 1.1f);
+        toolbar.Items.Add(new ToolStripLabel("Zoom:"));
+        toolbar.Items.Add(zoomOut); toolbar.Items.Add(zoomReset); toolbar.Items.Add(zoomIn);
+        toolbar.Items.Add(new ToolStripSeparator());
+        _layerSelector.Items.Clear();
+        _layerSelector.Items.AddRange(["Capa 1", "Capa 2", "Capa 3", "Capa 4"]);
+        _layerSelector.SelectedIndex = _renderControl.SelectedLayer;
+        _layerSelector.SelectedIndexChanged += (_, _) =>
+        {
+            _renderControl.SelectedLayer = _layerSelector.SelectedIndex;
+            _status.Text = $"Capa activa: {_layerSelector.SelectedIndex + 1}";
+        };
+        toolbar.Items.Add(new ToolStripLabel("Capa:")); toolbar.Items.Add(_layerSelector);
+        toolbar.Items.Add(new ToolStripSeparator());
+        _toolSelector.Items.AddRange(["Selector", "Cuentagotas", "Borrador", "Relleno", "Reemplazar", "Bloquear", "Desbloquear", "Línea", "Rectángulo", "Medir"]);
+        _toolSelector.SelectedIndex = 0;
+        _toolSelector.SelectedIndexChanged += (_, _) =>
+        {
+            if (_toolSelector.SelectedItem is string tool) HandlePaletteAction(tool);
+        };
+        toolbar.Items.Add(new ToolStripLabel("Herramienta:")); toolbar.Items.Add(_toolSelector);
+        toolbar.Items.Add(new ToolStripSeparator());
+        _toolbarBrushShape.Items.AddRange(["Individual", "Cuadrado", "Circular"]);
+        _toolbarBrushShape.SelectedItem = "Cuadrado";
+        _toolbarBrushSize.ValueChanged += (_, _) =>
+        {
+            _brushSize = (int)_toolbarBrushSize.Value;
+            _status.Text = $"Tamaño de brush: {_brushSize}";
+        };
+        _toolbarBrushShape.SelectedIndexChanged += (_, _) =>
+        {
+            if (_toolbarBrushShape.SelectedItem is string shape)
+            {
+                _brushShape = shape;
+                _status.Text = $"Forma de brush: {shape}";
+            }
+        };
+        toolbar.Items.Add(new ToolStripLabel("Brush:"));
+        toolbar.Items.Add(new ToolStripControlHost(_toolbarBrushSize));
+        toolbar.Items.Add(new ToolStripControlHost(_toolbarBrushShape));
+        toolbar.Items.Add(new ToolStripSeparator());
+        var xBox = new ToolStripTextBox { Name = "coordinateX", Width = 48, ToolTipText = "Coordenada X" };
+        var yBox = new ToolStripTextBox { Name = "coordinateY", Width = 48, ToolTipText = "Coordenada Y" };
+        var go = new ToolStripButton("Ir");
+        go.Click += (_, _) => CenterFromToolbar(xBox.Text, yBox.Text);
+        xBox.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CenterFromToolbar(xBox.Text, yBox.Text); };
+        yBox.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) CenterFromToolbar(xBox.Text, yBox.Text); };
+        toolbar.Items.Add(new ToolStripLabel("X:")); toolbar.Items.Add(xBox);
+        toolbar.Items.Add(new ToolStripLabel("Y:")); toolbar.Items.Add(yBox); toolbar.Items.Add(go);
+        toolbar.Items.Add(new ToolStripSeparator());
+        toolbar.Items.Add(_coordinates);
+        return toolbar;
+    }
+
+    private void CenterFromToolbar(string xText, string yText)
+    {
+        if (!int.TryParse(xText, out var x) || !int.TryParse(yText, out var y))
+        {
+            _status.Text = "Ingrese coordenadas X e Y válidas";
+            return;
+        }
+        try
+        {
+            if (_session.CurrentWorld is not null)
+            {
+                _renderControl.CenterOnGlobalTile(x, y);
+                _status.Text = $"Centrado en coordenadas globales {x},{y}";
+            }
+            else
+            {
+                _renderControl.CenterOnTile(Math.Clamp(x, 1, WorldMap.Width), Math.Clamp(y, 1, WorldMap.Height));
+                _status.Text = $"Centrado en coordenadas locales {x},{y}";
+            }
+        }
+        catch (Exception error) { _status.Text = error.Message; }
+    }
+
+    private void UpdateCoordinateBar(int x, int y)
+    {
+        var map = _session.CurrentMap;
+        var local = map is null ? "—" : $"{x},{y}";
+        var global = _renderControl.SelectedGlobalTile is { } selected ? $"{selected.X},{selected.Y}" : "—";
+        var floor = _renderControl.ActiveFloorZ is { } z ? $"Z: {z}" : "Z: —";
+        _coordinates.Text = $"Global: {global} | {floor} | Local: {local} | Capa: {_renderControl.SelectedLayer + 1} | Zoom: {_renderControl.Zoom:P0}";
     }
 
     private void PlaceGraphic(int x, int y)
     {
         try
         {
-            _session.ApplyInteractiveClick(x, y, _renderControl.SelectedLayer, _renderControl.SelectedGraphicIndex,
-                _terrainPresetSelected, _autoCompleteSurfaces && _mosaicEnabled,
-                _mosaicEnabled ? _mosaicWidth : 1, _mosaicEnabled ? _mosaicHeight : 1,
-                _terrainBlocked, _insertBlocking, _removeBlocking);
+            if (_activeTool == "Borrador")
+            {
+                _session.ClearTileGraphics(x, y);
+                if (_session.CurrentMap is not null) _renderControl.RefreshAfterEdit(_session.CurrentMap);
+                _status.Text = $"Gráficos borrados en {x},{y}";
+                _inspector.AddHistory($"Borrador en {x},{y}");
+                return;
+            }
+            if (_activeTool == "Relleno")
+            {
+                var changed = _session.FillGraphic(x, y, _renderControl.SelectedLayer, _renderControl.SelectedGraphicIndex);
+                if (_session.CurrentMap is not null) _renderControl.RefreshAfterEdit(_session.CurrentMap);
+                _status.Text = $"Relleno aplicado: {changed} tiles";
+                _inspector.AddHistory($"Relleno: {changed} tiles");
+                _activeTool = "Selector";
+                return;
+            }
+            if (_activeTool == "Reemplazar")
+            {
+                var from = _session.CurrentMap!.Blocks[x, y].Graphics[_renderControl.SelectedLayer].GraphicIndex;
+                var changed = _session.ReplaceGraphic(_renderControl.SelectedLayer, from, _renderControl.SelectedGraphicIndex);
+                _renderControl.RefreshAfterEdit(_session.CurrentMap);
+                _status.Text = $"Reemplazo aplicado: {changed} tiles";
+                _inspector.AddHistory($"Reemplazo GRH {from} → {_renderControl.SelectedGraphicIndex}: {changed} tiles");
+                _activeTool = "Selector";
+                _toolSelector.SelectedIndex = 0;
+                return;
+            }
+            if (_activeTool is "Bloquear" or "Desbloquear")
+            {
+                var blocked = _activeTool == "Bloquear" ? (byte)0xF : (byte)0;
+                _session.SetTileBlocked(x, y, blocked);
+                if (_session.CurrentMap is not null) _renderControl.RefreshAfterEdit(_session.CurrentMap);
+                _status.Text = $"Tile {x},{y}: {(_activeTool == "Bloquear" ? "bloqueado" : "desbloqueado")}";
+                _inspector.AddHistory($"{_activeTool} en {x},{y}");
+                return;
+            }
+            var radius = (_brushSize - 1) / 2;
+            for (var brushY = y - radius; brushY <= y + radius; brushY++)
+            for (var brushX = x - radius; brushX <= x + radius; brushX++)
+            {
+                if (_brushShape == "Individual" && (brushX != x || brushY != y)) continue;
+                if (_brushShape == "Circular" && ((brushX - x) * (brushX - x) + (brushY - y) * (brushY - y) > radius * radius)) continue;
+                if (brushX < 1 || brushX > WorldMap.Width || brushY < 1 || brushY > WorldMap.Height) continue;
+                _session.ApplyInteractiveClick(brushX, brushY, _renderControl.SelectedLayer, _renderControl.SelectedGraphicIndex,
+                    _terrainPresetSelected, _autoCompleteSurfaces && _mosaicEnabled,
+                    _mosaicEnabled ? _mosaicWidth : 1, _mosaicEnabled ? _mosaicHeight : 1,
+                    _terrainBlocked, _insertBlocking, _removeBlocking);
+            }
             if (_session.CurrentMap is not null) _renderControl.RefreshAfterEdit(_session.CurrentMap);
             _status.Text = $"Tile {x},{y}: grafico {_renderControl.SelectedGraphicIndex}";
+            _inspector.AddHistory($"Pintura en {x},{y} · GRH {_renderControl.SelectedGraphicIndex}");
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "Error de edicion"); }
+    }
+
+    private void HandleTileDragged(int x, int y)
+    {
+        // Selector is read-only. A drag while selecting must never paint with
+        // whichever GRH was previously chosen in the palette.
+        if (_activeTool is not "Selector" and not "Relleno" and not "Reemplazar" and not "Línea" and not "Rectángulo" and not "Medir" and not "Cuentagotas") PlaceGraphic(x, y);
+    }
+
+    private void HandleTileClicked(int x, int y)
+    {
+        if (_activeTool == "Cuentagotas") PickTile(x, y);
+        else if (_activeTool is not "Selector" and not "Línea" and not "Rectángulo" and not "Medir") PlaceGraphic(x, y);
+        if (_compiledUnifiedWorld is { } unified && _renderControl.SelectedGlobalTile is { } global)
+            _inspector.ShowUnifiedTile(unified, global.X, global.Y);
+        else if (_session.CurrentMap is not null) _inspector.ShowTile(_session.CurrentMap, x, y);
+        UpdateCoordinateBar(x, y);
+    }
+
+    private void HandleTileGestureCompleted(int startX, int startY, int endX, int endY)
+    {
+        if (_activeTool == "Medir")
+        {
+            var horizontal = Math.Abs(endX - startX);
+            var vertical = Math.Abs(endY - startY);
+            var diagonal = Math.Sqrt(horizontal * horizontal + vertical * vertical);
+            _status.Text = $"Medición: ΔX={horizontal}, ΔY={vertical}, Manhattan={horizontal + vertical}, diagonal={diagonal:0.##}";
+            _inspector.AddHistory($"Medición {startX},{startY} → {endX},{endY}");
+            return;
+        }
+        if (_activeTool is not "Línea" and not "Rectángulo") return;
+        if (_activeTool == "Línea")
+        {
+            var dx = Math.Abs(endX - startX); var sx = startX < endX ? 1 : -1;
+            var dy = -Math.Abs(endY - startY); var sy = startY < endY ? 1 : -1;
+            var error = dx + dy; var x = startX; var y = startY;
+            while (true)
+            {
+                PlaceGraphic(x, y);
+                if (x == endX && y == endY) break;
+                var twice = 2 * error;
+                if (twice >= dy) { error += dy; x += sx; }
+                if (twice <= dx) { error += dx; y += sy; }
+            }
+        }
+        else
+        {
+            var minX = Math.Min(startX, endX); var maxX = Math.Max(startX, endX);
+            var minY = Math.Min(startY, endY); var maxY = Math.Max(startY, endY);
+            for (var x = minX; x <= maxX; x++)
+            {
+                PlaceGraphic(x, minY);
+                if (maxY != minY) PlaceGraphic(x, maxY);
+            }
+            for (var y = minY + 1; y < maxY; y++)
+            {
+                PlaceGraphic(minX, y);
+                if (maxX != minX) PlaceGraphic(maxX, y);
+            }
+        }
+        _status.Text = $"{_activeTool} aplicado: {startX},{startY} → {endX},{endY}";
+        _inspector.AddHistory($"{_activeTool}: {startX},{startY} → {endX},{endY}");
+    }
+
+    private void PickTile(int x, int y)
+    {
+        if (_session.CurrentMap is null) return;
+        var block = _session.CurrentMap.Blocks[x, y];
+        var capture = new MapTileCaptureService().Capture(_session.CurrentMap, x, y, _settings.AutoCaptureSurfaces, _settings.AutoCaptureTransfers);
+        if (capture.Layer >= 0)
+        {
+            _renderControl.SelectedLayer = capture.Layer;
+            _renderControl.SelectedGraphicIndex = capture.GraphicIndex;
+            _terrainPresetSelected = false;
+        }
+        if (block.Object.Index > 0) _selectedObject = block.Object.Index;
+        if (block.NpcIndex > 0) _selectedNpc = block.NpcIndex;
+        _activeTool = "Selector";
+        _toolSelector.SelectedIndex = 0;
+        _status.Text = $"Cuentagotas: GRH {_renderControl.SelectedGraphicIndex}, capa {_renderControl.SelectedLayer + 1}";
+        _inspector.AddHistory($"Cuentagotas en {x},{y}");
+    }
+
+    private void HandlePaletteAction(string action)
+    {
+        var toolIndex = action switch { "Selector" => 0, "Cuentagotas" => 1, "Borrador" => 2, "Relleno" => 3, "Reemplazar" => 4, "Bloquear" => 5, "Desbloquear" => 6, "Línea" => 7, "Rectángulo" => 8, "Medir" => 9, _ => -1 };
+        if (toolIndex >= 0 && _toolSelector.SelectedIndex != toolIndex) _toolSelector.SelectedIndex = toolIndex;
+        switch (action)
+        {
+            case "Árboles": PlaceRandomTrees(null, EventArgs.Empty); break;
+            case "Rocas":
+            case "Carteles":
+            case "Puertas":
+            case "Ventanas": PlaceAmbientation(null, EventArgs.Empty); break;
+            case "Colocar objeto": PlacePaletteObject(); break;
+            case "Editar objeto": SetSelectedObject(null, EventArgs.Empty); break;
+            case "Borrar objeto": ClearSelectedEntity(true, false, false, false); break;
+            case "Colocar NPC": PlacePaletteNpc(); break;
+            case "Editar NPC": SetSelectedNpc(null, EventArgs.Empty); break;
+            case "Borrar NPC": ClearSelectedEntity(false, true, false, false); break;
+            case "Colocar trigger": PlacePaletteTrigger(); break;
+            case "Editar trigger": SetSelectedTrigger(null, EventArgs.Empty); break;
+            case "Borrar trigger": ClearSelectedEntity(false, false, true, false); break;
+            case "Colocar partícula": PlacePaletteParticle(); break;
+            case "Editar partícula": SetSelectedParticle(null, EventArgs.Empty); break;
+            case "Colocar luz": SetSelectedLight(null, EventArgs.Empty); break;
+            case "Editar luz": SetSelectedLight(null, EventArgs.Empty); break;
+            case "Borrar luz": ClearSelectedLight(null, EventArgs.Empty); break;
+            case "Borrar partícula": ClearSelectedParticle(null, EventArgs.Empty); break;
+            case "Crear salida": SetSelectedTransfer(null, EventArgs.Empty); break;
+            case "Editar salida": SetSelectedTransfer(null, EventArgs.Empty); break;
+            case "Validar salidas": ValidateMap(null, EventArgs.Empty); break;
+            case "Cuentagotas": _activeTool = "Cuentagotas"; _status.Text = "Cuentagotas activo: seleccione un tile"; break;
+            case "Borrador": _activeTool = "Borrador"; _status.Text = "Borrador activo: haga clic o arrastre sobre los tiles"; break;
+            case "Relleno": _activeTool = "Relleno"; _status.Text = "Relleno activo: haga clic sobre un tile"; break;
+            case "Reemplazar": _activeTool = "Reemplazar"; _status.Text = "Reemplazar activo: seleccione un tile origen"; break;
+            case "Bloquear": _activeTool = "Bloquear"; _status.Text = "Bloqueo activo: haga clic o arrastre"; break;
+            case "Desbloquear": _activeTool = "Desbloquear"; _status.Text = "Desbloqueo activo: haga clic o arrastre"; break;
+            case "Bloqueo por lados": ApplyBlockMask(null, EventArgs.Empty); break;
+            case "Copiar": CopySelectedTile(null, EventArgs.Empty); break;
+            case "Cortar": CutSelectedTile(null, EventArgs.Empty); break;
+            case "Pegar": PasteSelectedTile(null, EventArgs.Empty); break;
+            case "Línea": _activeTool = "Línea"; _status.Text = "Línea activa: arrastre desde el inicio hasta el final"; break;
+            case "Rectángulo": _activeTool = "Rectángulo"; _status.Text = "Rectángulo activo: arrastre entre dos esquinas"; break;
+            case "Auto-border": FixCoastsSelection(null, EventArgs.Empty); break;
+            case "Medir": _activeTool = "Medir"; _status.Text = "Medición activa: arrastre entre dos tiles"; break;
+            case "Selector": _activeTool = "Selector"; _status.Text = "Selector activo"; break;
+            case "Ver bloqueos": ToggleOverlay("Bloqueos", () => _renderControl.RenderOptions.ShowBlocked, value => _renderControl.RenderOptions.ShowBlocked = value); break;
+            case "Ver triggers": ToggleOverlay("Triggers", () => _renderControl.RenderOptions.ShowTriggers, value => _renderControl.RenderOptions.ShowTriggers = value); break;
+            case "Ver objetos": ToggleOverlay("Objetos", () => _renderControl.RenderOptions.ShowObjects, value => _renderControl.RenderOptions.ShowObjects = value); break;
+            case "Ver NPCs": ToggleOverlay("NPCs", () => _renderControl.RenderOptions.ShowNpcs, value => _renderControl.RenderOptions.ShowNpcs = value); break;
+            case "Ver luces": ToggleOverlay("Luces", () => _renderControl.RenderOptions.ShowLights, value => _renderControl.RenderOptions.ShowLights = value); break;
+            case "Ver partículas": ToggleOverlay("Partículas", () => _renderControl.RenderOptions.ShowParticles, value => _renderControl.RenderOptions.ShowParticles = value); break;
+            case "Ver salidas": ToggleOverlay("Traslados", () => _renderControl.RenderOptions.ShowTransfers, value => _renderControl.RenderOptions.ShowTransfers = value); break;
+            default: _status.Text = $"Herramienta seleccionada: {action}"; break;
+        }
+    }
+
+    private void ToggleOverlay(string name, Func<bool> get, Action<bool> set)
+    {
+        var value = !get();
+        set(value);
+        _renderControl.RefreshWorldView();
+        _status.Text = $"Overlay {name}: {(value ? "activado" : "desactivado")}";
+    }
+
+    private void HandleInspectorAction(string action)
+    {
+        switch (action)
+        {
+            case "object": SetSelectedObject(null, EventArgs.Empty); break;
+            case "npc": SetSelectedNpc(null, EventArgs.Empty); break;
+            case "trigger": SetSelectedTrigger(null, EventArgs.Empty); break;
+            case "blocking": ApplyBlockMask(null, EventArgs.Empty); break;
+            case "light": SetSelectedLight(null, EventArgs.Empty); break;
+            case "particle": SetSelectedParticle(null, EventArgs.Empty); break;
+            case "transfer": SetSelectedTransfer(null, EventArgs.Empty); break;
+            case "metadata": EditMapInfo(null, EventArgs.Empty); break;
+        }
+        if (_renderControl.SelectedTile is { } tile && _session.CurrentMap is not null)
+            _inspector.ShowTile(_session.CurrentMap, tile.X, tile.Y);
+    }
+
+    private void PlacePaletteObject()
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("colocar objeto", () => _session.SetObject(tile.X, tile.Y, _selectedObject, 1));
+    }
+
+    private void PlacePaletteNpc()
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("colocar NPC", () => _session.SetNpc(tile.X, tile.Y, _selectedNpc));
+    }
+
+    private void PlacePaletteTrigger()
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("colocar trigger", () => _session.SetTrigger(tile.X, tile.Y, _selectedTrigger));
+    }
+
+    private void PlacePaletteParticle()
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("colocar partícula", () => _session.SetParticle(tile.X, tile.Y, _selectedParticle));
+    }
+
+    private void PlacePaletteLight(short range, int color)
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("colocar luz", () =>
+        {
+            _session.SetLight(tile.X, tile.Y, range, color);
+            _renderControl.RefreshLightingAfterEdit();
+        });
+    }
+
+    private void PlacePaletteTransfer(short map, short x, short y)
+    {
+        if (!TryGetSelectedTile(out var tile)) return;
+        Destructive("crear salida", () => _session.SetTransfer(tile.X, tile.Y, map, x, y));
+    }
+
+    private void PlaceGlobalPaletteTransfer()
+    {
+        if (!TryGetSelectedTile(out var source) || _session.CurrentWorld is null)
+        {
+            _status.Text = "Abra un mundo completo y seleccione un destino global";
+            return;
+        }
+        if (_renderControl.SelectedGlobalTile is not { } target ||
+            !_session.CurrentWorld.TryResolve(target.X, target.Y, out var location))
+        {
+            _status.Text = "El destino global seleccionado no pertenece a un mapa resoluble";
+            return;
+        }
+        Destructive("crear salida global", () =>
+            _session.SetTransfer(source.X, source.Y, location.MapId, (short)location.LocalX, (short)location.LocalY));
     }
 
     private ToolStripMenuItem CreateBlockingMode(string text, Func<bool> get, Action<bool> set)
@@ -397,6 +855,7 @@ internal sealed class MainForm : Form
         if (_session.CurrentWorld is not null) _renderControl.RefreshWorldView();
         else _renderControl.SetMap(_session.CurrentMap, _session.Resources);
         _status.Text = "Edicion deshecha";
+        _inspector.AddHistory("Deshacer");
     }
 
     private void UndoMenu(object? sender, EventArgs e) => UndoEdit();
@@ -1214,11 +1673,10 @@ internal sealed class MainForm : Form
         using var dialog = new Form { Text = "Árboles al azar", Width = 360, Height = 190, StartPosition = FormStartPosition.CenterParent };
         var item = new NumericUpDown { Minimum = 1, Maximum = _session.Resources.Objects.Count - 1, Dock = DockStyle.Top };
         var count = new NumericUpDown { Minimum = 1, Maximum = 10000, Value = 10, Dock = DockStyle.Top };
-        var blocked = new NumericUpDown { Minimum = 0, Maximum = 255, Value = 1, Dock = DockStyle.Top };
         var accept = new Button { Text = "Colocar", DialogResult = DialogResult.OK, Dock = DockStyle.Bottom };
-        dialog.Controls.Add(accept); dialog.Controls.Add(blocked); dialog.Controls.Add(count); dialog.Controls.Add(item); dialog.AcceptButton = accept;
+        dialog.Controls.Add(accept); dialog.Controls.Add(count); dialog.Controls.Add(item); dialog.AcceptButton = accept;
         if (dialog.ShowDialog(this) == DialogResult.OK)
-            Destructive("colocar árboles al azar", () => _ = _session.PlaceTrees(new TreePlacementOptions((int)count.Value, [(short)item.Value], (byte)blocked.Value)));
+            Destructive("colocar árboles al azar", () => _ = _session.PlaceTrees(new TreePlacementOptions((int)count.Value, [(short)item.Value])));
     }
 
     private void SelectMusic(object? sender, EventArgs e)
@@ -1296,6 +1754,7 @@ internal sealed class MainForm : Form
             _renderControl.RefreshWorldView();
             _status.Text = $"Operacion completada: {description}" +
                 (_session.UndoOmitted ? " | undo omitido: seleccion muy grande" : string.Empty);
+            _inspector.AddHistory(description);
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "Error de edicion", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
@@ -1349,6 +1808,186 @@ internal sealed class MainForm : Form
         catch (Exception error) { MessageBox.Show(this, error.Message, "Error al guardar mapa", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
+    private async void SaveGlobalWorldAs(object? sender, EventArgs e)
+    {
+        if (_globalSaveInProgress) return;
+        var world = _session.CurrentWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Primero abra un mundo completo.", "Guardar mundo global");
+            return;
+        }
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "WORLD (*.csm)|*.csm|Todos los archivos (*.*)|*.*",
+            InitialDirectory = Path.Combine(ClientResourceRoot, "world"),
+            FileName = "world.csm",
+            Title = "Guardar WORLD"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var output = ResolveGlobalOutputPaths(dialog.FileName);
+            _globalSaveInProgress = true;
+            UseWaitCursor = true;
+            _status.Text = "Guardando WORLD y generando world.png...";
+            var resources = _session.Resources;
+            var resourceRoot = _session.ResourceRoot;
+            await _miniMap.WaitForWorldImageAsync();
+            var embeddedImages = CaptureWorldImageForSave();
+            var result = await Task.Run(() =>
+            {
+                var path = new GlobalCsmArchiveService().Save(world, output.Csm, output.Dat, output.Inf, output.Map,
+                    resources, resourceRoot, embeddedImages);
+                var audit = new GlobalArchiveAuditService().Audit(path, world, output.Dat, output.Inf, output.Map);
+                var semantic = new GlobalWorldSemanticAuditService().Audit(world, resources, path, output.Inf);
+                return (path, audit, semantic);
+            });
+            var path = result.path;
+            var audit = result.audit;
+            var semantic = result.semantic;
+            var auditStatus = audit.Errors + semantic.Errors == 0 ? "auditoría OK" : $"errores de auditoría: {audit.Errors + semantic.Errors}";
+            var auditDetails = audit.Issues.Count == 0 && semantic.Issues.Count == 0
+                ? "Auditoría: OK"
+                : "Auditoría:" + Environment.NewLine + string.Join(Environment.NewLine,
+                    audit.Issues.Select(issue => $"- {issue.Code}: {issue.Message}").Concat(
+                        semantic.Issues.Select(issue => $"- {issue.Code}: mapa={issue.MapId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}")));
+            _status.Text = $"WORLD guardado: world.csm, world.dat y world.inf ({world.Paths.Count} mapas) | {auditStatus}";
+            MessageBox.Show(this,
+                $"Se guardaron los tres archivos globales con {world.Paths.Count} mapas y sus metadatos:{Environment.NewLine}{Environment.NewLine}" +
+                $"{path}{Environment.NewLine}{output.Map}{Environment.NewLine}{output.Dat}{Environment.NewLine}{output.Inf}{Environment.NewLine}{Environment.NewLine}{auditDetails}",
+                "WORLD guardado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al guardar WORLD", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            _globalSaveInProgress = false;
+        }
+    }
+
+    private async void SaveUnifiedWorldAs(object? sender, EventArgs e)
+    {
+        if (_session.CurrentWorld is null)
+        {
+            MessageBox.Show(this, "Primero abra un mundo completo.", "Compilar mapa único", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Mapa global único (*.gmap)|*.gmap|Todos los archivos (*.*)|*.*",
+            InitialDirectory = Path.Combine(ClientResourceRoot, "world"),
+            FileName = "world.gmap",
+            Title = "Compilar mapa único global"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            UseWaitCursor = true;
+            _status.Text = "Compilando mapa único global...";
+            var result = await Task.Run(() => _session.SaveUnifiedWorld(dialog.FileName));
+            // Keep the compiled artifact as the radar source. The radar itself is
+            // cropped lazily from this grid; no legacy world bitmap is required.
+            _compiledUnifiedWorld = result.Map;
+            _radarDirty = true;
+            var conflictText = result.Conflicts.Count == 0
+                ? "sin conflictos"
+                : $"{result.Conflicts.Count} conflictos";
+            _status.Text = $"Mapa único generado: Z={result.Map.FloorZ} | {result.Map.Width}x{result.Map.Height} | {conflictText}";
+            MessageBox.Show(this,
+                $"Mapa global único generado:{Environment.NewLine}{Environment.NewLine}" +
+                $"Archivo: {dialog.FileName}{Environment.NewLine}" +
+                $"Dimensiones: {result.Map.Width} x {result.Map.Height}{Environment.NewLine}" +
+                $"Tiles escritos: {result.WrittenTiles}{Environment.NewLine}" +
+                $"Bordes fusionados: {result.MergedTiles}{Environment.NewLine}" +
+                $"NPCs: {result.Npcs} | Objetos: {result.Objects} | Partículas: {result.Particles}{Environment.NewLine}" +
+                $"Luces: {result.Lights} | Salidas internas: {result.InternalExits} | Externas: {result.ExternalExits}{Environment.NewLine}" +
+                $"Resultado: {conflictText}",
+                "Mapa único generado", MessageBoxButtons.OK,
+                result.Conflicts.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al compilar mapa único", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    private async void SaveUnifiedWorldBundleAs(object? sender, EventArgs e)
+    {
+        if (_session.CurrentWorld is null)
+        {
+            MessageBox.Show(this, "Primero abra un mundo completo.", "Compilar pisos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Seleccione la carpeta de salida del bundle de pisos",
+            SelectedPath = Path.Combine(ClientResourceRoot, "world")
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var directory = Path.Combine(dialog.SelectedPath, "world.floors");
+        try
+        {
+            UseWaitCursor = true;
+            _status.Text = "Compilando pisos globales...";
+            var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory));
+            _status.Text = $"Pisos globales generados: {bundle.Floors.Count}";
+            MessageBox.Show(this,
+                $"Bundle de pisos generado en:{Environment.NewLine}{directory}{Environment.NewLine}{Environment.NewLine}" +
+                $"Pisos: {string.Join(", ", bundle.Floors.Keys.Select(z => $"Z={z}"))}",
+                "Pisos globales generados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al compilar pisos", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    private async void GenerateUnifiedWorldConflictReport(object? sender, EventArgs e)
+    {
+        if (_session.CurrentWorld is null)
+        {
+            MessageBox.Show(this, "Primero abra el mundo completo.", "Informe global", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            UseWaitCursor = true;
+            _status.Text = "Analizando conflictos del mundo global...";
+            var bundle = await Task.Run(() => new UnifiedWorldCompiler().CompileFloors(_session.CurrentWorld, _session.Resources));
+            var output = Path.Combine(ClientResourceRoot, "world");
+            var report = new UnifiedWorldConflictReportService();
+            report.Write(bundle, output);
+            var count = report.Build(bundle).Count;
+            _status.Text = $"Informe global generado: {count} conflictos";
+            MessageBox.Show(this,
+                $"Informe generado en:{Environment.NewLine}{output}{Environment.NewLine}{Environment.NewLine}" +
+                "unified-world-conflicts.json\nunified-world-conflicts.csv",
+                "Informe global", MessageBoxButtons.OK,
+                count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al generar informe global", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    private IReadOnlyList<GlobalResolvedWorldSnapshot.EmbeddedImage> CaptureWorldImageForSave()
+    {
+        var image = _miniMap.WorldImage
+            ?? throw new InvalidOperationException("El mapa mundial todavía no terminó de componerse.");
+        using var copy = new Bitmap(image);
+        using var stream = new MemoryStream();
+        copy.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return [new GlobalResolvedWorldSnapshot.EmbeddedImage("worldmap/world.png", stream.ToArray())];
+    }
+
     private bool ConfirmPendingChanges()
     {
         var hasChanges = _session.CurrentWorld is not null
@@ -1387,7 +2026,7 @@ internal sealed class MainForm : Form
         using var dialog = new OpenFileDialog
         {
             Filter = "Mapas Argentum Online (*.csm;*.map)|*.csm;*.map|Todos los archivos (*.*)|*.*",
-            InitialDirectory = Path.Combine(_session.ResourceRoot, "Mapas"),
+            InitialDirectory = SourceMapsDirectory,
             Title = "Abrir mapa"
         };
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -1409,13 +2048,219 @@ internal sealed class MainForm : Form
         }
     }
 
+    private void OpenUnifiedWorld(object? sender, EventArgs e)
+    {
+        if (!ConfirmPendingChanges()) return;
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "Mapa global único (*.gmap)|*.gmap|Todos los archivos (*.*)|*.*",
+            InitialDirectory = Path.Combine(ClientResourceRoot, "world"),
+            Title = "Abrir mapa único global"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var map = _session.LoadUnifiedWorld(dialog.FileName);
+            _compiledUnifiedBundle = null;
+            _compiledUnifiedWorld = map;
+            _renderControl.SetUnifiedWorld(map, _session.Resources);
+            _miniMap.SetWorld(null, null, () => _renderControl.GlobalViewport, _renderControl.CenterOnGlobalTile);
+            _radarEnabled = true;
+            _sidebar.SetRadarVisible(true);
+            _radarTimer.Start();
+            _radarDirty = true;
+            _status.Text = $"Mapa único: Z={map.FloorZ} | {map.Width}x{map.Height} | {Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al abrir mapa único", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async void OpenUnifiedWorldBundle(object? sender, EventArgs e)
+    {
+        if (!ConfirmPendingChanges()) return;
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Seleccione la carpeta del bundle de pisos",
+            SelectedPath = Path.Combine(ClientResourceRoot, "world.floors")
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        await OpenBundlePreviewDirectory(dialog.SelectedPath);
+    }
+
+    public async Task OpenBundlePreviewDirectory(string directory)
+    {
+        try
+        {
+            if (!File.Exists(Path.Combine(directory, "bundle.aog")))
+                throw new InvalidDataException("La carpeta no contiene bundle.aog.");
+            var images = Directory.EnumerateFiles(directory, "floor-*.gmap")
+                .Select(path => (Path: path, Name: Path.GetFileNameWithoutExtension(path)))
+                .Select(item => (item.Path, Parsed: int.TryParse(item.Name[6..], out var z), Z: int.TryParse(item.Name[6..], out var value) ? value : 0))
+                .Where(item => item.Parsed)
+                .ToDictionary(item => item.Z, item => item.Path);
+            if (images.Count == 0) throw new InvalidDataException("El bundle no contiene floor-*.gmap.");
+            _previewFloorImages = images;
+            // Z=0 is the canonical starting floor. Fall back to the first
+            // available image only for bundles that do not contain floor 0.
+            _previewFloorZ = images.ContainsKey(0) ? 0 : images.Keys.OrderBy(z => z).First();
+            UseWaitCursor = true;
+            _status.Text = "Mostrando mundo completo; cargando datos del piso...";
+            var overview = Path.Combine(directory, "worldmap", $"floor-{_previewFloorZ.Value:+#;-#;0}.png");
+            if (File.Exists(overview))
+                _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), _previewFloorZ.Value);
+            _radarEnabled = true;
+            _sidebar.SetRadarVisible(true);
+            _radarTimer.Start();
+            var map = await Task.Run(() => _session.LoadUnifiedWorldFloor(directory, _previewFloorZ.Value));
+            _compiledUnifiedBundle = null;
+            _compiledUnifiedWorld = map;
+            _renderControl.SetUnifiedWorld(map, _session.Resources);
+            if (File.Exists(overview))
+                _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), _previewFloorZ.Value);
+            _miniMap.SetWorld(null, null, () => _renderControl.GlobalViewport, _renderControl.CenterOnGlobalTile);
+            _radarDirty = true;
+            _status.Text = $"Bundle de pisos: Z={_previewFloorZ.Value} | {images.Count} pisos | diseño real";
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al abrir bundle de pisos", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    public async Task RebuildBundleAsync(string directory)
+    {
+        UseWaitCursor = true;
+        _status.Text = "Regenerando world.floors con stitching...";
+        try
+        {
+            var source = Path.Combine(ClientResourceRoot, "world");
+            await Task.Run(() =>
+            {
+                _session.LoadWorld(source);
+                _session.SaveUnifiedWorldBundle(directory);
+            });
+            _status.Text = "world.floors regenerado con stitching.";
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    public async Task AuditStitchAsync(string directory)
+    {
+        UseWaitCursor = true;
+        _status.Text = "Analizando stitching sin regenerar world.floors...";
+        try
+        {
+            var source = Path.Combine(ClientResourceRoot, "world");
+            await Task.Run(() =>
+            {
+                _session.LoadWorld(source);
+                _session.SaveStitchAudits(directory);
+            });
+            _status.Text = "Auditoría de stitching guardada.";
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    public async Task AuditLooseTeleportsAsync(string directory)
+    {
+        UseWaitCursor = true;
+        _status.Text = "Auditando teleports VB6 de mapas originales...";
+        try
+        {
+            var maps = Path.Combine(_session.ReferenceResourceRoot, "Mapas");
+            await Task.Run(() =>
+            {
+                var audit = new LooseMapTeleportAuditService();
+                audit.SaveTsv(Path.Combine(directory, "loose-map-teleport-audit.tsv"), audit.Audit(maps));
+            });
+            _status.Text = "Audit de teleports de mapas originales guardado.";
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    public async Task CompileStitchedExperimentalAsync(string directory)
+    {
+        UseWaitCursor = true;
+        _status.Text = "Generando bundle experimental compacto...";
+        try
+        {
+            var source = Path.Combine(ClientResourceRoot, "world");
+            await Task.Run(() =>
+            {
+                _session.LoadWorld(source);
+                _session.SaveUnifiedWorldBundle(directory, applyStitching: true);
+            });
+            _status.Text = "Bundle experimental compacto generado.";
+        }
+        catch (Exception error)
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "experimental-error.txt"), error.ToString());
+            throw;
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    private async void ChangeUnifiedFloor(int delta)
+    {
+        if (_previewFloorImages is not null && _previewFloorZ is { } previewZ)
+        {
+            var previewFloors = _previewFloorImages.Keys.OrderBy(z => z).ToArray();
+            var previewIndex = Array.IndexOf(previewFloors, previewZ) + delta;
+            if (previewIndex < 0 || previewIndex >= previewFloors.Length) return;
+            var nextZ = previewFloors[previewIndex];
+            UseWaitCursor = true;
+            try
+            {
+                var floorMap = await Task.Run(() => _session.LoadUnifiedWorldFloor(
+                    Path.GetDirectoryName(_previewFloorImages[nextZ])!, nextZ));
+                _previewFloorZ = nextZ;
+                _compiledUnifiedWorld = floorMap;
+                _renderControl.SetUnifiedWorld(floorMap, _session.Resources);
+                var overview = Path.Combine(Path.GetDirectoryName(_previewFloorImages[nextZ])!, "worldmap",
+                    $"floor-{nextZ:+#;-#;0}.png");
+                if (File.Exists(overview))
+                    _renderControl.SetUnifiedWorldPreview(await Task.Run(() => LoadBitmapCopy(overview)), nextZ);
+                _radarEnabled = true;
+                _sidebar.SetRadarVisible(true);
+                _radarDirty = true;
+                _status.Text = $"Piso activo: Z={nextZ} | diseño real";
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, error.Message, "Error al abrir piso", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally { UseWaitCursor = false; }
+            return;
+        }
+        if (_compiledUnifiedBundle is null) return;
+        var floors = _compiledUnifiedBundle.Floors.Keys.ToArray();
+        if (floors.Length == 0 || _compiledUnifiedBundle.ActiveFloorZ is not { } active) return;
+        var index = Array.IndexOf(floors, active) + delta;
+        if (index < 0 || index >= floors.Length) return;
+        var map = _compiledUnifiedBundle.Select(floors[index]);
+        _compiledUnifiedWorld = map;
+        _renderControl.SetUnifiedWorld(map, _session.Resources);
+        _radarDirty = true;
+        _status.Text = $"Piso activo: Z={map.FloorZ}";
+    }
+
+    private static Bitmap LoadBitmapCopy(string path)
+    {
+        using var source = new Bitmap(path);
+        return new Bitmap(source);
+    }
+
     private async void OpenWorld(object? sender, EventArgs e)
     {
         if (!ConfirmPendingChanges()) return;
         using var dialog = new FolderBrowserDialog
         {
             Description = "Seleccione la carpeta que contiene los mapas .csm del mundo",
-            SelectedPath = Path.Combine(_session.ResourceRoot, "Mapas")
+            SelectedPath = SourceMapsDirectory
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         using var loading = new Form
@@ -1445,6 +2290,18 @@ internal sealed class MainForm : Form
         try
         {
             world = await Task.Run(() => _session.LoadWorld(dialog.SelectedPath, null, progress));
+            if (_compileFloorsAfterWorldLoad)
+            {
+                bar.Style = ProgressBarStyle.Marquee;
+                bar.MarqueeAnimationSpeed = 24;
+                label.Text = "Compilando world.floors con metadatos de reference\\Recursos...";
+                await Task.Run(() => _session.SaveUnifiedWorldBundle(Path.Combine(ClientResourceRoot, "world.floors")));
+                bar.Style = ProgressBarStyle.Continuous;
+                bar.MarqueeAnimationSpeed = 0;
+                bar.Value = 100;
+                label.Text = "world.floors generado correctamente.";
+                _compileFloorsAfterWorldLoad = false;
+            }
             _settings.LastMap = _session.CurrentMapPath ?? string.Empty;
             _renderControl.SetGlobalWorld(world, _session.Resources);
             _miniMap.SetWorld(world, _session.Resources.Graphics, () => _renderControl.GlobalViewport,
@@ -1457,12 +2314,6 @@ internal sealed class MainForm : Form
                 (world.IgnoredWorldIds.Count == 0 ? string.Empty :
                     $" | WORLDMAP ignorados: {string.Join(",", world.IgnoredWorldIds)}") +
                 (world.LoadErrors.Count == 0 ? string.Empty : $" | mapas con error: {world.LoadErrors.Count}");
-            if (world.LoadErrors.Count > 0)
-            {
-                loading.Close();
-                MessageBox.Show(this, string.Join(Environment.NewLine, world.LoadErrors.Take(30)),
-                    "Mapas omitidos al abrir el mundo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
             UpdateTitle();
         }
         catch (Exception error)
@@ -1471,6 +2322,12 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, error.Message, "Error al abrir mundo", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { loading.Close(); }
+    }
+
+    private void OpenOriginalMaps(object? sender, EventArgs e)
+    {
+        _compileFloorsAfterWorldLoad = true;
+        OpenWorld(sender, e);
     }
 
     private async void RunFullAudit(object? sender, EventArgs e)
@@ -1511,6 +2368,138 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, error.Message, "Error en auditoría", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { loading.Close(); }
+    }
+
+    private (string Csm, string Map, string Dat, string Inf) ResolveGlobalOutputPaths(string csmPath)
+    {
+        var fullCsm = Path.GetFullPath(csmPath);
+        if (Path.GetFileName(fullCsm).Equals("world.csm", StringComparison.OrdinalIgnoreCase))
+        {
+            var outputRoot = ClientResourceRoot;
+            var datDirectory = Path.Combine(outputRoot, "Dat");
+            var outputWorld = Path.Combine(outputRoot, "world");
+            Directory.CreateDirectory(outputWorld);
+            Directory.CreateDirectory(datDirectory);
+            // Keep the selected WORLD archive in the client/server resource tree,
+            // even when the source maps were read from reference/Recursos.
+            var outputCsm = Path.Combine(outputWorld, "world.csm");
+            return (outputCsm, Path.Combine(outputRoot, "maps", "world.map"),
+                Path.Combine(datDirectory, "world.dat"), Path.Combine(datDirectory, "world.inf"));
+        }
+        return (fullCsm, Path.ChangeExtension(fullCsm, ".map"), Path.ChangeExtension(fullCsm, ".dat"), Path.ChangeExtension(fullCsm, ".inf"));
+    }
+
+    private static string ClientResourceRoot => ResourceRootResolver.GeneratedRoot();
+
+    private string SourceMapsDirectory =>
+        Directory.Exists(Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas"))
+            ? Path.Combine(ResourceRootResolver.ReferenceRoot(), "Mapas")
+            : Path.Combine(_session.ResourceRoot, "Mapas");
+
+    private void RunGlobalArchiveAudit(object? sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "WORLD (*.csm)|*.csm|Todos los archivos (*.*)|*.*",
+            Title = "Seleccionar world.csm"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var output = ResolveGlobalOutputPaths(dialog.FileName);
+            var result = new GlobalArchiveAuditService().Audit(dialog.FileName, _session.CurrentWorld, output.Dat, output.Inf, output.Map);
+            var semantic = _session.CurrentWorld is null
+                ? new GlobalSemanticAuditResult([])
+                : new GlobalWorldSemanticAuditService().Audit(_session.CurrentWorld, _session.Resources, dialog.FileName, output.Inf);
+            var errors = result.Issues.Where(issue => issue.Error).ToArray();
+            var warnings = result.Issues.Where(issue => !issue.Error).ToArray();
+            _status.Text = $"Auditoría global: {result.Maps} mapas, {errors.Length + semantic.Errors} errores, {warnings.Length + semantic.Warnings} advertencias";
+            var structuralDetails = result.Issues.Count == 0
+                ? "No se encontraron inconsistencias."
+                : string.Join(Environment.NewLine, result.Issues.Select(issue =>
+                    $"{(issue.Error ? "ERROR" : "WARN")} [{issue.Code}] {issue.Message}"));
+            var semanticDetails = semantic.Issues.Count == 0
+                ? "No se encontraron inconsistencias semánticas en el ensamblado."
+                : string.Join(Environment.NewLine, semantic.Issues.Select(issue =>
+                    $"{issue.Severity.ToString().ToUpperInvariant()} [{issue.Code}] mapa={issue.MapId} local={issue.LocalX},{issue.LocalY} global={issue.GlobalX},{issue.GlobalY}: {issue.Message}"));
+            MessageBox.Show(this,
+                $"Auditoría de WORLD terminada.{Environment.NewLine}{Environment.NewLine}" +
+                "[Estructura binaria]" + Environment.NewLine + structuralDetails + Environment.NewLine + Environment.NewLine +
+                "[Coherencia semántica]" + Environment.NewLine + semanticDetails,
+                "Auditoría global", MessageBoxButtons.OK,
+                errors.Length + semantic.Errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error en auditoría global", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void RunGlobalBlockingAudit(object? sender, EventArgs e)
+    {
+        var world = _session.CurrentWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Primero abra un mundo completo.", "Auditoría de bloqueos");
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "Informe TSV (*.tsv)|*.tsv|Todos los archivos|*.*",
+            FileName = "auditoria-bloqueos.tsv",
+            Title = "Guardar auditoría global de bloqueos"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var service = new GlobalBlockingAuditService();
+            var report = service.Audit(world, _session.Resources.Objects);
+            service.WriteReport(report, dialog.FileName);
+            _status.Text = $"Auditoría de bloqueos: {report.MapsVisited} mapas, {report.Issues.Count} incidencias";
+            MessageBox.Show(this,
+                $"Auditoría terminada.{Environment.NewLine}{Environment.NewLine}" +
+                $"Mapas: {report.MapsVisited}{Environment.NewLine}" +
+                $"Celdas: {report.CellsVisited}{Environment.NewLine}" +
+                $"Incidencias: {report.Issues.Count}{Environment.NewLine}{Environment.NewLine}" +
+                $"Informe: {dialog.FileName}",
+                "Auditoría de bloqueos", MessageBoxButtons.OK,
+                report.Issues.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error en auditoría de bloqueos", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void CorrectGlobalBlockingCopy(object? sender, EventArgs e)
+    {
+        var world = _session.CurrentWorld;
+        if (world is null)
+        {
+            MessageBox.Show(this, "Primero abra un mundo completo.", "Corregir bloqueos");
+            return;
+        }
+
+        if (MessageBox.Show(this,
+                "Esta operación copiará todos los CSM a otra carpeta y aplicará allí los bloqueos configurados. " +
+                "Nunca modifica los archivos originales. ¿Continuar?",
+                "Corregir bloqueos en copia", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            return;
+
+        using var dialog = new FolderBrowserDialog { Description = "Carpeta destino para la copia corregida de los CSM" };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            new GlobalBlockingAuditService().ApplyCorrectionsToCopy(world, dialog.SelectedPath, _session.Resources.Objects);
+            _status.Text = $"Bloqueos corregidos en copia: {dialog.SelectedPath}";
+            MessageBox.Show(this, "La copia corregida fue generada. Los CSM originales no fueron modificados.",
+                "Corregir bloqueos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al corregir bloqueos", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async void GenerateWorldOutputs(object? sender, EventArgs e)
@@ -1712,7 +2701,10 @@ internal sealed class MainForm : Form
     /// </summary>
     private async void OpenWorldAt(int worldId)
     {
-        var directory = Path.Combine(_session.ResourceRoot, "Mapas");
+        var worldDirectory = Path.Combine(_session.ResourceRoot, "world");
+        var directory = File.Exists(Path.Combine(worldDirectory, "world.csm"))
+            ? worldDirectory
+            : SourceMapsDirectory;
         var world = await Task.Run(() => _session.LoadWorld(directory));
         if (worldId > 0 && _session.CurrentWorld is { } current &&
             current.WorldLayouts.Any(layout => layout.WorldId == worldId))
@@ -1743,6 +2735,23 @@ internal sealed class MainForm : Form
     private void UpdateRadar()
     {
         if (!_radarEnabled) return;
+        if (_compiledUnifiedWorld is { } unified)
+        {
+            var (x, y) = _renderControl.ViewportCenterGlobalTile;
+            if (!_radarDirty && x == _radarX && y == _radarY) return;
+            _radarX = x; _radarY = y; _radarDirty = false;
+            try
+            {
+                var radar = new UnifiedWorldRadarService();
+                var crop = radar.CreateCentered(unified,
+                    Math.Clamp(x, 0, unified.Width - 1),
+                    Math.Clamp(y, 0, unified.Height - 1),
+                    WorldRadarService.DefaultSize, WorldRadarService.DefaultSize);
+                _radarView.SetImage(crop.Image, crop.MarkerX, crop.MarkerY);
+            }
+            catch (Exception error) { LogRadarError(error); }
+            return;
+        }
         var service = new WorldRadarService();
         if (_session.CurrentWorld is { } world && _miniMap.RadarImage is { } worldImage)
         {

@@ -1,4 +1,5 @@
 using AoProject.WorldEditor.Domain;
+using AoProject.WorldEditor.Engine.Rendering;
 using AoProject.WorldEditor.Infrastructure;
 
 namespace AoProject.WorldEditor.Application;
@@ -6,6 +7,9 @@ namespace AoProject.WorldEditor.Application;
 internal sealed class GlobalWorldDocument
 {
     private readonly HashSet<short> _pinnedMaps = [];
+    private readonly object _stitchSync = new();
+    private IReadOnlyDictionary<GlobalChunkCoordinate, int>? _stitchColumns;
+    private IReadOnlyDictionary<GlobalChunkCoordinate, int>? _stitchRows;
     public GlobalWorldDocument(
         GlobalWorldAssembly assembly,
         IReadOnlyDictionary<short, WorldMap> maps,
@@ -23,7 +27,7 @@ internal sealed class GlobalWorldDocument
         GlobalWorldAssembly assembly,
         IReadOnlyDictionary<short, string> paths,
         short rootMap,
-        Func<string, WorldMap> loader)
+        Func<short, string, WorldMap> loader)
     {
         Assembly = assembly;
         Paths = paths;
@@ -49,6 +53,11 @@ internal sealed class GlobalWorldDocument
         RootMap = rootMap;
         _pinnedMaps.Clear();
         _pinnedMaps.Add(rootMap);
+        lock (_stitchSync)
+        {
+            _stitchColumns = null;
+            _stitchRows = null;
+        }
     }
 
     public int LoadedMapCount => Maps is LazyWorldMapCatalog lazy ? lazy.LoadedCount : Maps.Count;
@@ -110,6 +119,7 @@ internal sealed class GlobalWorldDocument
 
     public bool TryResolve(int globalX, int globalY, out GlobalTileLocation location)
     {
+        var shifts = EnsureStitching();
         var chunks = Assembly.Placements.Select(item => item.Chunk).ToHashSet();
         foreach (var placement in Assembly.Placements)
         {
@@ -117,27 +127,61 @@ internal sealed class GlobalWorldDocument
             var (left, top, right, bottom) = GlobalBounds(placement, chunks);
             if (globalX < left || globalX > right || globalY < top || globalY > bottom) continue;
             location = new GlobalTileLocation(placement.MapId,
-                globalX - placement.Chunk.X * GlobalChunkGeometry.WidthTiles + 1,
-                globalY - placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + 1);
+                globalX - placement.Chunk.X * GlobalChunkGeometry.WidthTiles + shifts.Columns.GetValueOrDefault(placement.Chunk) + 1,
+                globalY - placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + shifts.Rows.GetValueOrDefault(placement.Chunk) + 1);
             return true;
         }
         location = default;
         return false;
     }
 
-    private static (int Left, int Top, int Right, int Bottom) GlobalBounds(
+    /// <summary>
+    /// Runtime-facing resolver. It validates that a global coordinate belongs
+    /// to the assembled WORLD without exposing the legacy map id.
+    /// </summary>
+    public bool TryResolveGlobal(int globalX, int globalY, out GlobalTileCoordinate coordinate)
+    {
+        if (!TryResolve(globalX, globalY, out _))
+        {
+            coordinate = default;
+            return false;
+        }
+        coordinate = new GlobalTileCoordinate(globalX, globalY);
+        return true;
+    }
+
+    /// <summary>
+    /// Converts a legacy source exit to the global runtime target. The map id is
+    /// intentionally consumed only at this import/editor boundary.
+    /// </summary>
+    public bool TryResolveLegacyExit(short targetMapId, int targetLocalX, int targetLocalY,
+        out GlobalExitTarget target)
+    {
+        if (!TryGetGlobalTile(targetMapId, targetLocalX, targetLocalY, out var global))
+        {
+            target = default;
+            return false;
+        }
+        target = new GlobalExitTarget(global.X, global.Y);
+        return true;
+    }
+
+    private (int Left, int Top, int Right, int Bottom) GlobalBounds(
         GlobalMapPlacement placement, HashSet<GlobalChunkCoordinate> chunks)
     {
+        var shifts = EnsureStitching();
+        var shiftX = shifts.Columns.GetValueOrDefault(placement.Chunk);
+        var shiftY = shifts.Rows.GetValueOrDefault(placement.Chunk);
         var hasWest = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
         var hasNorth = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
         var minX = hasWest ? GlobalChunkGeometry.CoreMinX + 1 : GlobalChunkGeometry.CoreMinX;
         var minY = hasNorth ? GlobalChunkGeometry.CoreMinY + 1 : GlobalChunkGeometry.CoreMinY;
         // Only the rendered core is resolvable. Without this, clicks in the
         // blank padding west/north of the first map edited invisible tiles.
-        var left = placement.Chunk.X * GlobalChunkGeometry.WidthTiles + minX - 1;
-        var top = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + minY - 1;
-        var right = placement.Chunk.X * GlobalChunkGeometry.WidthTiles + GlobalChunkGeometry.CoreMaxX - 1;
-        var bottom = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + GlobalChunkGeometry.CoreMaxY - 1;
+        var left = placement.Chunk.X * GlobalChunkGeometry.WidthTiles - shiftX + minX - 1;
+        var top = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - shiftY + minY - 1;
+        var right = placement.Chunk.X * GlobalChunkGeometry.WidthTiles - shiftX + GlobalChunkGeometry.CoreMaxX - 1;
+        var bottom = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - shiftY + GlobalChunkGeometry.CoreMaxY - 1;
         return (left, top, right, bottom);
     }
 
@@ -152,8 +196,11 @@ internal sealed class GlobalWorldDocument
         }
         var chunks = Assembly.Placements.Select(item => item.Chunk).ToHashSet();
         var (left, top, right, bottom) = GlobalBounds(placement, chunks);
-        var globalX = placement.Chunk.X * GlobalChunkGeometry.WidthTiles + localX - 1;
-        var globalY = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles + localY - 1;
+        var shifts = EnsureStitching();
+        var globalX = placement.Chunk.X * GlobalChunkGeometry.WidthTiles -
+            shifts.Columns.GetValueOrDefault(placement.Chunk) + localX - 1;
+        var globalY = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles -
+            shifts.Rows.GetValueOrDefault(placement.Chunk) + localY - 1;
         if (globalX < left || globalX > right || globalY < top || globalY > bottom)
         {
             global = default;
@@ -170,20 +217,60 @@ internal sealed class GlobalWorldDocument
         global = (globalX, globalY);
         return true;
     }
+
+    public (int X, int Y) GlobalTileForPlacement(GlobalMapPlacement placement,
+        int localX, int localY, int minChunkX = 0, int minChunkY = 0)
+    {
+        var shifts = EnsureStitching();
+        return ((placement.Chunk.X - minChunkX) * GlobalChunkGeometry.WidthTiles -
+                shifts.Columns.GetValueOrDefault(placement.Chunk) + localX - 1,
+            (placement.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles -
+                shifts.Rows.GetValueOrDefault(placement.Chunk) + localY - 1);
+    }
+
+    public (int X, int Y) StitchShift(GlobalChunkCoordinate chunk)
+    {
+        var shifts = EnsureStitching();
+        return (shifts.Columns.GetValueOrDefault(chunk), shifts.Rows.GetValueOrDefault(chunk));
+    }
+
+    private (IReadOnlyDictionary<GlobalChunkCoordinate, int> Columns,
+        IReadOnlyDictionary<GlobalChunkCoordinate, int> Rows) EnsureStitching()
+    {
+        lock (_stitchSync)
+        {
+            if (_stitchColumns is not null && _stitchRows is not null)
+                return (_stitchColumns, _stitchRows);
+
+            var stitcher = new WorldBorderStitcher(Assembly.Placements, mapId =>
+            {
+                if (!Paths.TryGetValue(mapId, out var path)) return null;
+                try { return WorldBorderStitcher.Sample(new CsmMapFileService().Load(path, mapId)); }
+                catch { return null; }
+            });
+            var result = stitcher.ForAll(Assembly.Placements.Select(item => item.Chunk));
+            _stitchColumns = result.Columns;
+            _stitchRows = result.Rows;
+            return (_stitchColumns, _stitchRows);
+        }
+    }
 }
 
 internal sealed class LazyWorldMapCatalog : IReadOnlyDictionary<short, WorldMap>
 {
     private readonly object _sync = new();
     private readonly IReadOnlyDictionary<short, string> _paths;
-    private readonly Func<string, WorldMap> _loader;
+    private readonly Func<short, string, WorldMap> _loader;
     private readonly Dictionary<short, WorldMap> _cache = [];
     private readonly HashSet<short> _unavailable = [];
 
-    public LazyWorldMapCatalog(IReadOnlyDictionary<short, string> paths, Func<string, WorldMap> loader)
+    public LazyWorldMapCatalog(IReadOnlyDictionary<short, string> paths, Func<short, string, WorldMap> loader)
     {
         _paths = paths; _loader = loader;
     }
+
+    public LazyWorldMapCatalog(IReadOnlyDictionary<short, string> paths, Func<string, WorldMap> loader)
+        : this(paths, (_, path) => loader(path)) { }
 
     public WorldMap this[short key] => Get(key);
     public IEnumerable<short> Keys => _paths.Keys;
@@ -231,7 +318,7 @@ internal sealed class LazyWorldMapCatalog : IReadOnlyDictionary<short, WorldMap>
             if (_unavailable.Contains(key)) throw new InvalidDataException($"El mapa {key} no está disponible.");
             if (_cache.TryGetValue(key, out var map)) return map;
             if (!_paths.TryGetValue(key, out var path)) throw new KeyNotFoundException($"No existe el mapa {key}.");
-            map = _loader(path);
+            map = _loader(key, path);
             _cache[key] = map;
             return map;
         }

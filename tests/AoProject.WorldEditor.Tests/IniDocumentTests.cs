@@ -1,4 +1,5 @@
 using AoProject.WorldEditor.Infrastructure;
+using System.Text;
 using Xunit;
 
 namespace AoProject.WorldEditor.Tests;
@@ -27,6 +28,19 @@ public sealed class IniDocumentTests
         {
             File.WriteAllText(path, "[PATH]\r\nUltimoMapa=mapa1.csm\r\n", new System.Text.UTF8Encoding(true));
             Assert.Equal("mapa1.csm", IniDocument.Load(path).Get("PATH", "UltimoMapa"));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void Legacy_ansi_resources_are_decoded_as_windows1252()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "ao-ini-ansi-" + Guid.NewGuid().ToString("N") + ".ini");
+        try
+        {
+            File.WriteAllBytes(path, Encoding.Latin1.GetBytes(
+                "[OBJ1]\r\nName=Árbol ñ\r\n"));
+            Assert.Equal("Árbol ñ", IniDocument.Load(path).Get("OBJ1", "Name"));
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

@@ -37,8 +37,8 @@ ao-project-world-editor/artifacts/world/<timestamp>/
   translados.ini
   minimapas/mapa<id>.png
   minimapas-bmp/mapa<id>.bmp
-  worldmap/worldmap<id>.png
-  worldmap/worldmap<id>-preview.png
+  worldmap/world.png
+  worldmap/world-preview.png
   worldmap/worldmap-summary.txt
   output-summary.txt
   output-audit.tsv
@@ -127,8 +127,8 @@ Baseline 2026-10-28 (`artifacts/audit/20261028-144130`): **12 archivos, 0 errore
 | `translados.ini` | Seccion `[mapa<id>]` con `Abajo/Arriba/Izquierda/Derecha` contra `50,91`, `50,10`, `13,50`, `88,50` |
 | `minimapas/mapa<id>.png` | Existe y no esta vacio (paridad VB6) |
 | `minimapas-bmp/mapa<id>.bmp` | Existe y el header es 100x100, 16bpp, BI_RGB (lo que carga el cliente) |
-| `worldmap/worldmap<id>.png` | Existe y mide `ancho*100 x alto*100` del WORLDMAP |
-| `worldmap/worldmap<id>-preview.png` | Existe (25% del anterior) |
+| `worldmap/world.png` | Existe y mide `ancho*100 x alto*100` de WORLDMAP1 |
+| `worldmap/world-preview.png` | Existe (25% del anterior) |
 
 El resultado se escribe en `output-audit.tsv` dentro de la misma carpeta de
 salida (columnas `MapId, Code, Severity, X, Y, Layer, Message`).

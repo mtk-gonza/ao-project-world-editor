@@ -46,6 +46,7 @@ internal sealed class ReferenceIndexLoader
                 SecondaryGraphicIndex = Short(document.GetInt(section, "GrhSec")),
                 Closed = Byte(document.GetInt(section, "Cerrada")),
                 Subtype = Byte(document.GetInt(section, "Subtipo"))
+                ,DefaultBlockedMask = ReadMask(document, section)
             };
         }
         return result;
@@ -92,4 +93,10 @@ internal sealed class ReferenceIndexLoader
 
     private static byte Byte(int value) => value is >= byte.MinValue and <= byte.MaxValue ? (byte)value : throw new InvalidDataException("Valor byte fuera de rango.");
     private static short Short(int value) => value is >= short.MinValue and <= short.MaxValue ? (short)value : throw new InvalidDataException("Valor short fuera de rango.");
+    private static byte ReadMask(IniDocument document, string section)
+    {
+        var value = document.GetInt(section, "BlockedMask");
+        if (value == 0) value = document.GetInt(section, "Bloqueo");
+        return value is >= 0 and <= 15 ? (byte)value : throw new InvalidDataException("DefaultBlockedMask fuera de rango.");
+    }
 }

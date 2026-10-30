@@ -13,7 +13,8 @@ internal sealed class WorldCoordinateAuditService
     public IReadOnlyList<WorldAuditSummary> Audit(
         IReadOnlyList<MapsWorldDataService.WorldLayout> layouts,
         IReadOnlyCollection<short> availableMaps,
-        IReadOnlyDictionary<short, MapCoordinateInfo> mapInfo)
+        IReadOnlyDictionary<short, MapCoordinateInfo> mapInfo,
+        IReadOnlyDictionary<short, string>? mapPaths = null)
     {
         ArgumentNullException.ThrowIfNull(layouts);
         ArgumentNullException.ThrowIfNull(availableMaps);
@@ -58,8 +59,9 @@ internal sealed class WorldCoordinateAuditService
             var mapCounts = cells.Values.GroupBy(id => id).ToDictionary(group => group.Key, group => group.Count());
             var filler = mapCounts.Where(pair => pair.Value > 1).Select(pair => pair.Key).ToHashSet();
             var dummy = new WorldMap();
+            var paths = mapPaths ?? new Dictionary<short, string>();
             var document = new GlobalWorldDocument(assembly,
-                available.ToDictionary(id => id, _ => dummy), new Dictionary<short, string>(), root);
+                available.ToDictionary(id => id, _ => dummy), paths, root);
             var visible = new List<VisibleCell>();
 
             foreach (var (chunk, mapId) in cells)
@@ -72,10 +74,11 @@ internal sealed class WorldCoordinateAuditService
                 var hasNorth = chunks.Contains(new GlobalChunkCoordinate(chunk.X, chunk.Y - 1));
                 var minX = hasWest ? GlobalChunkGeometry.CoreMinX + 1 : GlobalChunkGeometry.CoreMinX;
                 var minY = hasNorth ? GlobalChunkGeometry.CoreMinY + 1 : GlobalChunkGeometry.CoreMinY;
-                var left = chunk.X * GlobalChunkGeometry.WidthTiles + minX - 1;
-                var top = chunk.Y * GlobalChunkGeometry.HeightTiles + minY - 1;
-                var right = chunk.X * GlobalChunkGeometry.WidthTiles + GlobalChunkGeometry.CoreMaxX - 1;
-                var bottom = chunk.Y * GlobalChunkGeometry.HeightTiles + GlobalChunkGeometry.CoreMaxY - 1;
+                var shift = document.StitchShift(chunk);
+                var left = chunk.X * GlobalChunkGeometry.WidthTiles - shift.X + minX - 1;
+                var top = chunk.Y * GlobalChunkGeometry.HeightTiles - shift.Y + minY - 1;
+                var right = chunk.X * GlobalChunkGeometry.WidthTiles - shift.X + GlobalChunkGeometry.CoreMaxX - 1;
+                var bottom = chunk.Y * GlobalChunkGeometry.HeightTiles - shift.Y + GlobalChunkGeometry.CoreMaxY - 1;
                 visible.Add(new VisibleCell(mapId, chunk, minX, minY, GlobalChunkGeometry.CoreMaxX,
                     GlobalChunkGeometry.CoreMaxY, left, top, right, bottom));
 

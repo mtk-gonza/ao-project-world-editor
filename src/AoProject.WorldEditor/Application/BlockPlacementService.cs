@@ -22,6 +22,7 @@ internal sealed class BlockPlacementService
             if (targetX is < 1 or > WorldMap.Width || targetY is < 1 or > WorldMap.Height)
                 continue;
             map.Blocks[targetX, targetY].Graphics[preset.Layer - 1].GraphicIndex = item.GraphicIndex + placed;
+            map.Blocks[targetX, targetY].Blocked = item.DefaultBlockedMask;
             placed++;
         }
         if (placed > 0) map.Info.Changed = true;

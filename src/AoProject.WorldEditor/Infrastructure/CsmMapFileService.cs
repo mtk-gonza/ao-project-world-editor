@@ -12,6 +12,21 @@ internal sealed class CsmMapFileService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         using var reader = new BinaryReader(File.OpenRead(path), Encoding.Latin1, leaveOpen: false);
+        return Load(reader);
+    }
+
+    public WorldMap Load(string path, short mapId)
+    {
+        if (GlobalCsmArchiveService.TryRead(path, mapId, out var payload))
+        {
+            using var reader = new BinaryReader(new MemoryStream(payload, writable: false), Encoding.Latin1, leaveOpen: false);
+            return Load(reader);
+        }
+        return Load(path);
+    }
+
+    private static WorldMap Load(BinaryReader reader)
+    {
         var counts = new Counts(reader);
         var worldMapSize = new CsmMapSize(reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16(), reader.ReadInt16()).Normalize();
 

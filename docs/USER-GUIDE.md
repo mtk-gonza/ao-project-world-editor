@@ -149,8 +149,8 @@ de recursos; los Info de trailing/triggers/exits especiales no bloquean.
   `50,10`, `13,50`, `88,50`);
 - `minimapas/mapa<id>.png` (paridad VB6) y `minimapas-bmp/mapa<id>.bmp` (16bpp,
   el formato que carga el cliente);
-- `worldmap/worldmap<id>.png` (minimapa completo del mundo, 1900x2200) y un
-  `worldmap<id>-preview.png` al 25%;
+- `worldmap/world.png` (minimapa completo de WORLDMAP1, 1900x2200) y un
+  `world-preview.png` al 25%; los mundos adicionales usan `world-<id>.png`;
 - `output-audit.tsv` con el resultado de comparar lo generado contra los CSM.
 
 El generador parte de `init/namemapa.dat` y `MiniMap/translados.ini` y solo

@@ -155,8 +155,9 @@ constructor sin parametros y deja todos los flags en `false`; usar siempre
 **Decision:** ademas del minimapa por mapa (PNG para paridad VB6 y BMP 16bpp para el
 cliente), el comando de salidas compone **un minimapa por WORLDMAP**: la grilla
 oficial (19x22) de minimapas de 100x100, en orden fila-mayor, con celdas vacias en
-negro. Se emite `worldmap/worldmap<id>.png` (1900x2200) y un preview al 25%
-(`worldmap<id>-preview.png`, 475x550) con nearest-neighbor.
+negro. Para `WORLDMAP1` se emite `worldmap/world.png` (1900x2200) y
+`worldmap/world-preview.png`; los mundos adicionales usan `world-<id>.png`.
+El mismo PNG queda embebido en `world.map`.
 
 **Consecuencias:** el artefacto de mundo tiene el mismo formato de pixel que el
 cliente (`Minimapas/mapaN.bmp`), sin reescalado. Los mapas de relleno repetidos se
@@ -483,3 +484,70 @@ asi que el radar sigue exacto.
 **Evidencia:** `MapRenderGeometryTests.Duplicated_border_junction_collapses_to_the_same_row`
 (las dos copias en la misma fila) y `Different_border_junction_keeps_both_rows` (sin
 union duplicada quedan dos filas).
+
+## ADR-WM-023: contrato de coordenadas del bundle runtime
+
+**Decision:** se mantienen separadas las coordenadas locales VB6, las coordenadas
+globales del mundo ensamblado y las coordenadas externas de un teleport.
+
+- Las coordenadas locales CSM son 1-based y validas en `1..100`.
+- Las coordenadas globales runtime son zero-based.
+- Cada placement serializa `StitchX/StitchY` en `bundle.aog` v3.
+- El stride fisico es `75x81`, no `100x100`.
+- La formula canonica es:
+
+```text
+GlobalX = (ChunkX - MinChunkX) * 75 + LocalX - 1 - StitchX
+GlobalY = (ChunkY - MinChunkY) * 81 + LocalY - 1 - StitchY
+```
+
+El editor, cliente, servidor, radar, movimiento y resolucion de salidas deben usar la
+misma formula y su inversa. Un consumidor no puede aplicar offsets distintos ni mezclar
+coordenadas externas 1-based con indices globales zero-based.
+
+## ADR-WM-024: fuentes originales y bundle generado
+
+**Decision:** `reference\\Recursos` es fuente read-only. Los artefactos generados se
+escriben en `ao-project-resources\\world.floors` y no se crea configuracion artificial
+en `reference\\Recursos\\init`.
+
+El bundle productivo actual contiene `bundle.aog` v3 y los floors compilados con
+stitching fisico. Antes de reemplazarlo se conserva una copia en una ruta temporal de
+backup. Las auditorias TSV se distribuyen junto al bundle para hacer reproducible la
+generacion y revisar seams, niveles, salidas y teleports.
+
+## ADR-WM-025: mapas especiales como salidas externas
+
+**Decision:** `TileExit.Map` no positivo no se interpreta automaticamente como un
+placement. `Map=0` significa ausencia de salida; `Map=-1`, `Map=-2` y `Map=3000..3004`
+se conservan como salidas externas.
+
+Para esas salidas:
+
+- `ExternalMapId` conserva el ID original.
+- `ExternalX/ExternalY` conservan las coordenadas VB6 originales `1..100`.
+- Las coordenadas globales del destino quedan en `(-1,-1)` porque no pertenecen al
+  mundo compacto.
+- `ExternalZ=-1` por la politica actual de destino especial.
+- El mapa de origen conserva su piso normal (`SourceZ=0` salvo asignacion explicita).
+
+La auditoria de los 843 CSM originales encontro 1.184 salidas a `-1`, 2 a `-2` y 10
+a `3000..3004`. La semantica exacta de esos IDs aun debe confirmarse contra el codigo
+VB6 de rutas/teleports antes de inferir que representan un subterraneo real.
+
+## ADR-WM-026: compactacion fisica experimental promovida a runtime
+
+**Decision:** el floor generado se materializa fisicamente aplicando los offsets de
+stitching, ajustando dimensiones y normalizando destinos internos. En conflictos de
+seam se conserva el placement existente (`KeepExistingPlacement`) porque todos los
+6.270 conflictos auditados estan en bordes o esquinas y no en el interior.
+
+El resultado actual fue validado con:
+
+- WorldEditor: 362/362 tests.
+- Cliente: 784/784 tests.
+- Servidor: 646/646 tests.
+
+La reserva adicional para referencias legacy permanece documentada como deuda: debe
+reemplazarse por una normalizacion semantica cuando se confirme el contrato de los
+destinos especiales.

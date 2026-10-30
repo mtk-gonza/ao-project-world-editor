@@ -11,7 +11,9 @@ public sealed class ResourceParityTests
 {
     private static string ResourceRoot =>
         Environment.GetEnvironmentVariable("AO_RESOURCES") ??
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "ao-project-resources"));
+        (Directory.Exists(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "reference", "Recursos")))
+            ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "reference", "Recursos"))
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "ao-project-resources")));
 
     [Fact]
     public void GraphicIndexLoader_reads_reference_resources()
@@ -110,6 +112,22 @@ public sealed class ResourceParityTests
         {
             File.Delete(target);
         }
+    }
+
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(4)] [InlineData(8)] [InlineData(15)]
+    public void CsmMapFileService_roundtrips_each_vb6_directional_mask(byte mask)
+    {
+        var service = new CsmMapFileService();
+        var source = new WorldMap();
+        source.Blocks[12, 13].Blocked = mask;
+        var target = Path.Combine(Path.GetTempPath(), $"world-editor-blocked-{Guid.NewGuid():N}.csm");
+        try
+        {
+            service.Save(source, target);
+            Assert.Equal(mask, service.Load(target).Blocks[12, 13].Blocked);
+        }
+        finally { File.Delete(target); }
     }
 
     [Fact]

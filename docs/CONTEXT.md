@@ -8,7 +8,8 @@ WorldEditor de Argentum Online, escrito originalmente en VB6 con DirectDraw/Dire
 - Referencia funcional: `reference/argentum-online-worldeditor` (submodulo).
 - Runtime destino: .NET 8 WinForms en Windows.
 - Backend grafico: Vortice.Direct3D11 (`Rendering/D3D11WorldRenderer.cs`).
-- Recursos: `ao-project-resources` (solo lectura).
+- Recursos fuente: `reference/Recursos` (solo lectura).
+- Artefactos runtime: `ao-project-resources/world.floors` (generados, no fuente).
 - Ledger de paridad: `../docs/parity/world-editor-coverage.tsv` (617 procedimientos,
   100% `Ported` al 2026-10-28).
 
@@ -61,13 +62,13 @@ ao-project-world-editor/
     Application/      Servicios de edicion, sesion, undo, mundo global, audio
     Domain/           Modelo de mapa y reglas puras
       Rendering/      WorldRenderOptions (sin dependencia de D3D)
-    Infrastructure/   Lectores/escritores CSM/V3, indices, INI, mapsworlddata
+    Infrastructure/   Lectores/escritores CSM/V3, bundle v3, indices, INI, mapsworlddata
       Runtime/        EditorPaths (raiz del proyecto, logs, autosave)
     Engine/Rendering/ D3D11, atlas, geometria de render, camara, texto
-    Presentation/
+   Presentation/
       Forms/          MainForm
       Features/World/ WorldRenderControl, WorldMiniMapControl
-  tests/AoProject.WorldEditor.Tests/   xUnit (229 tests al 2026-10-28)
+   tests/AoProject.WorldEditor.Tests/   xUnit (362 tests al 2026-10-29)
 ```
 
 Rutas de runtime (centralizadas en `Infrastructure/Runtime/EditorPaths.cs`):
@@ -152,6 +153,22 @@ El mundo no se arma con celdas de 100 tiles. Se arma con el area jugable real:
 Estas constantes viven en `Domain/GlobalWorldTypes.cs` (`GlobalChunkGeometry`) y se
 aplican en `Rendering/MapRenderGeometry.Combine`, `GlobalWorldDocument.TryResolve`
 y `WorldMiniMapControl`.
+
+El bundle runtime conserva el mismo contrato: las coordenadas locales VB6 son 1-based
+(`1..100`), las coordenadas globales son zero-based y la conversion aplica los offsets
+`StitchX/StitchY` del placement. Para un chunk, el stride es `75x81` y la formula es:
+
+```text
+GlobalX = (ChunkX - MinChunkX) * 75 + LocalX - 1 - StitchX
+GlobalY = (ChunkY - MinChunkY) * 81 + LocalY - 1 - StitchY
+```
+
+Las coordenadas `ExternalX/ExternalY` de un teleport externo no se convierten a globales:
+se conservan en formato VB6 para el mapa destino.
+
+`Map=-1`, `Map=-2` y `Map=3000..3004` son salidas externas con `ExternalZ=-1`; no son
+placements normales. La semantica exacta de esos identificadores especiales queda
+documentada en `WORLD-STITCH-AND-TELEPORT-AUDIT.md`.
 
 ## 7. Feature "mapa mundial"
 

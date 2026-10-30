@@ -10,6 +10,7 @@ internal sealed class MapEntityEditingService
         if (index < 0 || index >= objects.Count) throw new ArgumentOutOfRangeException(nameof(index));
         var block = map.Blocks[x, y]; block.Object.Index = index; block.Object.Amount = index == 0 ? (short)0 : amount;
         block.ObjectGraphic = index == 0 ? default : new GraphicAnimation { GraphicIndex = objects[index].GraphicIndex };
+        if (index != 0) block.Blocked = objects[index].DefaultBlockedMask;
         map.Info.Changed = true;
     }
 

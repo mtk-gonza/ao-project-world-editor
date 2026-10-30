@@ -1,6 +1,6 @@
 # Estado medido
 
-Fecha: 2026-10-28
+Fecha: 2026-10-29
 Base: repo raiz `66eac79` (el World Editor vive en el repo raiz; no tiene `.git` propio).
 
 Este documento registra lo que se **midio**, no lo que dicen documentos viejos.
@@ -10,8 +10,10 @@ Si un numero cambia, se actualiza aca y en [`WORLD-MAP-AUDIT.md`](WORLD-MAP-AUDI
 
 | Metrica | Valor | Comando |
 | --- | --- | --- |
-| Build Release | 0 errores, 0 warnings | `dotnet build .\ao-project-world-editor\AoProject.WorldEditor.sln -c Release` |
-| Tests | **332/332** | `dotnet test .\ao-project-world-editor\AoProject.WorldEditor.sln` |
+| Build Release | 0 errores, 0 warnings | `dotnet build src/AoProject.WorldEditor/AoProject.WorldEditor.csproj --no-restore -c Release` |
+| Tests WorldEditor | **362/362** | `dotnet test tests/AoProject.WorldEditor.Tests/AoProject.WorldEditor.Tests.csproj --no-restore` |
+| Tests cliente | **784/784** | `dotnet test ..\ao-project-client\tests\AoProject.Client.Tests\AoProject.Client.Tests.csproj --no-restore` |
+| Tests servidor | **646/646** | `dotnet test ..\ao-project-server\tests\AoProject.Server.Tests\AoProject.Server.Tests.csproj --no-restore` |
 | Ledger de procedimientos | **617/617 Ported** (0 Waived, 0 Todo) | `.\tools\parity\Test-WorldEditorLedgerClosure.ps1` |
 | Tests del feature mapa mundial | **132** (14 originales + 11 guardas + 4 auditoria + 4 F2 + 5 F3 + 1 F4 + 16 F7/F8 + 1 paleta + 1 capas + 4 editor INI + 3 BMP + 2 mundo + 5 proyeccion + 3 alpha + 2 blend + 11 equipo + 6 luces + 3 indices + 4 perf + 4 minimapa + 10 radar + 13 diagnostico + 2 acople) | ver seccion 5 |
 
@@ -57,6 +59,8 @@ la auditoria de datos (`docs/MAP-DATA-AUDIT.md`).
 - `WORLDMAP3`: 109 distintos (mapa 400 repetido 310 veces).
 - `WORLDMAP4`: ignorado por `TOTALWORLDS=3`.
 - 157.353 salidas entre mapas (clases en el audit).
+- 1.184 salidas a `Map=-1`, 2 a `Map=-2` y 10 a `Map=3000..3004` en la auditoria de
+  los 843 CSM originales; las especiales se conservan como salidas externas.
 - 743 de 842 mapas estan pintados completamente en 100x100.
 
 ## 4. Mediciones de performance y memoria

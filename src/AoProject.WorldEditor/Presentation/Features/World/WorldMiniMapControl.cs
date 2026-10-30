@@ -91,6 +91,17 @@ internal sealed class WorldMiniMapControl : Control
     /// </summary>
     public Bitmap? WorldImage => _worldImage;
 
+    public bool IsWorldImageComplete => _world is not null && _worldImage is not null &&
+        _pending.Count == 0 && !_building;
+
+    public async Task WaitForWorldImageAsync()
+    {
+        while (_world is not null && !IsWorldImageComplete)
+            await Task.Delay(50);
+        if (_world is not null && _worldImage is null)
+            throw new InvalidOperationException("El mapa mundial no pudo componerse.");
+    }
+
     /// <summary>Core-only composition (1 px/tile) used by the radar crop.</summary>
     public Bitmap? RadarImage => _radarImage;
 
@@ -186,8 +197,11 @@ internal sealed class WorldMiniMapControl : Control
         if (_world is null) return;
         var cellsX = Math.Max(1, _world.Assembly.Width);
         var cellsY = Math.Max(1, _world.Assembly.Height);
-        var worldWidth = cellsX * WorldMap.Width;
-        var worldHeight = cellsY * WorldMap.Height;
+        // The global renderer joins playable map bands, not 100x100 file
+        // rectangles. Keep this bitmap on the same 75x81 grid used by the
+        // viewport, hit-testing and radar.
+        var worldWidth = cellsX * GlobalChunkGeometry.WidthTiles;
+        var worldHeight = cellsY * GlobalChunkGeometry.HeightTiles;
         var radarWidth = cellsX * WorldRadarService.RadarStrideX;
         var radarHeight = cellsY * WorldRadarService.RadarStrideY;
         if (_worldImage is null || _worldImage.Width != worldWidth || _worldImage.Height != worldHeight ||
@@ -195,7 +209,7 @@ internal sealed class WorldMiniMapControl : Control
         {
             _worldImage?.Dispose();
             _radarImage?.Dispose();
-            // MUNDO keeps the previous look: the whole 100x100 minimap per cell.
+            // MAPA keeps the previous look: the whole 100x100 minimap per cell.
             _worldImage = new Bitmap(worldWidth, worldHeight);
             // RADAR needs the playable core only, so neighbouring maps are
             // contiguous. Same stride as the renderer (75x81): pixel-exact crop.
@@ -211,8 +225,8 @@ internal sealed class WorldMiniMapControl : Control
             canvas.PixelOffsetMode = PixelOffsetMode.Half;
             var (shiftX, shiftY) = StitchOf(placement.Chunk);
             canvas.DrawImage(mapImage,
-                new RectangleF(placement.Chunk.X * WorldMap.Width - shiftX,
-                    placement.Chunk.Y * WorldMap.Height - shiftY,
+                new RectangleF(placement.Chunk.X * GlobalChunkGeometry.WidthTiles - shiftX,
+                    placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - shiftY,
                     WorldMap.Width, WorldMap.Height),
                 new RectangleF(0, 0, mapImage.Width, mapImage.Height), GraphicsUnit.Pixel);
         }
@@ -464,31 +478,20 @@ internal sealed class WorldMiniMapControl : Control
         }
         if (_world is null || _maps.Count == 0) return;
         var scale = ScaleFactor;
-        // The world image is 100 px per map and the panel is ~220 px: downscale
-        // with a quality filter or the water tiles alias into stripes.
+        // The exported world.png is _worldImage. Draw that exact bitmap here too;
+        // composing the panel again from individual maps used to omit the same
+        // border-stitch shifts applied by AddMapToWorldImage, so the editor and
+        // the generated PNG visibly disagreed.
         e.Graphics.InterpolationMode = scale < 1f
             ? InterpolationMode.HighQualityBicubic
             : InterpolationMode.NearestNeighbor;
         e.Graphics.PixelOffsetMode = scale < 1f ? PixelOffsetMode.HighQuality : PixelOffsetMode.Half;
-        var chunks = _world.Assembly.Placements.Select(item => item.Chunk).ToHashSet();
-        foreach (var placement in _world.Assembly.Placements)
-            if (_maps.TryGetValue(placement.MapId, out var image))
-            {
-                var x = 6 + (placement.Chunk.X * GlobalChunkGeometry.WidthTiles - _bounds.MinX) * scale;
-                var y = 6 + (placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - _bounds.MinY) * scale;
-                var minX = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y))
-                    ? GlobalChunkGeometry.CoreMinX + 1 : GlobalChunkGeometry.CoreMinX;
-                var minY = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1))
-                    ? GlobalChunkGeometry.CoreMinY + 1 : GlobalChunkGeometry.CoreMinY;
-                var coreX = x + (minX - 1) * scale;
-                var coreY = y + (minY - 1) * scale;
-                var coreWidth = (GlobalChunkGeometry.CoreMaxX - minX + 1) * scale;
-                var coreHeight = (GlobalChunkGeometry.CoreMaxY - minY + 1) * scale;
-                var state = e.Graphics.Save();
-                e.Graphics.SetClip(new RectangleF(coreX, coreY, coreWidth, coreHeight));
-                e.Graphics.DrawImage(image, x, y, WorldMap.Width * scale, WorldMap.Height * scale);
-                e.Graphics.Restore(state);
-            }
+        if (_worldImage is null) return;
+        e.Graphics.DrawImage(_worldImage,
+            6f - _bounds.MinX * scale,
+            6f - _bounds.MinY * scale,
+            _worldImage.Width * scale,
+            _worldImage.Height * scale);
         if (_viewport is { } viewport)
         {
             var view = viewport();

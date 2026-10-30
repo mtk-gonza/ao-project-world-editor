@@ -64,7 +64,9 @@ internal readonly record struct GlobalMapLink(
 internal readonly record struct GlobalMapPlacement(
     short MapId,
     GlobalChunkCoordinate Chunk,
-    string LevelId);
+    string LevelId,
+    int StitchX = 0,
+    int StitchY = 0);
 
 internal readonly record struct GlobalWorldConflict(
     short FromMap,

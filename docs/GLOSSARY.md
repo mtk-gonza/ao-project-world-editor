@@ -25,6 +25,13 @@ mapa.
 **En el codigo:** `WorldMap`, `CsmMapFileService`, `MapRenderGeometry`.
 
 **En la UI:** `Archivo > Abrir mapa...`, titulo `AO WorldEditor - mapaN.csm`.
+En la barra lateral, el panel superior se rotula `MAPA`; `RADAR` es el recorte
+centrado independiente.
+
+En el runtime del WORLD, una posicion se expresa como `GlobalX, GlobalY`.
+`mapId` solo se conserva en la importacion y compatibilidad legacy.
+El archivo independiente para el cliente es `maps/world.map`, un snapshot
+binario `AOWORLD` con coordenadas globales por tile.
 
 ## Miniatura (overview)
 

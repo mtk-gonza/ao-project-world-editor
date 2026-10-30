@@ -32,6 +32,7 @@ internal sealed class WorldEditorSession
     private readonly LinkedList<WorldMapSnapshot> _bulkUndo = [];
     private readonly LinkedList<GlobalWorldSnapshot> _globalUndo = [];
     private WorldEditorResourceCatalog? _resources;
+    private readonly object _resourceSync = new();
 
     public WorldEditorSession(string resourceRoot)
     {
@@ -39,12 +40,99 @@ internal sealed class WorldEditorSession
     }
 
     public string ResourceRoot { get; }
+    /// <summary>Immutable source tree used for legacy map and world metadata import.</summary>
+    public string ReferenceResourceRoot => ResourceRootResolver.ReferenceRoot();
     public bool UseUndo { get; private set; } = true;
     /// <summary>True when the last global operation was too large to snapshot.</summary>
     public bool UndoOmitted { get; private set; }
     public WorldMap? CurrentMap { get; private set; }
     public string? CurrentMapPath { get; private set; }
     public GlobalWorldDocument? CurrentWorld { get; private set; }
+
+    /// <summary>
+    /// Compiles the currently loaded legacy assembly into one rectangular map.
+    /// The source CSM files remain untouched.
+    /// </summary>
+    public UnifiedWorldCompileResult CompileUnifiedWorld()
+    {
+        if (CurrentWorld is null)
+            throw new InvalidOperationException("No hay un mundo global cargado.");
+        return new UnifiedWorldCompiler().Compile(CurrentWorld, Resources);
+    }
+
+    /// <summary>Saves the compiled single-map artifact without modifying CSMs.</summary>
+    public UnifiedWorldCompileResult SaveUnifiedWorld(string path)
+    {
+        var result = CompileUnifiedWorld();
+        new UnifiedWorldFileService().Save(result.Map, path);
+        return result;
+    }
+
+    public UnifiedWorldMap LoadUnifiedWorld(string path) => new UnifiedWorldFileService().Load(path);
+
+    public UnifiedWorldBundle CompileUnifiedWorldBundle(bool applyStitching = false)
+    {
+        if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo global cargado.");
+        var assignmentPath = Path.Combine(ReferenceResourceRoot, "init", "world-floors.json");
+        var assignmentService = new UnifiedWorldFloorAssignmentService();
+        var assignments = assignmentService.Load(assignmentPath);
+        if (assignments.Count == 0)
+        {
+            // A missing manifest is valid: the original reference tree is the
+            // source of maps and metadata. Keep the fallback in memory; never
+            // write generated configuration into reference/Recursos. Preserve
+            // an explicit negative level from the original map metadata as the
+            // first underground floor; ordinary maps remain on Z=0.
+            assignments = CurrentWorld.Assembly.Placements
+                .Select(item => item.MapId)
+                .Distinct()
+                .ToDictionary(mapId => mapId,
+                    mapId => CurrentWorld.Maps.TryGetValue(mapId, out var map) && map.Info.Level < 0 ? -1 : 0);
+        }
+        return new UnifiedWorldCompiler().CompileFloors(CurrentWorld, Resources, assignments, applyStitching);
+    }
+
+    public UnifiedWorldBundle CompileStitchedWorldBundle() => CompileUnifiedWorldBundle(true);
+
+    public UnifiedWorldBundle SaveUnifiedWorldBundle(string directory, bool applyStitching = false)
+    {
+        var bundle = CompileUnifiedWorldBundle(applyStitching);
+        new UnifiedWorldBundleFileService().Save(bundle, directory);
+        new UnifiedWorldImageService().Save(bundle, Resources, Path.Combine(directory, "worldmap"));
+        SaveStitchAudits(directory);
+        return bundle;
+    }
+
+    public void SaveStitchAudits(string directory)
+    {
+        if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo global cargado.");
+        Directory.CreateDirectory(directory);
+        var audit = new GlobalStitchAuditService();
+        audit.SaveTsv(Path.Combine(directory, "stitch-audit.tsv"), audit.Audit(CurrentWorld));
+        audit.SaveCompactedMaterializationTsv(
+            Path.Combine(directory, "stitch-compile-audit.tsv"),
+            audit.AuditCompactedMaterialization(CurrentWorld));
+        audit.SaveConflictTsv(
+            Path.Combine(directory, "stitch-conflict-audit.tsv"),
+            audit.AuditCompactedConflicts(CurrentWorld));
+        audit.SaveExtendedExitTsv(
+            Path.Combine(directory, "extended-exit-audit.tsv"),
+            audit.AuditExtendedExits(CurrentWorld));
+        audit.SaveMapLevelsTsv(
+            Path.Combine(directory, "map-level-audit.tsv"),
+            audit.AuditMapLevels(CurrentWorld));
+        var looseMaps = Path.Combine(ReferenceResourceRoot, "Mapas");
+        if (Directory.Exists(looseMaps))
+            new LooseMapTeleportAuditService().SaveTsv(
+                Path.Combine(directory, "loose-map-teleport-audit.tsv"),
+                new LooseMapTeleportAuditService().Audit(looseMaps));
+    }
+
+    public UnifiedWorldBundle LoadUnifiedWorldBundle(string directory) =>
+        new UnifiedWorldBundleFileService().Load(directory);
+
+    public UnifiedWorldMap LoadUnifiedWorldFloor(string directory, int floorZ) =>
+        new UnifiedWorldFileService().Load(Path.Combine(directory, $"floor-{floorZ:+#;-#;0}.gmap"));
 
     public bool ActivateWorldMap(short mapId)
     {
@@ -184,11 +272,21 @@ internal sealed class WorldEditorSession
         service.Configure(minutes);
         return service.Save(CurrentMapRequired(), CurrentMapPath, destinationRoot);
     }
-    public WorldEditorResourceCatalog Resources => _resources ??= WorldEditorResourceCatalog.Load(ResourceRoot);
+    public WorldEditorResourceCatalog Resources
+    {
+        get
+        {
+            lock (_resourceSync)
+                return _resources ??= WorldEditorResourceCatalog.Load(ResourceRoot);
+        }
+    }
     public ResourceIndexRefreshResult RefreshResourceIndices()
     {
-        (_resources, var result) = _indexRefresh.Reload(ResourceRoot);
-        return result;
+        lock (_resourceSync)
+        {
+            (_resources, var result) = _indexRefresh.Reload(ResourceRoot);
+            return result;
+        }
     }
     public int ReplaceGraphic(int fromLayer, int toLayer, int fromGraphic, int toGraphic) =>
         ExecuteBulk(map => _replacement.ReplaceGraphic(map, fromLayer, toLayer, fromGraphic, toGraphic));
@@ -196,6 +294,7 @@ internal sealed class WorldEditorSession
     public int ReplaceNpc(short from, short to) => ExecuteBulk(map => _replacement.ReplaceNpc(map, Resources.Npcs, from, to));
     public int ReplaceTrigger(short from, short to) => ExecuteBulk(map => _replacement.ReplaceTrigger(map, from, to));
     public int PlaceTrees(TreePlacementOptions options) => ExecuteBulk(map => _trees.Place(map, Resources.Objects, options));
+    public int BlockConfiguredObjects() => ExecuteBulk(map => _trees.BlockConfiguredObjects(map, Resources.Objects));
     public int PlaceSurface(SurfaceData surface, int x, int y, bool mosaic = false) =>
         ExecuteBulk(map => _surfacePlacement.Place(map, surface, x, y, mosaic));
     public void PaintSurfaceAt(int x, int y, int layer, int graphic, int width, int height, bool blocked) =>
@@ -225,6 +324,54 @@ internal sealed class WorldEditorSession
             else if (removeBlocking) map.Blocks[x, y].Blocked = 0;
             map.Info.Changed = true;
         });
+
+    public int FillGraphic(int x, int y, int layer, int graphic)
+    {
+        return ExecuteBulk(map =>
+        {
+            ValidateTile(map, x, y);
+            if (layer is < 0 or >= 4 || graphic < 0) throw new ArgumentOutOfRangeException(nameof(layer));
+            var original = map.Blocks[x, y].Graphics[layer].GraphicIndex;
+            if (original == graphic) return 0;
+
+            var pending = new Queue<(int X, int Y)>();
+            var visited = new HashSet<(int X, int Y)>();
+            pending.Enqueue((x, y));
+            var changed = 0;
+            while (pending.Count > 0)
+            {
+                var tile = pending.Dequeue();
+                if (!visited.Add(tile) || !InDomain(map, tile.X, tile.Y)) continue;
+                if (map.Blocks[tile.X, tile.Y].Graphics[layer].GraphicIndex != original) continue;
+                map.Blocks[tile.X, tile.Y].Graphics[layer].GraphicIndex = graphic;
+                changed++;
+                pending.Enqueue((tile.X - 1, tile.Y)); pending.Enqueue((tile.X + 1, tile.Y));
+                pending.Enqueue((tile.X, tile.Y - 1)); pending.Enqueue((tile.X, tile.Y + 1));
+            }
+            if (changed > 0) map.Info.Changed = true;
+            return changed;
+        });
+    }
+
+    public int ReplaceGraphic(int layer, int fromGraphic, int toGraphic)
+    {
+        return ExecuteBulk(map =>
+        {
+            if (layer is < 0 or >= 4 || fromGraphic < 0 || toGraphic < 0)
+                throw new ArgumentOutOfRangeException(nameof(layer));
+            if (fromGraphic == toGraphic) return 0;
+            var changed = 0;
+            for (var x = (int)map.CsmMapSize.XMin; x <= map.CsmMapSize.XMax; x++)
+            for (var y = (int)map.CsmMapSize.YMin; y <= map.CsmMapSize.YMax; y++)
+            {
+                if (!InDomain(map, x, y) || map.Blocks[x, y].Graphics[layer].GraphicIndex != fromGraphic) continue;
+                map.Blocks[x, y].Graphics[layer].GraphicIndex = toGraphic;
+                changed++;
+            }
+            if (changed > 0) map.Info.Changed = true;
+            return changed;
+        });
+    }
     public void SetObject(int x, int y, short index, short amount = 1) => ExecuteBulk(map => _entities.SetObject(map, Resources.Objects, x, y, index, amount));
     public void SetNpc(int x, int y, short index) => ExecuteBulk(map => _entities.SetNpc(map, Resources.Npcs, x, y, index));
     public void SetTrigger(int x, int y, short trigger) => ExecuteBulk(map => _entities.SetTrigger(map, x, y, trigger));
@@ -314,7 +461,9 @@ internal sealed class WorldEditorSession
         if (!Directory.Exists(directory)) throw new DirectoryNotFoundException(directory);
 
         var files = Directory.EnumerateFiles(directory, "*.csm", SearchOption.TopDirectoryOnly)
-            .Select(path => (Path: path, Id: ParseMapId(path)))
+            .SelectMany(path => IsGlobalWorldFileName(Path.GetFileName(path))
+                ? GlobalCsmArchiveService.ReadMapIds(path).Select(id => (Path: path, Id: id))
+                : [ (Path: path, Id: ParseMapId(path)) ])
             .Where(item => item.Id > 0)
             .GroupBy(item => item.Id)
             .Select(group => group.First())
@@ -327,7 +476,7 @@ internal sealed class WorldEditorSession
         if (validFiles.Length == 0)
             throw new InvalidDataException("No se pudo cargar ningún mapa .csm: " + string.Join(" | ", loadErrors));
         var worldData = new MapsWorldDataService();
-        var layouts = worldData.Load(Path.Combine(ResourceRoot, "init", "mapsworlddata.dat"));
+        var layouts = worldData.Load(SourceResourcePath("init", "mapsworlddata.dat"));
         var availableIds = validFiles.Select(item => item.Id).ToArray();
         var layoutRoot = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, availableIds))
             .FirstOrDefault(id => id > 0);
@@ -343,20 +492,26 @@ internal sealed class WorldEditorSession
             foreach (var file in validFiles)
             {
                 progress?.Report(new WorldLoadProgress(files.Length, maps.Count + loadErrors.Count + 1, Path.GetFileName(file.Path), null));
-                try { maps[file.Id] = _csmMaps.Load(file.Path); }
+                try
+                {
+                    maps[file.Id] = IsGlobalWorldFileName(Path.GetFileName(file.Path))
+                        ? _csmMaps.Load(file.Path, file.Id)
+                        : _csmMaps.Load(file.Path);
+                }
                 catch (Exception error) { loadErrors.Add($"{Path.GetFileName(file.Path)}: {error.Message}"); }
             }
             if (!maps.ContainsKey(selectedRoot)) throw new InvalidDataException("No se pudo cargar el mapa raíz.");
             assembly = new GlobalWorldAssembler().Assemble(maps, selectedRoot);
         }
         progress?.Report(new WorldLoadProgress(1, 1, "layout", null));
-        CurrentWorld = new GlobalWorldDocument(assembly, paths, selectedRoot, path => _csmMaps.Load(path));        CurrentWorld.WorldLayouts = layouts;
+        CurrentWorld = new GlobalWorldDocument(assembly, paths, selectedRoot,
+            (mapId, path) => _csmMaps.Load(path, mapId));        CurrentWorld.WorldLayouts = layouts;
         CurrentWorld.IgnoredWorldIds = worldData.IgnoredWorldIds;
         var specialData = new SpecialWorldDataService();
         CurrentWorld.SpecialWorlds = new Dictionary<string, SpecialWorldCatalog>
         {
-            ["underworld"] = specialData.LoadUnderworld(Path.Combine(ResourceRoot, "Dat", "UnderworldMapPool.dat")),
-            ["phoenix"] = specialData.LoadPhoenix(Path.Combine(ResourceRoot, "Dat", "PhoenixMapPool.dat"))
+            ["underworld"] = specialData.LoadUnderworld(SourceResourcePath("Dat", "UnderworldMapPool.dat")),
+            ["phoenix"] = specialData.LoadPhoenix(SourceResourcePath("Dat", "PhoenixMapPool.dat"))
         };
         CurrentWorld.LoadErrors = loadErrors;
         CurrentMap = CurrentWorld.Maps[selectedRoot];
@@ -365,6 +520,12 @@ internal sealed class WorldEditorSession
         _bulkUndo.Clear();
         _globalUndo.Clear();
         return CurrentWorld;
+    }
+
+    private string SourceResourcePath(params string[] parts)
+    {
+        var reference = Path.Combine(new[] { ReferenceResourceRoot }.Concat(parts).ToArray());
+        return File.Exists(reference) ? reference : Path.Combine(new[] { ResourceRoot }.Concat(parts).ToArray());
     }
 
     public bool SwitchWorldLevel(int worldId)
@@ -417,6 +578,10 @@ internal sealed class WorldEditorSession
         CurrentWorld.LoadErrors = errors;
         CurrentWorld.KeepAllLoaded = true;
     }
+
+    private static bool IsGlobalWorldFileName(string fileName) =>
+        fileName.Equals("world.csm", StringComparison.OrdinalIgnoreCase) ||
+        fileName.Equals("mapaGlobal.csm", StringComparison.OrdinalIgnoreCase);
 
     private static short ParseMapId(string path)
     {

@@ -73,7 +73,10 @@ internal sealed class WorldRadarControl : Control
         // Center the image in the panel: the sidebar is wider than the radar, so
         // pinning it to the padding left the crop visibly off-center.
         _originX = Math.Max(Pad, (ClientSize.Width - size) / 2);
-        _originY = Math.Max(Pad, (ClientSize.Height - size) / 2);
+        // Keep the crop immediately below the RADAR title, matching the
+        // MAPA/minimap section. The radar panel may be taller than the crop,
+        // but that extra space belongs below the image, never above it.
+        _originY = Pad;
         e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
         e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
         e.Graphics.SmoothingMode = SmoothingMode.None;

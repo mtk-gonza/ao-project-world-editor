@@ -9,6 +9,19 @@ internal enum Heading : byte
     West = 4
 }
 
+/// <summary>Directional mask stored in the low nibble of a VB6 Blqs record.</summary>
+internal static class BlockedMask
+{
+    public const byte North = 1;
+    public const byte East = 2;
+    public const byte South = 4;
+    public const byte West = 8;
+    public const byte AllSides = 15;
+    public const byte DirectionalBits = AllSides;
+
+    public static bool IsValid(byte value) => (value & ~DirectionalBits) == 0;
+}
+
 internal readonly record struct Position(short X, short Y);
 
 internal struct GraphicAnimation
@@ -173,6 +186,8 @@ internal sealed class ObjectData
     public string Text { get; set; } = string.Empty;
     public byte Closed { get; set; }
     public byte Subtype { get; set; }
+    /// <summary>Explicit physical mask materialized into MapBlock.Blocked.</summary>
+    public byte DefaultBlockedMask { get; set; }
 }
 
 internal sealed class NpcData

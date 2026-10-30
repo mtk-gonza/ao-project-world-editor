@@ -4,7 +4,7 @@ Documentacion propia de `ao-project-world-editor`. No reemplaza la documentacion
 paridad de la raiz (`docs/parity/`), que sigue siendo la fuente para el ledger de
 procedimientos VB6 y las decisiones globales del proyecto.
 
-Fecha de esta revision: 2026-10-28
+Fecha de esta revision: 2026-10-29
 Commit base del repo raiz: `66eac79` (el World Editor no tiene repositorio Git propio).
 
 ## Indice
@@ -21,8 +21,10 @@ Commit base del repo raiz: `66eac79` (el World Editor no tiene repositorio Git p
 | [`CLIENT-STRATEGY.md`](CLIENT-STRATEGY.md) | Estrategia para F6 del cliente (wrap, ANCHO/ALTO, minimapa centrado); no modifica el cliente. |
 | [`PERFORMANCE.md`](PERFORMANCE.md) | Como medir (`AO_PERF`), baseline del render y la optimizacion de overlays. |
 | [`ADR-WORLD-MAP.md`](ADR-WORLD-MAP.md) | Decisiones de arquitectura de la feature (geometria, wrap, lazy, undo, relleno, luces, auditoria, salidas). |
+| [`WORLD-STITCH-AND-TELEPORT-AUDIT.md`](WORLD-STITCH-AND-TELEPORT-AUDIT.md) | Auditoria consolidada de stitching, coordenadas, pisos, teleports especiales y bundle runtime. |
 | [`USER-GUIDE.md`](USER-GUIDE.md) | Guia de usuario: abrir mundo, navegar, editar, undo, guardar, validar, auditoria y logs. |
 | [`PLAN.md`](PLAN.md) | Plan de implementacion de los hallazgos: fases, tareas, DoD, criterios de aceptacion y riesgos. |
+| [`EDITOR-UX-PLAN.md`](EDITOR-UX-PLAN.md) | Plan de interfaz visual tipo RME: paletas, inspector, brushes, overlays, historial y fases. |
 
 ## Reglas de esta carpeta
 
@@ -43,7 +45,8 @@ Commit base del repo raiz: `66eac79` (el World Editor no tiene repositorio Git p
 ## Estado en una linea
 
 El camino feliz funciona (parseo de `mapsworlddata.dat`, placements, geometria
-75x81 validada contra 157.353 salidas, render, minimapa, edicion global). **F0 a F8
+75x81 validada contra 157.353 salidas, render, minimapa, edicion global y bundle
+runtime v3 con stitching). **F0 a F8
 ya estan cerrados**: arnes de auditoria, overlays acotados, luces sin crash, clip de
 sprites/overlays, refresh de edicion, carga lazy, undo por mapa, guardado con backup,
 validador in-place, wrap horizontal, round-trip de bordes, ADR, guia de usuario,

@@ -11,6 +11,8 @@ namespace AoProject.WorldEditor.Presentation.Features.World;
 internal sealed class WorldRenderControl : Control
 {
     public event Action<int, int>? TileClicked;
+    public event Action<int, int>? TileDragged;
+    public event Action<int, int, int, int>? TileGestureCompleted;
     public event Action<int, int>? TileEraseRequested;
     public event Action? UndoRequested;
     public event Action<int, int>? TileRightClicked;
@@ -25,6 +27,10 @@ internal sealed class WorldRenderControl : Control
     private IWorldRenderer? _renderer;
     private Exception? _initializationError;
     private WorldMap? _map;
+    private UnifiedWorldMap? _unifiedMap;
+    private UnifiedWorldMap? _unifiedSourceMap;
+    private Bitmap? _unifiedPreview;
+    private int _unifiedPreviewFloor;
     private GlobalWorldDocument? _world;
     private WorldEditorResourceCatalog? _worldResources;
     private (int MinX, int MinY, int MaxX, int MaxY)? _lastGlobalChunkBounds;
@@ -34,6 +40,7 @@ internal sealed class WorldRenderControl : Control
     private readonly System.Collections.Concurrent.ConcurrentDictionary<short, IReadOnlyList<RenderSprite>> _globalSpriteCache = [];
     private int _globalWarmupGeneration;
     private (int MinX, int MinY, int MaxX, int MaxY)? _globalWarmingBounds;
+    private CancellationTokenSource? _globalWarmupCancellation;
     private MapRenderGeometry? _geometry;
     private GraphicAtlas? _atlas;
     private readonly Dictionary<int, AtlasRegion> _regions = [];
@@ -57,6 +64,14 @@ internal sealed class WorldRenderControl : Control
     private FontAtlas? _hudFont;
     private IReadOnlyList<RenderSprite> _sprites = [];
     public WorldRenderOptions RenderOptions { get; } = new();
+    public float Zoom => _camera.Zoom;
+
+    public void SetZoom(float zoom)
+    {
+        _camera.SetZoom(zoom, ClientSize.Width / 2f, ClientSize.Height / 2f);
+        RefreshUnifiedViewport();
+        Invalidate();
+    }
     private Point _lastMouse;
     private bool _panning;
     private (int X, int Y)? _selectedTile;
@@ -65,9 +80,12 @@ internal sealed class WorldRenderControl : Control
     private TileSelection? _selection;
     private (int X, int Y)? _selectionAnchor;
     private bool _selecting;
+    private bool _painting;
+    private (int X, int Y)? _paintStart;
     private const float KeyboardPanPixels = 64f;
     public (int X, int Y)? SelectedTile => _selectedTile;
     public (int X, int Y)? SelectedGlobalTile => _selectedGlobalTile;
+    public int? ActiveFloorZ => _unifiedMap?.FloorZ ?? (_unifiedPreview is null ? null : _unifiedPreviewFloor);
     public GlobalTileSelection? SelectedGlobalSelection => _globalSelection;
     public TileSelection? SelectedSelection => _selection;
 
@@ -80,6 +98,7 @@ internal sealed class WorldRenderControl : Control
     public void CenterOnGlobalTile(int x, int y)
     {
         _camera.CenterOnGlobalTile(x, y, ClientSize.Width, ClientSize.Height);
+        RefreshUnifiedViewport();
         if (_world is not null && _worldResources is not null)
             WarmGlobalCachesAsync(_world, _worldResources, GlobalChunkBounds());
         ViewChanged?.Invoke();
@@ -93,8 +112,18 @@ internal sealed class WorldRenderControl : Control
 
     public void SetMap(WorldMap map)
     {
+        _unifiedPreview?.Dispose();
+        _unifiedPreview = null;
+        _unifiedSourceMap = null;
+        if (_renderer is null && IsHandleCreated)
+        {
+            _renderer = new D3D11WorldRenderer(Handle, ClientSize.Width, ClientSize.Height);
+            if (_renderer is D3D11WorldRenderer d3d)
+                d3d.SetCamera(_camera);
+        }
         _particleGroups.Clear();
         _world = null;
+        _unifiedMap = null;
         _selectedGlobalTile = null;
         _globalSelection = null;
         _selectedWorldMap = null;
@@ -106,11 +135,123 @@ internal sealed class WorldRenderControl : Control
         Invalidate();
     }
 
+    /// <summary>Displays the compiled one-grid artifact without legacy stitching.</summary>
+    public void SetUnifiedWorld(UnifiedWorldMap map, WorldEditorResourceCatalog resources)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        _unifiedPreview?.Dispose();
+        _unifiedPreview = null;
+        if (_renderer is null && IsHandleCreated)
+        {
+            _renderer = new D3D11WorldRenderer(Handle, ClientSize.Width, ClientSize.Height);
+            if (_renderer is D3D11WorldRenderer d3d)
+                d3d.SetCamera(_camera);
+        }
+        _particleGroups.Clear();
+        _world = null;
+        _worldResources = resources;
+        _map = null;
+        _unifiedMap = map;
+        _unifiedSourceMap = map;
+        _selectedTile = null;
+        _selectedGlobalTile = null;
+        _camera.CenterOnGlobalTile(map.Width / 2, map.Height / 2, ClientSize.Width, ClientSize.Height);
+        var initialBounds = UnifiedViewportBounds(map);
+        _geometry = MapRenderGeometry.Build(map, RenderOptions,
+            initialBounds.MinX, initialBounds.MaxX, initialBounds.MinY, initialBounds.MaxY);
+        _atlas?.Dispose();
+        _atlas = new GraphicAtlas(resources.Root);
+        _regions.Clear();
+        foreach (var tile in _geometry.Tiles.DistinctBy(tile => tile.GraphicIndex))
+        {
+            if (tile.GraphicIndex > 0 && tile.GraphicIndex < resources.Graphics.Count &&
+                _atlas.TryResolve(resources.Graphics[tile.GraphicIndex], out var region))
+                _regions[tile.GraphicIndex] = region;
+        }
+        // Dynamic objects are refreshed only when the visible region is rebuilt;
+        // do not scan the complete global floor here.
+        _sprites = [];
+        _animations.Clear();
+        _lights = null;
+        foreach (var index in _geometry.Tiles.Select(tile => tile.GraphicIndex))
+            RegisterGraphic(index, resources);
+        BindRenderer();
+        ViewChanged?.Invoke();
+        Invalidate();
+    }
+
+    private (int MinX, int MaxX, int MinY, int MaxY) UnifiedViewportBounds(UnifiedWorldMap map)
+    {
+        var view = GlobalViewport;
+        const int margin = 8;
+        return (Math.Max(0, (int)MathF.Floor(view.X) - margin),
+            Math.Min(map.Width - 1, (int)MathF.Ceiling(view.X + view.Width) + margin),
+            Math.Max(0, (int)MathF.Floor(view.Y) - margin),
+            Math.Min(map.Height - 1, (int)MathF.Ceiling(view.Y + view.Height) + margin));
+    }
+
+    private void RefreshUnifiedViewport()
+    {
+        if (_unifiedMap is not { } map || _worldResources is not { } resources) return;
+        var bounds = UnifiedViewportBounds(map);
+        _geometry = MapRenderGeometry.Build(map, RenderOptions,
+            bounds.MinX, bounds.MaxX, bounds.MinY, bounds.MaxY);
+        _regions.Clear();
+        foreach (var tile in _geometry.Tiles.DistinctBy(tile => tile.GraphicIndex))
+        {
+            if (tile.GraphicIndex > 0 && tile.GraphicIndex < resources.Graphics.Count &&
+                _atlas?.TryResolve(resources.Graphics[tile.GraphicIndex], out var region) == true)
+                _regions[tile.GraphicIndex] = region;
+        }
+        _animations.Clear();
+        foreach (var index in _geometry.Tiles.Select(tile => tile.GraphicIndex))
+            RegisterGraphic(index, resources);
+        BindRenderer();
+    }
+
+    /// <summary>
+    /// Displays a bundle floor from its pre-rendered PNG. A bundle floor can
+    /// contain millions of tiles, so building editable geometry here would
+    /// allocate hundreds of megabytes and stall the WinForms thread.
+    /// </summary>
+    public void SetUnifiedWorldPreview(Bitmap image, int floorZ)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        _renderer?.Dispose();
+        _renderer = null;
+        _geometry = null;
+        _unifiedMap = null;
+        _world = null;
+        _map = null;
+        _unifiedPreview?.Dispose();
+        _unifiedPreview = image;
+        // Keep the floor data alive so zooming from the overview can switch to
+        // the real tile renderer without loading a second source.
+        _unifiedPreviewFloor = floorZ;
+        _selectedTile = null;
+        _selectedGlobalTile = null;
+        FitUnifiedPreview();
+        ViewChanged?.Invoke();
+        Invalidate();
+    }
+
+    private void FitUnifiedPreview()
+    {
+        if (_unifiedPreview is null || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+        var worldWidth = _unifiedPreview.Width / 4f * MapRenderGeometry.TilePixels;
+        var worldHeight = _unifiedPreview.Height / 4f * MapRenderGeometry.TilePixels;
+        var fit = Math.Min(ClientSize.Width / worldWidth, ClientSize.Height / worldHeight) * .96f;
+        _camera.SetZoom(Math.Clamp(fit, .02f, 4f), ClientSize.Width / 2f, ClientSize.Height / 2f);
+        _camera.CenterOnGlobalTile(_unifiedPreview.Width / 8, _unifiedPreview.Height / 8,
+            ClientSize.Width, ClientSize.Height);
+    }
+
     public void SetGlobalWorld(GlobalWorldDocument world, WorldEditorResourceCatalog resources)
     {
         ArgumentNullException.ThrowIfNull(world);
         _particleGroups.Clear();
         _world = world;
+        _unifiedMap = null;
         _worldResources = resources;
         _globalGeometryCache.Clear();
         _globalSpriteCache.Clear();
@@ -131,6 +272,10 @@ internal sealed class WorldRenderControl : Control
         (int MinX, int MinY, int MaxX, int MaxY) bounds)
     {
         if (_globalWarmingBounds == bounds || GlobalCachesReady(bounds)) return;
+        _globalWarmupCancellation?.Cancel();
+        _globalWarmupCancellation?.Dispose();
+        var cancellation = _globalWarmupCancellation = new CancellationTokenSource();
+        var token = cancellation.Token;
         _globalWarmingBounds = bounds;
         var generation = ++_globalWarmupGeneration;
         var options = new WorldRenderOptions
@@ -163,6 +308,7 @@ internal sealed class WorldRenderControl : Control
                     .DistinctBy(item => item.MapId);
                 foreach (var placement in visible)
                 {
+                    if (token.IsCancellationRequested) return;
                     try
                     {
                         if (!world.Maps.TryGetValue(placement.MapId, out var map)) continue;
@@ -186,6 +332,7 @@ internal sealed class WorldRenderControl : Control
                 BeginInvoke(new Action(() =>
                 {
                     if (!ReferenceEquals(_world, world) || generation != _globalWarmupGeneration) return;
+                    if (token.IsCancellationRequested) return;
                     foreach (var item in geometries)
                         _globalGeometryCache.TryAdd(item.Key, item.Value);
                     foreach (var item in sprites)
@@ -273,8 +420,21 @@ internal sealed class WorldRenderControl : Control
         // the UI thread froze the editor). The world starts un-collapsed and snaps
         // into the collapsed grid when the prewarm finishes.
         if (!_stitcher.IsComplete)
-            _stitcher.Prewarm(() => { try { BeginInvoke(new Action(() => { Invalidate(); })); } catch (InvalidOperationException) { } });
-        var stitch = _stitcher.ForAll(mapGeometry.Select(item => item.Chunk));
+            _stitcher.Prewarm(() =>
+            {
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        if (_world is null) return;
+                        RefreshGlobalViewport();
+                        BindRenderer();
+                        Invalidate();
+                    }));
+                }
+                catch (InvalidOperationException) { }
+            });
+        var stitch = _stitcher.ForAllNonBlocking(mapGeometry.Select(item => item.Chunk));
         _stitchColumns = stitch.Columns;
         _stitchRows = stitch.Rows;
         _geometry = MapRenderGeometry.Combine(mapGeometry, stitch.Columns, stitch.Rows);
@@ -485,6 +645,55 @@ internal sealed class WorldRenderControl : Control
         return sprites;
     }
 
+    private static IReadOnlyList<RenderSprite> BuildUnifiedSprites(UnifiedWorldMap map,
+        WorldRenderOptions options, WorldEditorResourceCatalog? resources = null)
+    {
+        var sprites = new List<RenderSprite>();
+        if (options.ShowObjects)
+        {
+            for (var y = 0; y < map.Height; y++)
+            for (var x = 0; x < map.Width; x++)
+            {
+                var offset = map.Offset(x, y);
+                var graphic = map.ObjectGraphicIndex[offset];
+                if (graphic <= 0) continue;
+                var duplicated = false;
+                for (var layer = 0; layer < 8; layer++)
+                {
+                    if (map.GraphicIndices[map.GraphicOffset(offset, layer)] == graphic)
+                    {
+                        duplicated = true;
+                        break;
+                    }
+                }
+                if (!duplicated)
+                    sprites.Add(new RenderSprite(graphic, x * MapRenderGeometry.TilePixels,
+                        y * MapRenderGeometry.TilePixels, 0xFFFFFF, 255, SpriteKind.Object));
+            }
+        }
+        if (resources is not null && options.ShowNpcs && map.Npcs.Count > 0)
+        {
+            var characters = map.Npcs.Select((npc, index) => new CharacterEntry
+            {
+                Index = index + 1, Body = npc.Body, Head = npc.Head, Heading = npc.Heading,
+                X = (short)Math.Clamp(npc.X + 1, 1, WorldMap.Width),
+                Y = (short)Math.Clamp(npc.Y + 1, 1, WorldMap.Height), Weapon = npc.Weapon,
+                Shield = npc.Shield, Helmet = npc.Helmet, Active = true
+            }).ToArray();
+            sprites.AddRange(new CharacterRenderService().Render(characters, resources.Bodies,
+                resources.Heads, resources.Helmets, resources.Weapons, resources.Shields));
+        }
+        if (resources is not null && options.ShowParticles && map.ParticleGroups.Count > 0)
+        {
+            var groups = new ParticleGroupService();
+            foreach (var group in map.ParticleGroups)
+                groups.Create((short)Math.Clamp(group.X + 1, 1, WorldMap.Width),
+                    (short)Math.Clamp(group.Y + 1, 1, WorldMap.Height), group.Type);
+            sprites.AddRange(new ParticleRenderService().Render(groups.Groups, resources.Particles, 0f));
+        }
+        return sprites;
+    }
+
     /// <summary>
     /// Objects are stored in OBJInfo + ObjGrh and anchored to the bottom of the
     /// tile, so taller graphics extend upwards (VB6 RenderObject behaviour).
@@ -518,6 +727,18 @@ internal sealed class WorldRenderControl : Control
 
     private bool TryGetEditorTile(int screenX, int screenY, out (int X, int Y) tile)
     {
+        if (_unifiedSourceMap is { } unified)
+        {
+            var globalTile = _camera.ScreenToGlobalTile(screenX, screenY);
+            if (globalTile.X < 0 || globalTile.Y < 0 || globalTile.X >= unified.Width || globalTile.Y >= unified.Height)
+            {
+                tile = default;
+                return false;
+            }
+            _selectedGlobalTile = globalTile;
+            tile = (globalTile.X + 1, globalTile.Y + 1);
+            return true;
+        }
         if (_world is null)
         {
             tile = _camera.ScreenToTile(screenX, screenY) ?? default;
@@ -601,11 +822,24 @@ internal sealed class WorldRenderControl : Control
         // the background (or a GDI overlay) on the same HWND causes a visible
         // flash whenever Windows delivers WM_PAINT during mouse interaction.
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.Opaque, true);
+            ControlStyles.Opaque | ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.ResizeRedraw, true);
         BackColor = Color.FromArgb(24, 30, 38);
         _renderTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _renderTimer.Tick += (_, _) => RenderFrame();
-        MouseWheel += (_, e) => { _camera.SetZoom(_camera.Zoom * (e.Delta > 0 ? 1.1f : 1f / 1.1f), e.X, e.Y); Invalidate(); };
+        MouseWheel += (_, e) =>
+        {
+            // The tile atlas is authoritative for detail view, but rendering it
+            // below 100% aliases large graphics into a blue/white checkerboard.
+            // Keep the generated overview while zoomed out and switch only when
+            // the user reaches detail scale.
+            if (_unifiedPreview is not null && e.Delta > 0 && _camera.Zoom >= .75f &&
+                _unifiedSourceMap is not null && _worldResources is not null)
+                SetUnifiedWorld(_unifiedSourceMap, _worldResources);
+            _camera.SetZoom(_camera.Zoom * (e.Delta > 0 ? 1.1f : 1f / 1.1f), e.X, e.Y);
+            ViewChanged?.Invoke();
+            Invalidate();
+        };
         MouseDown += (_, e) =>
         {
             Focus();
@@ -625,6 +859,11 @@ internal sealed class WorldRenderControl : Control
                     SelectionChanged?.Invoke(_selection.Value);
                 }
                 else TileClicked?.Invoke(clickedTile.X, clickedTile.Y);
+                if (!ModifierKeys.HasFlag(Keys.Shift))
+                {
+                    _painting = true;
+                    _paintStart = clickedTile;
+                }
             }
             if (e.Button == MouseButtons.Right && TryGetEditorTile(e.X, e.Y, out var rightTile))
             {
@@ -635,7 +874,7 @@ internal sealed class WorldRenderControl : Control
         };
         MouseMove += (_, e) =>
         {
-            if (_panning) { _camera.Pan(-(e.X - _lastMouse.X) / _camera.Zoom, -(e.Y - _lastMouse.Y) / _camera.Zoom); _lastMouse = e.Location; ViewChanged?.Invoke(); Invalidate(); return; }
+            if (_panning) { _camera.Pan(-(e.X - _lastMouse.X) / _camera.Zoom, -(e.Y - _lastMouse.Y) / _camera.Zoom); _lastMouse = e.Location; RefreshUnifiedViewport(); ViewChanged?.Invoke(); Invalidate(); return; }
             if (_selecting && TryGetEditorTile(e.X, e.Y, out var tile))
             {
                 _selection = new TileSelection(_selectionAnchor!.Value.X, _selectionAnchor.Value.Y, tile.X, tile.Y).Normalize();
@@ -647,8 +886,15 @@ internal sealed class WorldRenderControl : Control
                 }
                 SelectionChanged?.Invoke(_selection.Value); Invalidate();
             }
+            else if (_painting && TryGetEditorTile(e.X, e.Y, out var paintedTile))
+                TileDragged?.Invoke(paintedTile.X, paintedTile.Y);
         };
-        MouseUp += (_, _) => { _panning = false; _selecting = false; };
+        MouseUp += (_, e) =>
+        {
+            if (_painting && _paintStart is { } start && TryGetEditorTile(e.X, e.Y, out var end))
+                TileGestureCompleted?.Invoke(start.X, start.Y, end.X, end.Y);
+            _panning = false; _selecting = false; _painting = false; _paintStart = null;
+        };
         MouseDoubleClick += (_, e) => { if (TryGetEditorTile(e.X, e.Y, out var tile)) TileDoubleClicked?.Invoke(tile.X, tile.Y); };
         KeyDown += (_, e) =>
         {
@@ -678,6 +924,7 @@ internal sealed class WorldRenderControl : Control
         };
         if (panX == 0f && panY == 0f) return false;
         _camera.Pan(panX / _camera.Zoom, panY / _camera.Zoom);
+        RefreshUnifiedViewport();
         ViewChanged?.Invoke();
         Invalidate();
         return true;
@@ -742,6 +989,17 @@ internal sealed class WorldRenderControl : Control
         base.OnResize(e);
         _lastGlobalChunkBounds = null;
         _renderer?.Resize(ClientSize.Width, ClientSize.Height);
+        if (_unifiedPreview is not null)
+        {
+            FitUnifiedPreview();
+            Invalidate();
+            return;
+        }
+        // The first layout pass can create the control smaller than the final
+        // maximized window. Rebuild only the visible rectangle for a unified
+        // floor so the newly exposed area is rendered too.
+        if (_unifiedMap is { } unified && _worldResources is { } resources)
+            SetUnifiedWorld(unified, resources);
     }
 
     private void RenderFrame()
@@ -787,7 +1045,7 @@ internal sealed class WorldRenderControl : Control
             if (_atlas is not null && _regions.Count > 0)
                 {
                     overlayWatch.Start();
-                    var overlays = BuildOverlays();
+                    var overlays = _unifiedMap is null ? BuildOverlays() : Array.Empty<MapOverlay>();
                     overlayWatch.Stop();
                     d3d.RenderTextured(BackColor, _geometry, _regions, overlays);
                 }
@@ -972,10 +1230,13 @@ internal sealed class WorldRenderControl : Control
                 if (!_world.Maps.TryGetValue(placement.MapId, out var map)) continue;
                 var hasWest = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
                 var hasNorth = chunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
-                var dx = placement.Chunk.X * GlobalChunkGeometry.WidthTiles;
-                var dy = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles;
+                var stitch = _world.StitchShift(placement.Chunk);
+                var dx = placement.Chunk.X * GlobalChunkGeometry.WidthTiles - stitch.X;
+                var dy = placement.Chunk.Y * GlobalChunkGeometry.HeightTiles - stitch.Y;
                 // Translate the visible global rect into this map's local tiles.
-                var clip = GlobalChunkGeometry.ToLocalTileBounds(visible, placement.Chunk);
+                var clip = GlobalChunkGeometry.ToLocalTileBounds(
+                    (visible.MinX + stitch.X, visible.MaxX + stitch.X,
+                        visible.MinY + stitch.Y, visible.MaxY + stitch.Y), placement.Chunk);
                 overlays.AddRange(MapOverlayGeometry.Build(map, RenderOptions, null, clip)
                     .Where(item => GlobalChunkGeometry.IsCoreTile(item.X, item.Y, hasWest, hasNorth))
                     .Select(item => item with { X = item.X + dx, Y = item.Y + dy }));
@@ -1026,6 +1287,32 @@ internal sealed class WorldRenderControl : Control
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        if (_unifiedPreview is not null)
+        {
+            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            var sourceX = _camera.OffsetX / MapRenderGeometry.TilePixels * 4f;
+            var sourceY = _camera.OffsetY / MapRenderGeometry.TilePixels * 4f;
+            var sourceWidth = ClientSize.Width / _camera.Zoom / MapRenderGeometry.TilePixels * 4f;
+            var sourceHeight = ClientSize.Height / _camera.Zoom / MapRenderGeometry.TilePixels * 4f;
+            var destination = new RectangleF(0, 0, ClientSize.Width, ClientSize.Height);
+            sourceX = Math.Clamp(sourceX, 0, Math.Max(0, _unifiedPreview.Width - 1));
+            sourceY = Math.Clamp(sourceY, 0, Math.Max(0, _unifiedPreview.Height - 1));
+            sourceWidth = Math.Min(sourceWidth, _unifiedPreview.Width - sourceX);
+            sourceHeight = Math.Min(sourceHeight, _unifiedPreview.Height - sourceY);
+            if (sourceWidth > 0 && sourceHeight > 0)
+                e.Graphics.DrawImage(_unifiedPreview, destination,
+                    new RectangleF(sourceX, sourceY, sourceWidth, sourceHeight), GraphicsUnit.Pixel);
+            if (_selectedGlobalTile is { } selected)
+            {
+                var tileSize = MapRenderGeometry.TilePixels * _camera.Zoom;
+                var screenX = (selected.X * MapRenderGeometry.TilePixels - _camera.OffsetX) * _camera.Zoom;
+                var screenY = (selected.Y * MapRenderGeometry.TilePixels - _camera.OffsetY) * _camera.Zoom;
+                using var pen = new Pen(Color.Yellow, Math.Max(1f, _camera.Zoom));
+                e.Graphics.DrawRectangle(pen, screenX, screenY, tileSize, tileSize);
+            }
+            return;
+        }
         // Normal frames are presented exclusively by D3D11. Do not call the
         // base implementation: it paints BackColor over the swap chain.
         if (_renderer is null && _initializationError is not null)

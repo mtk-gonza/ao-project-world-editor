@@ -69,7 +69,7 @@ siempre en el medio" hace falta una proyeccion global y un viewport.
    personaje (`map, x, y`) al pixel global.
 3. Dibujar en el viewport el BMP del chunk visible y sus vecinos (3x3), con el
    rectangulo de origen calculado por la proyeccion; en el seam, dibujar dos veces.
-4. Opcional: usar `artifacts/world/worldmap/worldmap<id>.png` como capa de fondo
+4. Opcional: usar `artifacts/world/worldmap/world.png` como capa de fondo
    cuando exista (requiere un loader nuevo y un asset mas pesado: 1900x2200).
 
 **Riesgo:** mezclar la proyeccion 100 px/mapa con la geometria jugable 75x81

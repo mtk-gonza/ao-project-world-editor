@@ -62,7 +62,8 @@ internal sealed class WorldAuditService
 
         var layouts = new MapsWorldDataService().Load(Path.Combine(resourceRoot, "init", "mapsworlddata.dat"));
         progress?.Report(new AuditProgress(files.Length, files.Length, "coordenadas", "WORLDMAP"));
-        var worldSummaries = new WorldCoordinateAuditService().Audit(layouts, available, coordinates);
+        var mapPaths = files.ToDictionary(item => item.Id, item => item.Path);
+        var worldSummaries = new WorldCoordinateAuditService().Audit(layouts, available, coordinates, mapPaths);
 
         progress?.Report(new AuditProgress(files.Length, files.Length, "indices", "graficos.ind"));
         var indexAudit = new IndexAuditService().Audit(resourceRoot, mapsDirectory, catalog);

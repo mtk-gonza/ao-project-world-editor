@@ -53,11 +53,11 @@ public sealed class FullAuditTests
             Assert.True(File.Exists(full), $"Falta {full}");
             Assert.True(File.Exists(preview), $"Falta {preview}");
             using var image = new System.Drawing.Bitmap(full);
-            Assert.Equal(1900, image.Width);
-            Assert.Equal(2200, image.Height);
+            Assert.Equal(1425, image.Width);
+            Assert.Equal(1782, image.Height);
             using var small = new System.Drawing.Bitmap(preview);
-            Assert.Equal(475, small.Width);
-            Assert.Equal(550, small.Height);
+            Assert.Equal(356, small.Width);
+            Assert.Equal(446, small.Height);
         }
         var issues = new WorldOutputAuditService().Audit(maps, result.Directory, true, root);
         var report = new WorldOutputAuditService().WriteReport(issues, result.Directory);

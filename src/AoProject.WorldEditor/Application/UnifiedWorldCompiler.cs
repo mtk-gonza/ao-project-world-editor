@@ -1,0 +1,388 @@
+using AoProject.WorldEditor.Domain;
+using AoProject.WorldEditor.Infrastructure;
+
+namespace AoProject.WorldEditor.Application;
+
+internal sealed record UnifiedWorldCompileResult(
+    UnifiedWorldMap Map,
+    int WrittenTiles,
+    int MergedTiles,
+    int InternalExits,
+    int ExternalExits,
+    int Npcs,
+    int Objects,
+    int Particles,
+    int Lights,
+    int RoofZones,
+    IReadOnlyList<UnifiedWorldConflict> Conflicts);
+
+/// <summary>
+/// Materializes the legacy sector layout into one authoritative rectangular
+/// world. This is an import/compile step; the resulting map has no sector
+/// identity and does not require stitching while rendering or simulating.
+/// </summary>
+internal sealed class UnifiedWorldCompiler
+{
+    public UnifiedWorldBundle CompileFloors(GlobalWorldDocument world,
+        WorldEditorResourceCatalog? resources = null,
+        IReadOnlyDictionary<short, int>? floorAssignments = null,
+        bool applyStitching = false)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        var bundle = new UnifiedWorldBundle();
+        var stitchByChunk = applyStitching
+            ? new GlobalStitchAuditService().Audit(world)
+                .ToDictionary(item => new GlobalChunkCoordinate(item.ChunkX, item.ChunkY),
+                    item => (item.ShiftX, item.ShiftY))
+            : new Dictionary<GlobalChunkCoordinate, (int X, int Y)>();
+        foreach (var group in world.Assembly.Placements.GroupBy(item =>
+                     floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : 0))
+        {
+            var assembly = new GlobalWorldAssembly
+            {
+                Width = world.Assembly.Width,
+                Height = world.Assembly.Height,
+                WrapX = world.Assembly.WrapX,
+                Placements = group.ToArray()
+            };
+            var floorWorld = new GlobalWorldDocument(assembly, world.Maps, world.Paths, group.First().MapId);
+            bundle.Add(Compile(floorWorld, resources, world.Assembly.Placements,
+                world.Assembly.Placements, group.Key, floorAssignments, stitchByChunk, applyStitching).Map);
+        }
+        bundle.SetPlacements(world.Assembly.Placements.Select(placement =>
+            applyStitching && stitchByChunk.TryGetValue(placement.Chunk, out var stitch)
+                ? placement with { StitchX = stitch.Item1, StitchY = stitch.Item2 }
+                : placement));
+        bundle.SetMapFloors(world.Assembly.Placements.Select(item =>
+            new KeyValuePair<short, int>(item.MapId,
+                floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : 0)));
+        return bundle;
+    }
+
+    public UnifiedWorldCompileResult Compile(GlobalWorldDocument world,
+        WorldEditorResourceCatalog? resources = null,
+        IReadOnlyList<GlobalMapPlacement>? exitPlacements = null,
+        IReadOnlyList<GlobalMapPlacement>? coordinatePlacements = null,
+        int? forcedFloorZ = null,
+        IReadOnlyDictionary<short, int>? floorAssignments = null,
+        IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
+        bool applyStitching = false)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        var placements = world.Assembly.Placements
+            .OrderBy(item => item.Chunk.Y).ThenBy(item => item.Chunk.X).ThenBy(item => item.MapId)
+            .ToArray();
+        if (placements.Length == 0) throw new InvalidDataException("El mundo no contiene mapas.");
+        var occupiedChunks = placements.Select(item => item.Chunk).ToHashSet();
+        var exitPlacementByMap = (exitPlacements ?? placements).ToDictionary(item => item.MapId);
+
+        var coordinateSource = coordinatePlacements is { Count: > 0 } ? coordinatePlacements : placements;
+        var minChunkX = coordinateSource.Min(item => item.Chunk.X);
+        var minChunkY = coordinateSource.Min(item => item.Chunk.Y);
+        var maxChunkX = coordinateSource.Max(item => item.Chunk.X);
+        var maxChunkY = coordinateSource.Max(item => item.Chunk.Y);
+        var floorValues = placements.Select(item =>
+            floorAssignments is not null && floorAssignments.TryGetValue(item.MapId, out var z) ? z : forcedFloorZ ?? 0)
+            .Distinct().ToArray();
+        if (floorValues.Length > 1)
+            throw new InvalidDataException("La compilación de un .gmap debe contener un único piso Z.");
+        var floorZ = forcedFloorZ ?? floorValues.SingleOrDefault();
+        var maxStitchedX = applyStitching
+            ? coordinateSource.Max(item =>
+                (item.Chunk.X - minChunkX) * GlobalChunkGeometry.WidthTiles + WorldMap.Width -
+                (stitchByChunk?.GetValueOrDefault(item.Chunk).Item1 ?? 0))
+            : (maxChunkX - minChunkX + 1) * GlobalChunkGeometry.WidthTiles + WorldMap.Width;
+        var maxStitchedY = applyStitching
+            ? coordinateSource.Max(item =>
+                (item.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles + WorldMap.Height -
+                (stitchByChunk?.GetValueOrDefault(item.Chunk).Item2 ?? 0))
+            : (maxChunkY - minChunkY + 1) * GlobalChunkGeometry.HeightTiles + WorldMap.Height;
+        if (applyStitching)
+        {
+            foreach (var sourceEntry in world.Maps)
+            {
+                if (!exitPlacementByMap.ContainsKey(sourceEntry.Key)) continue;
+                var source = sourceEntry.Value;
+                for (var exitY = 1; exitY <= WorldMap.Height; exitY++)
+                for (var exitX = 1; exitX <= WorldMap.Width; exitX++)
+                {
+                    var block = source.Blocks[exitX, exitY];
+                    if (block is null) continue;
+                    var exit = block.TileExit;
+                    if (exit.Map <= 0 || !exitPlacementByMap.TryGetValue(exit.Map, out var targetPlacement)) continue;
+                    var target = RawGlobalTile(targetPlacement, exit.X, exit.Y, minChunkX, minChunkY,
+                        stitchByChunk, applyStitching);
+                    maxStitchedX = Math.Max(maxStitchedX, target.X + 1);
+                    maxStitchedY = Math.Max(maxStitchedY, target.Y + 1);
+                }
+            }
+            // Legacy exits may use the compatibility band beyond the 100x100
+            // source extent. Keep that band addressable in the experimental
+            // compact floor instead of truncating a valid destination.
+            maxStitchedX = checked(maxStitchedX + GlobalChunkGeometry.WidthTiles);
+            maxStitchedY = checked(maxStitchedY + GlobalChunkGeometry.HeightTiles);
+        }
+        var map = new UnifiedWorldMap(checked(maxStitchedX), checked(maxStitchedY), floorZ);
+        var owners = new Dictionary<int, TileOwner>();
+        var roofIds = new Dictionary<(short MapId, short Trigger), int>();
+        var nextRoofId = 1;
+        var written = 0;
+        var merged = 0;
+        var internalExits = 0;
+        var externalExits = 0;
+        var npcs = 0;
+        var objects = 0;
+        var particles = 0;
+        var lights = 0;
+
+        foreach (var placement in placements)
+        {
+            if (!world.Maps.TryGetValue(placement.MapId, out var source))
+                throw new InvalidDataException($"El mapa {placement.MapId} no pudo materializarse.");
+
+            var hasWest = occupiedChunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X - 1, placement.Chunk.Y));
+            var hasNorth = occupiedChunks.Contains(new GlobalChunkCoordinate(placement.Chunk.X, placement.Chunk.Y - 1));
+            var environment = source.Info;
+            var firstGlobal = RawGlobalTile(placement,
+                hasWest ? GlobalChunkGeometry.CoreMinX + 1 : GlobalChunkGeometry.CoreMinX,
+                hasNorth ? GlobalChunkGeometry.CoreMinY + 1 : GlobalChunkGeometry.CoreMinY,
+                minChunkX, minChunkY, stitchByChunk, applyStitching);
+            var lastGlobal = RawGlobalTile(placement,
+                GlobalChunkGeometry.CoreMaxX, GlobalChunkGeometry.CoreMaxY, minChunkX, minChunkY,
+                stitchByChunk, applyStitching);
+            map.EnvironmentProfiles.Add(new UnifiedWorldEnvironmentProfile(
+                firstGlobal.X, firstGlobal.Y, lastGlobal.X, lastGlobal.Y,
+                source.Environment.BaseLight, source.Environment.Rain, source.Environment.Snow,
+                source.Environment.Fog, environment.Music, environment.Zone,
+                environment.Restriction, environment.Safety, floorZ, source.Info.Level));
+
+            for (var localY = 1; localY <= WorldMap.Height; localY++)
+            for (var localX = 1; localX <= WorldMap.Width; localX++)
+            {
+                if (!GlobalChunkGeometry.IsCoreTile(localX, localY, hasWest, hasNorth)) continue;
+                var global = RawGlobalTile(placement, localX, localY, minChunkX, minChunkY,
+                    stitchByChunk, applyStitching);
+                var gx = global.X;
+                var gy = global.Y;
+                var offset = map.Offset(gx, gy);
+                var sourceBlock = source.Blocks[localX, localY];
+                if (owners.TryGetValue(offset, out var owner))
+                {
+                    var diagonalSeam = owner.Chunk.X != placement.Chunk.X && owner.Chunk.Y != placement.Chunk.Y;
+                    if (diagonalSeam)
+                    {
+                        // The outer corner of two diagonal sectors maps to the
+                        // same dense pixel, but is not a shared playable tile.
+                        // Keep the first canonical corner and do not turn this
+                        // geometric seam into a gameplay conflict.
+                        merged++;
+                        continue;
+                    }
+                    var duplicateExit = AppendExit(map, offset, gx, gy, sourceBlock, floorZ,
+                        world, exitPlacementByMap, minChunkX, minChunkY, floorAssignments,
+                        stitchByChunk, applyStitching);
+                    if (duplicateExit == UnifiedWorldExitKind.Internal) internalExits++;
+                    if (duplicateExit == UnifiedWorldExitKind.External) externalExits++;
+                    if (TilesEquivalent(owner.Block, owner.Environment, sourceBlock, source.Environment) ||
+                        (applyStitching && IsSeamDuplicate(owner, placement, localX, localY)))
+                        merged++;
+                    else
+                        AddConflict(map, gx, gy, owner.MapId, placement.MapId,
+                            DifferenceField(owner.Block, owner.Environment, sourceBlock, source.Environment),
+                            owner.LocalX, owner.LocalY, localX, localY, placement.Chunk, floorZ);
+                    continue;
+                }
+                owners[offset] = new TileOwner(placement.MapId, placement.Chunk, localX, localY, sourceBlock, source.Environment);
+                CopyTile(map, offset, sourceBlock, source.Environment);
+                written++;
+
+                if (sourceBlock.NpcIndex > 0) npcs++;
+                if (sourceBlock.Object.Index > 0) objects++;
+                if (sourceBlock.ParticleIndex > 0) particles++;
+                if (sourceBlock.Light.Range > 0) lights++;
+
+                if (resources is not null && sourceBlock.NpcIndex > 0 &&
+                    sourceBlock.NpcIndex < resources.Npcs.Count)
+                {
+                    var npc = resources.Npcs[sourceBlock.NpcIndex];
+                    map.Npcs.Add(new UnifiedWorldNpcPlacement(gx, gy, npc.Body, npc.Head,
+                        npc.Heading, npc.Weapon, npc.Shield, npc.Helmet, floorZ));
+                }
+                if (sourceBlock.ParticleGroup > 0)
+                {
+                    if (map.ParticleGroups.All(item => item.Index != sourceBlock.ParticleGroup))
+                        map.ParticleGroups.Add(new UnifiedWorldParticleGroup(sourceBlock.ParticleGroup,
+                            gx, gy, sourceBlock.ParticleIndex, floorZ));
+                }
+
+                if (sourceBlock.Graphics[3].GraphicIndex > 0 && sourceBlock.Trigger > 0)
+                {
+                    var key = (placement.MapId, sourceBlock.Trigger);
+                    if (!roofIds.TryGetValue(key, out var roofId))
+                    {
+                        roofId = nextRoofId++;
+                        roofIds[key] = roofId;
+                        map.RoofZones.Add(new UnifiedWorldRoofZone(roofId, sourceBlock.Trigger,
+                            gx, gy, gx, gy, floorZ));
+                    }
+                    map.RoofZoneId[offset] = roofId;
+                    var zone = map.RoofZones.Single(item => item.Id == roofId);
+                    map.RoofZones[map.RoofZones.IndexOf(zone)] = zone with
+                    {
+                        MinX = Math.Min(zone.MinX, gx), MinY = Math.Min(zone.MinY, gy),
+                        MaxX = Math.Max(zone.MaxX, gx), MaxY = Math.Max(zone.MaxY, gy)
+                    };
+                }
+
+                var exitKind = AppendExit(map, offset, gx, gy, sourceBlock, floorZ,
+                    world, exitPlacementByMap, minChunkX, minChunkY, floorAssignments);
+                if (exitKind == UnifiedWorldExitKind.Internal) internalExits++;
+                if (exitKind == UnifiedWorldExitKind.External) externalExits++;
+            }
+        }
+
+        return new UnifiedWorldCompileResult(map, written, merged, internalExits, externalExits,
+            npcs, objects, particles, lights, map.RoofZones.Count, map.Conflicts);
+    }
+
+    private static void CopyTile(UnifiedWorldMap target, int offset, MapBlock source, MapEnvironment environment)
+    {
+        target.Blocked[offset] = source.Blocked;
+        target.Trigger[offset] = source.Trigger;
+        target.CharacterIndex[offset] = source.CharacterIndex;
+        target.NpcIndex[offset] = source.NpcIndex;
+        target.ParticleGroup[offset] = source.ParticleGroup;
+        target.ParticleIndex[offset] = source.ParticleIndex;
+        target.Marked[offset] = source.Marked;
+        target.ObjectIndex[offset] = source.Object.Index;
+        target.ObjectAmount[offset] = source.Object.Amount;
+        target.ObjectGraphicIndex[offset] = source.ObjectGraphic.GraphicIndex;
+        target.LightRange[offset] = source.Light.Range;
+        target.LightColor[offset] = source.Light.Color;
+        target.Red[offset] = source.Red;
+        target.Green[offset] = source.Green;
+        target.Blue[offset] = source.Blue;
+        target.AmbientLight[offset] = environment.BaseLight;
+        target.Rain[offset] = environment.Rain;
+        target.Snow[offset] = environment.Snow;
+        target.Fog[offset] = environment.Fog;
+        for (var layer = 0; layer < 8; layer++)
+            target.GraphicIndices[target.GraphicOffset(offset, layer)] = source.Graphics[layer].GraphicIndex;
+        for (var corner = 0; corner < 4; corner++)
+        {
+            target.LightValues[target.CornerOffset(offset, corner)] = source.LightValues[corner];
+            target.Colors[target.CornerOffset(offset, corner)] = source.Colors[corner];
+        }
+    }
+
+    private static (int X, int Y) RawGlobalTile(GlobalMapPlacement placement, int localX, int localY,
+        int minChunkX, int minChunkY,
+        IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
+        bool applyStitching = false)
+    {
+        var stitch = applyStitching ? stitchByChunk?.GetValueOrDefault(placement.Chunk) ?? (0, 0) : (0, 0);
+        return ((placement.Chunk.X - minChunkX) * GlobalChunkGeometry.WidthTiles + localX - 1 - stitch.Item1,
+            (placement.Chunk.Y - minChunkY) * GlobalChunkGeometry.HeightTiles + localY - 1 - stitch.Item2);
+    }
+
+    private static UnifiedWorldExitKind? AppendExit(UnifiedWorldMap map, int offset, int gx, int gy,
+        MapBlock sourceBlock, int floorZ, GlobalWorldDocument world,
+        IReadOnlyDictionary<short, GlobalMapPlacement> placements, int minChunkX, int minChunkY,
+        IReadOnlyDictionary<short, int>? floorAssignments,
+        IReadOnlyDictionary<GlobalChunkCoordinate, (int X, int Y)>? stitchByChunk = null,
+        bool applyStitching = false)
+    {
+        var exit = sourceBlock.TileExit;
+        // VB6 uses negative map ids for special destinations (for example
+        // underworld/return routes). Preserve them as external runtime exits;
+        // they are not ordinary placements and must not be silently dropped.
+        if (exit.Map == 0) return null;
+        UnifiedWorldExit candidate;
+        if (world.Maps.TryGetValue(exit.Map, out var targetMap) && placements.TryGetValue(exit.Map, out var targetPlacement))
+        {
+            var target = RawGlobalTile(targetPlacement, exit.X, exit.Y, minChunkX, minChunkY,
+                stitchByChunk, applyStitching);
+            var targetZ = floorAssignments is not null && floorAssignments.TryGetValue(exit.Map, out var assignedTargetZ)
+                ? assignedTargetZ : floorZ;
+            candidate = new UnifiedWorldExit(targetZ == floorZ ? UnifiedWorldExitKind.Internal : UnifiedWorldExitKind.CrossFloor,
+                gx, gy, target.X, target.Y, SourceZ: floorZ, TargetZ: targetZ);
+        }
+        else
+        {
+            candidate = new UnifiedWorldExit(UnifiedWorldExitKind.External, gx, gy, -1, -1,
+                exit.Map, exit.X, exit.Y, SourceZ: floorZ,
+                ExternalZ: IsSpecialExternalMap(exit.Map) ? -1 : floorZ);
+        }
+        if (!map.Exits.Contains(candidate)) map.Exits.Add(candidate);
+        var reference = map.Exits.IndexOf(candidate) + 1;
+        if (map.ExitIndex[offset] == 0) map.ExitIndex[offset] = reference;
+        return candidate.Kind;
+    }
+
+    private static bool IsSeamDuplicate(TileOwner owner, GlobalMapPlacement placement, int localX, int localY) =>
+        (owner.LocalX == GlobalChunkGeometry.CoreMaxX && localX == GlobalChunkGeometry.CoreMinX + 1) ||
+        (owner.LocalY == GlobalChunkGeometry.CoreMaxY && localY == GlobalChunkGeometry.CoreMinY + 1);
+
+    private static bool IsSpecialExternalMap(short mapId) => mapId < 0 || mapId >= 3000;
+
+    private static void AddConflict(UnifiedWorldMap target, int x, int y, short firstMap, short secondMap,
+        string field, int firstLocalX, int firstLocalY, int secondLocalX, int secondLocalY,
+        GlobalChunkCoordinate secondChunk, int z)
+    {
+        target.Conflicts.Add(new UnifiedWorldConflict(x, y, firstMap, secondMap,
+            field, $"Solapamiento Z={z}: mapa {firstMap} local ({firstLocalX},{firstLocalY}) " +
+            $"vs mapa {secondMap} local ({secondLocalX},{secondLocalY}) en chunk " +
+            $"({secondChunk.X},{secondChunk.Y}); los datos persistentes difieren."));
+    }
+
+    private static string DifferenceField(MapBlock first, MapEnvironment firstEnvironment,
+        MapBlock second, MapEnvironment secondEnvironment)
+    {
+        if (first.Blocked != second.Blocked) return "Blocked";
+        if (first.Trigger != second.Trigger) return "Trigger";
+        if (first.CharacterIndex != second.CharacterIndex) return "CharacterIndex";
+        if (first.NpcIndex != second.NpcIndex) return "NpcIndex";
+        if (first.ParticleGroup != second.ParticleGroup || first.ParticleIndex != second.ParticleIndex) return "Particles";
+        if (first.Object.Index != second.Object.Index || first.Object.Amount != second.Object.Amount ||
+            first.ObjectGraphic.GraphicIndex != second.ObjectGraphic.GraphicIndex) return "Object";
+        if (first.Light.Range != second.Light.Range || first.Light.Color != second.Light.Color) return "Light";
+        if (first.Red != second.Red || first.Green != second.Green || first.Blue != second.Blue) return "Color";
+        for (var layer = 0; layer < first.Graphics.Length; layer++)
+            if (!AnimationsEqual(first.Graphics[layer], second.Graphics[layer])) return $"Graphic[{layer}]";
+        for (var corner = 0; corner < 4; corner++)
+            if (first.LightValues[corner] != second.LightValues[corner] || first.Colors[corner] != second.Colors[corner]) return $"Corner[{corner}]";
+        if (firstEnvironment.BaseLight != secondEnvironment.BaseLight || firstEnvironment.Rain != secondEnvironment.Rain ||
+            firstEnvironment.Snow != secondEnvironment.Snow || firstEnvironment.Fog != secondEnvironment.Fog) return "Environment";
+        return "Unknown";
+    }
+
+    private static bool TilesEquivalent(MapBlock first, MapEnvironment firstEnvironment,
+        MapBlock second, MapEnvironment secondEnvironment)
+    {
+        if (first.Blocked != second.Blocked || first.Trigger != second.Trigger ||
+            first.CharacterIndex != second.CharacterIndex || first.NpcIndex != second.NpcIndex ||
+            first.ParticleGroup != second.ParticleGroup || first.ParticleIndex != second.ParticleIndex ||
+            first.Marked != second.Marked || first.Object.Index != second.Object.Index ||
+            first.Object.Amount != second.Object.Amount || first.ObjectGraphic.GraphicIndex != second.ObjectGraphic.GraphicIndex ||
+            first.Light.Range != second.Light.Range || first.Light.Color != second.Light.Color ||
+            first.Red != second.Red || first.Green != second.Green || first.Blue != second.Blue ||
+            firstEnvironment.BaseLight != secondEnvironment.BaseLight ||
+            firstEnvironment.Rain != secondEnvironment.Rain || firstEnvironment.Snow != secondEnvironment.Snow ||
+            firstEnvironment.Fog != secondEnvironment.Fog)
+            return false;
+        if (!AnimationsEqual(first.ObjectGraphic, second.ObjectGraphic)) return false;
+        for (var layer = 0; layer < first.Graphics.Length; layer++)
+            if (!AnimationsEqual(first.Graphics[layer], second.Graphics[layer])) return false;
+        for (var corner = 0; corner < 4; corner++)
+            if (first.LightValues[corner] != second.LightValues[corner] || first.Colors[corner] != second.Colors[corner]) return false;
+        return true;
+    }
+
+    private static bool AnimationsEqual(GraphicAnimation first, GraphicAnimation second) =>
+        first.GraphicIndex == second.GraphicIndex && first.FrameCounter == second.FrameCounter &&
+        first.Speed == second.Speed && first.Started == second.Started && first.Loops == second.Loops &&
+        first.Angle == second.Angle;
+
+    private sealed record TileOwner(short MapId, GlobalChunkCoordinate Chunk, int LocalX, int LocalY,
+        MapBlock Block, MapEnvironment Environment);
+}

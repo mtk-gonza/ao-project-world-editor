@@ -66,7 +66,7 @@ internal sealed class WorldOutputService
         var options = MapMiniMapOptions.Vb6Default;
         var layouts = LoadLayouts(referenceRoot);
         using var worldComposer = includeMinimaps && layouts.Count > 0
-            ? new WorldMiniMapComposer(layouts, options)
+            ? new WorldMiniMapComposer(layouts, options, catalog?.Root)
             : null;
         for (var index = 0; index < files.Length; index++)
         {

@@ -1,4 +1,5 @@
 using AoProject.WorldEditor.Domain;
+using System.Collections.Concurrent;
 
 namespace AoProject.WorldEditor.Engine.Rendering;
 
@@ -28,9 +29,11 @@ internal sealed class WorldBorderStitcher
 
     private readonly Dictionary<GlobalChunkCoordinate, short> _byChunk;
     private readonly Func<short, BorderSample?> _sampleOf;
-    private readonly Dictionary<short, BorderSample?> _samples = [];
-    private readonly Dictionary<int, bool> _verticalLines = [];
-    private readonly Dictionary<int, bool> _horizontalLines = [];
+    private readonly ConcurrentDictionary<short, Lazy<BorderSample?>> _samples = [];
+    private readonly ConcurrentDictionary<int, bool> _verticalLines = [];
+    private readonly ConcurrentDictionary<int, bool> _horizontalLines = [];
+    private int _prewarming;
+    private volatile bool _isComplete;
 
     public WorldBorderStitcher(IEnumerable<GlobalMapPlacement> placements,
         Func<short, BorderSample?> sampleOf)
@@ -42,10 +45,9 @@ internal sealed class WorldBorderStitcher
 
     private BorderSample? Sample(short mapId)
     {
-        if (_samples.TryGetValue(mapId, out var cached)) return cached;
-        var sample = _sampleOf(mapId);
-        _samples[mapId] = sample;
-        return sample;
+        var lazy = _samples.GetOrAdd(mapId,
+            id => new Lazy<BorderSample?>(() => _sampleOf(id), LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
     /// <summary>Reads the border lines of a map and lets the caller drop the map.</summary>
@@ -80,9 +82,35 @@ internal sealed class WorldBorderStitcher
         return (columns, rows);
     }
 
+    private (int X, int Y) ForSynchronous(GlobalChunkCoordinate chunk)
+    {
+        var columns = 0;
+        for (var line = 1; line <= chunk.X; line++)
+            if (ComputeVerticalLine(line)) columns++;
+        var rows = 0;
+        for (var line = 1; line <= chunk.Y; line++)
+            if (ComputeHorizontalLine(line)) rows++;
+        return (columns, rows);
+    }
+
     /// <summary>Collapse flags for the chunks a caller is going to draw.</summary>
     public (Dictionary<GlobalChunkCoordinate, int> Columns, Dictionary<GlobalChunkCoordinate, int> Rows)
         ForAll(IEnumerable<GlobalChunkCoordinate> chunks)
+    {
+        var columns = new Dictionary<GlobalChunkCoordinate, int>();
+        var rows = new Dictionary<GlobalChunkCoordinate, int>();
+        foreach (var chunk in chunks)
+        {
+            var (x, y) = ForSynchronous(chunk);
+            columns[chunk] = x;
+            rows[chunk] = y;
+        }
+        return (columns, rows);
+    }
+
+    /// <summary>Returns cached shifts without ever loading a border on the caller thread.</summary>
+    public (Dictionary<GlobalChunkCoordinate, int> Columns, Dictionary<GlobalChunkCoordinate, int> Rows)
+        ForAllNonBlocking(IEnumerable<GlobalChunkCoordinate> chunks)
     {
         var columns = new Dictionary<GlobalChunkCoordinate, int>();
         var rows = new Dictionary<GlobalChunkCoordinate, int>();
@@ -103,46 +131,47 @@ internal sealed class WorldBorderStitcher
     /// </summary>
     public void Prewarm(Action? onDone)
     {
-        if (_prewarming || IsComplete) return;
-        _prewarming = true;
+        if (IsComplete || Interlocked.CompareExchange(ref _prewarming, 1, 0) != 0) return;
         _ = Task.Run(() =>
         {
             try
             {
                 foreach (var line in _byChunk.Keys.Select(chunk => chunk.X).Distinct().OrderBy(value => value))
-                    if (line > 0) VerticalLine(line);
+                    if (line > 0) ComputeVerticalLine(line);
                 foreach (var line in _byChunk.Keys.Select(chunk => chunk.Y).Distinct().OrderBy(value => value))
-                    if (line > 0) HorizontalLine(line);
-                IsComplete = true;
+                    if (line > 0) ComputeHorizontalLine(line);
+                _isComplete = true;
             }
             finally
             {
-                _prewarming = false;
+                Volatile.Write(ref _prewarming, 0);
                 onDone?.Invoke();
             }
         });
     }
 
     /// <summary>True once every junction line has been evaluated.</summary>
-    public bool IsComplete { get; private set; }
-
-    private bool _prewarming;
+    public bool IsComplete => _isComplete;
 
     private bool VerticalLine(int line)
     {
         if (_verticalLines.TryGetValue(line, out var cached)) return cached;
-        var value = LineDuplicates(line, vertical: true);
-        _verticalLines[line] = value;
-        return value;
+        if (!IsComplete) return false;
+        return ComputeVerticalLine(line);
     }
 
     private bool HorizontalLine(int line)
     {
         if (_horizontalLines.TryGetValue(line, out var cached)) return cached;
-        var value = LineDuplicates(line, vertical: false);
-        _horizontalLines[line] = value;
-        return value;
+        if (!IsComplete) return false;
+        return ComputeHorizontalLine(line);
     }
+
+    private bool ComputeVerticalLine(int line) =>
+        _verticalLines.GetOrAdd(line, value => LineDuplicates(value, vertical: true));
+
+    private bool ComputeHorizontalLine(int line) =>
+        _horizontalLines.GetOrAdd(line, value => LineDuplicates(value, vertical: false));
 
     private bool LineDuplicates(int line, bool vertical)
     {
