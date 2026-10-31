@@ -63,7 +63,7 @@ internal static class MapOverlayGeometry
                         position += 8;
                     }
                 }
-                if (options.ShowTransfers && block.TileExit.Map != 0)
+                if (options.ShowTransfers && block.TileExit.SectorId != 0)
                     overlays.Add(new(OverlayKind.Transfer, x, y, 1, 1, TransferGraphic));
                 if (options.ShowParticles && block.ParticleIndex != 0) overlays.Add(new(OverlayKind.Particle, x, y, 1, 1));
                 if (options.ShowLights && block.Light.Range != 0) overlays.Add(new(OverlayKind.Light, x, y, 1, 1));

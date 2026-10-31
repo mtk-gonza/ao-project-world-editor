@@ -219,7 +219,7 @@ internal sealed class MapDataAuditService
         for (var y = 1; y <= WorldSector.Height; y++)
         {
             var exit = map.Blocks[x, y].TileExit;
-            if (exit.Map == 0)
+            if (exit.SectorId == 0)
             {
                 if (exit.X != 0 || exit.Y != 0)
                     issues.Add("CSM-EXIT", AuditSeverity.Warning, "TileExit sin mapa pero con coordenadas.", x, y);
@@ -227,11 +227,11 @@ internal sealed class MapDataAuditService
             }
             if (exit.X is < 1 or > WorldSector.Width || exit.Y is < 1 or > WorldSector.Height)
                 issues.Add("CSM-EXIT", AuditSeverity.Warning,
-                    $"TileExit a mapa {exit.Map} con destino fuera de 1..100: {exit.X},{exit.Y}.", x, y);
-            if (exit.Map < 0)
-                specialDestinations.Add(exit.Map);
-            else if (available is not null && !available.Contains(exit.Map))
-                missingDestinations.Add(exit.Map);
+                    $"TileExit a mapa {exit.SectorId} con destino fuera de 1..100: {exit.X},{exit.Y}.", x, y);
+            if (exit.SectorId < 0)
+                specialDestinations.Add(exit.SectorId);
+            else if (available is not null && !available.Contains(exit.SectorId))
+                missingDestinations.Add(exit.SectorId);
         }
         AddAggregate(issues, "CSM-EXIT-SPECIAL", AuditSeverity.Info,
             "TileExit a mapa especial negativo", specialDestinations);
@@ -295,7 +295,7 @@ internal sealed class MapDataAuditService
             if (a.Light.Range != b.Light.Range || a.Light.Color != b.Light.Color) return $"Luz distinta en {x},{y}.";
             if (a.Object.Index != b.Object.Index || a.Object.Amount != b.Object.Amount) return $"Objeto distinto en {x},{y}.";
             if (a.NpcIndex != b.NpcIndex) return $"NPC distinto en {x},{y}.";
-            if (a.TileExit.Map != b.TileExit.Map || a.TileExit.X != b.TileExit.X || a.TileExit.Y != b.TileExit.Y)
+            if (a.TileExit.SectorId != b.TileExit.SectorId || a.TileExit.X != b.TileExit.X || a.TileExit.Y != b.TileExit.Y)
                 return $"TileExit distinto en {x},{y}.";
         }
         return null;
@@ -307,17 +307,17 @@ internal sealed class MapDataAuditService
         for (var index = 1; index <= WorldSector.Width; index++)
         {
             var west = map.Blocks[13, index].TileExit;
-            if (west.Map != 0 && west.X == 87)
-                exits.Add(new MapBorderExit(GlobalWorldSide.West, west.Map, 13, index, west.X, west.Y));
+            if (west.SectorId != 0 && west.X == 87)
+                exits.Add(new MapBorderExit(GlobalWorldSide.West, west.SectorId, 13, index, west.X, west.Y));
             var east = map.Blocks[88, index].TileExit;
-            if (east.Map != 0 && east.X == 14)
-                exits.Add(new MapBorderExit(GlobalWorldSide.East, east.Map, 88, index, east.X, east.Y));
+            if (east.SectorId != 0 && east.X == 14)
+                exits.Add(new MapBorderExit(GlobalWorldSide.East, east.SectorId, 88, index, east.X, east.Y));
             var north = map.Blocks[index, 10].TileExit;
-            if (north.Map != 0 && north.Y == 90)
-                exits.Add(new MapBorderExit(GlobalWorldSide.North, north.Map, index, 10, north.X, north.Y));
+            if (north.SectorId != 0 && north.Y == 90)
+                exits.Add(new MapBorderExit(GlobalWorldSide.North, north.SectorId, index, 10, north.X, north.Y));
             var south = map.Blocks[index, 91].TileExit;
-            if (south.Map != 0 && south.Y == 11)
-                exits.Add(new MapBorderExit(GlobalWorldSide.South, south.Map, index, 91, south.X, south.Y));
+            if (south.SectorId != 0 && south.Y == 11)
+                exits.Add(new MapBorderExit(GlobalWorldSide.South, south.SectorId, index, 91, south.X, south.Y));
         }
         return exits;
     }
@@ -326,7 +326,7 @@ internal sealed class MapDataAuditService
     {
         if (block.Blocked != 0 || block.Trigger != 0 || block.Light.Range != 0 ||
             block.ParticleIndex != 0 || block.NpcIndex != 0 || block.Object.Index != 0 ||
-            block.TileExit.Map != 0) return true;
+            block.TileExit.SectorId != 0) return true;
         for (var layer = 0; layer < 4; layer++)
             if (block.Graphics[layer].GraphicIndex != 0) return true;
         return false;
@@ -346,7 +346,7 @@ internal sealed class MapDataAuditService
             if (block.ParticleIndex != 0) particles++;
             if (block.NpcIndex != 0) npcs++;
             if (block.Object.Index != 0) objects++;
-            if (block.TileExit.Map != 0) exits++;
+            if (block.TileExit.SectorId != 0) exits++;
         }
         return (blocked, triggers, lights, particles, npcs, objects, exits);
     }

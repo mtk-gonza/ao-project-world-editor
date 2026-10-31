@@ -82,10 +82,10 @@ internal sealed class WorldOutputService
                 if (names.Get("NameMapa", $"mapa{mapId}").Length == 0) namesAdded++;
                 names.Set("NameMapa", $"mapa{mapId}", Sanitize(map.Info.Name));
                 if (transfers.Get($"mapa{mapId}", "Abajo").Length == 0) transfersAdded++;
-                transfers.Set($"mapa{mapId}", "Abajo", map.Blocks[50, 91].TileExit.Map.ToString());
-                transfers.Set($"mapa{mapId}", "Arriba", map.Blocks[50, 10].TileExit.Map.ToString());
-                transfers.Set($"mapa{mapId}", "Izquierda", map.Blocks[13, 50].TileExit.Map.ToString());
-                transfers.Set($"mapa{mapId}", "Derecha", map.Blocks[88, 50].TileExit.Map.ToString());
+                transfers.Set($"mapa{mapId}", "Abajo", map.Blocks[50, 91].TileExit.SectorId.ToString());
+                transfers.Set($"mapa{mapId}", "Arriba", map.Blocks[50, 10].TileExit.SectorId.ToString());
+                transfers.Set($"mapa{mapId}", "Izquierda", map.Blocks[13, 50].TileExit.SectorId.ToString());
+                transfers.Set($"mapa{mapId}", "Derecha", map.Blocks[88, 50].TileExit.SectorId.ToString());
                 if (includeMinimaps)
                 {
                     minimapService.SavePng(map, catalog!.Graphics, options, catalog.Objects,

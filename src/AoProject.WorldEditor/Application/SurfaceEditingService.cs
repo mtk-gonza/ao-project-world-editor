@@ -42,7 +42,7 @@ internal sealed class SurfaceEditingService
                 block.Blocked = 0xF;
         });
         foreach (var point in new[] { (innerMinX, innerMinY), (innerMinX, innerMaxY), (innerMaxX, innerMinY), (innerMaxX, innerMaxY) })
-            if (InMapDomain(map, point.Item1, point.Item2) && map.Blocks[point.Item1, point.Item2].TileExit.Map == 0)
+            if (InMapDomain(map, point.Item1, point.Item2) && map.Blocks[point.Item1, point.Item2].TileExit.SectorId == 0)
                 map.Blocks[point.Item1, point.Item2].Blocked = 0xF;
         map.Info.Changed = true;
     }

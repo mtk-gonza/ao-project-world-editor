@@ -75,7 +75,13 @@ internal sealed class WorldEditorSession
         if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo global cargado.");
         var assignments = new UnifiedWorldFloorAssignmentService()
             .Detect(CurrentWorld);
-        return new UnifiedWorldCompiler().CompileFloors(CurrentWorld, Resources, assignments, applyStitching);
+        var settlements = Path.Combine(ResourceRoot, "world", "settlements.json");
+        var dat = Path.Combine(ResourceRoot, "Dat");
+        return new UnifiedWorldCompiler().CompileFloors(CurrentWorld, Resources, assignments, applyStitching,
+            File.Exists(settlements) ? File.ReadAllBytes(settlements) : [],
+            File.Exists(Path.Combine(dat, "SectorId.dat")) ? File.ReadAllBytes(Path.Combine(dat, "SectorId.dat")) : [],
+            File.Exists(Path.Combine(dat, "UnderworldMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "UnderworldMapPool.dat")) : [],
+            File.Exists(Path.Combine(dat, "PhoenixMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "PhoenixMapPool.dat")) : []);
     }
 
     public UnifiedWorldBundle CompileStitchedWorldBundle() => CompileUnifiedWorldBundle(true);
@@ -370,7 +376,7 @@ internal sealed class WorldEditorSession
         if (clearObject) { block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default; }
         if (clearNpc) { block.NpcIndex = 0; block.CharacterIndex = 0; }
         if (clearTrigger) block.Trigger = 0;
-        if (clearTransfer) { block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0; }
+        if (clearTransfer) { block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0; }
         map.Info.Changed = true;
     });
     public int ClearMap(int baseGraphic = 1) => ExecuteBulk(map => _cleanup.ClearMap(map, baseGraphic));

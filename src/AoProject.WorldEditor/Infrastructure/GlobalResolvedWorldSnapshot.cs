@@ -80,7 +80,7 @@ internal static class GlobalResolvedWorldSnapshot
                 writer.Write(graphic.Loops); writer.Write(graphic.Angle);
             }
             var exit = block.TileExit;
-            if (exit.Map > 0 && placements.TryGetValue(exit.Map, out var targetPlacement))
+            if (exit.SectorId > 0 && placements.TryGetValue(exit.SectorId, out var targetPlacement))
             {
                 var target = document.GlobalTileForPlacement(targetPlacement, exit.X, exit.Y, minChunkX, minChunkY);
                 var targetX = target.X;

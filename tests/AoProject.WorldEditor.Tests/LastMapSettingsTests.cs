@@ -11,7 +11,7 @@ public sealed class LastMapSettingsTests
         var path = Path.Combine(Path.GetTempPath(), "ao-last-map-" + Guid.NewGuid().ToString("N"), "WorldEditor.ini");
         try
         {
-            var settings = new WorldEditorSettings { LastMap = "C:\\maps\\mapa7.csm" }; settings.Save(path);
+            var settings = new WorldEditorSettings { LastSectorId = "C:\\maps\\mapa7.csm" }; settings.Save(path);
             Assert.Equal("C:\\maps\\mapa7.csm", WorldEditorSettings.Load(path).LastMap);
         }
         finally { var directory = Path.GetDirectoryName(path)!; if (Directory.Exists(directory)) Directory.Delete(directory, true); }

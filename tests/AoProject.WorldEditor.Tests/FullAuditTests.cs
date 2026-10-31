@@ -112,10 +112,10 @@ public sealed class FullAuditTests
                 sections++;
                 var expected = new (string Key, short Value)[]
                 {
-                    ("Abajo", map.Blocks[50, 91].TileExit.Map),
-                    ("Arriba", map.Blocks[50, 10].TileExit.Map),
-                    ("Izquierda", map.Blocks[13, 50].TileExit.Map),
-                    ("Derecha", map.Blocks[88, 50].TileExit.Map)
+                    ("Abajo", map.Blocks[50, 91].TileExit.SectorId),
+                    ("Arriba", map.Blocks[50, 10].TileExit.SectorId),
+                    ("Izquierda", map.Blocks[13, 50].TileExit.SectorId),
+                    ("Derecha", map.Blocks[88, 50].TileExit.SectorId)
                 };
                 var all = true;
                 foreach (var (key, value) in expected)

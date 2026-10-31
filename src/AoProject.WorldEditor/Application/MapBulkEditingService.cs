@@ -47,7 +47,7 @@ internal sealed class MapBulkEditingService
 
     public void ClearExits(WorldSector map)
     {
-        ForEachBlock(map, block => { block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0; });
+        ForEachBlock(map, block => { block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0; });
         MarkChanged(map, true);
     }
 

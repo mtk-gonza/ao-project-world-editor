@@ -23,7 +23,7 @@ internal sealed class SurfaceBorderPlacementService
             block.Blocked = blocked ? (byte)0xF : (byte)0;
             block.NpcIndex = 0; block.CharacterIndex = 0;
             block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default;
-            block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
+            block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
             count++;
         }
         if (count > 0) map.Info.Changed = true;

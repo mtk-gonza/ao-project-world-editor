@@ -13,7 +13,7 @@ public sealed class WorldMapRenderGuardTests
         var map = new WorldSector();
         map.Blocks[10, 10].Trigger = 5;
         map.Blocks[10, 10].Blocked = 0xF;
-        map.Blocks[10, 10].TileExit.Map = 2;
+        map.Blocks[10, 10].TileExit.SectorId = 2;
         map.Blocks[10, 10].ParticleIndex = 1;
         map.Blocks[10, 10].Light.Range = 10;
 

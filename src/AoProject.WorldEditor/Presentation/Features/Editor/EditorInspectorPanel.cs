@@ -55,7 +55,7 @@ internal sealed class EditorInspectorPanel : Panel
             $"NPC: {block.NpcIndex}\r\n" +
             $"Particula: grupo {block.ParticleGroup}, indice {block.ParticleIndex}\r\n" +
             $"Luz: rango {block.Light.Range}, color {block.Light.Color}\r\n" +
-            $"Salida legacy: {block.TileExit.Map} ({block.TileExit.X},{block.TileExit.Y})";
+            $"Salida legacy: {block.TileExit.SectorId} ({block.TileExit.X},{block.TileExit.Y})";
     }
 
     public void ShowUnifiedTile(UnifiedWorldMap map, int x, int y)

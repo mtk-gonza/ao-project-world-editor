@@ -16,10 +16,10 @@ public sealed class AdjacentTransferTests
         var changed = new AdjacentTransferService().Apply(map, [transfer, default, default, default]);
 
         Assert.Equal(2, changed);
-        Assert.Equal((short)42, map.Blocks[19, 10].TileExit.Map);
+        Assert.Equal((short)42, map.Blocks[19, 10].TileExit.SectorId);
         Assert.Equal((short)19, map.Blocks[19, 10].TileExit.X);
         Assert.Equal((short)1, map.Blocks[19, 10].TileExit.Y);
-        Assert.Equal((short)0, map.Blocks[20, 10].TileExit.Map);
+        Assert.Equal((short)0, map.Blocks[20, 10].TileExit.SectorId);
         Assert.True(map.Info.Changed);
     }
 }

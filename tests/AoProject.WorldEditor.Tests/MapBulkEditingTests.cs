@@ -13,7 +13,7 @@ public sealed class MapBulkEditingTests
         map.Blocks[2, 3].Graphics[1].GraphicIndex = 10;
         map.Blocks[4, 5].Trigger = 7;
         map.Blocks[6, 7].Object.Index = 3;
-        map.Blocks[8, 9].TileExit.Map = 2;
+        map.Blocks[8, 9].TileExit.SectorId = 2;
         var service = new MapBulkEditingService();
 
         Assert.Equal(1, service.ReplaceGraphic(map, 1, 10, 20));
@@ -24,7 +24,7 @@ public sealed class MapBulkEditingTests
         Assert.Equal(20, map.Blocks[2, 3].Graphics[1].GraphicIndex);
         Assert.Equal(0, map.Blocks[4, 5].Trigger);
         Assert.Equal(0, map.Blocks[6, 7].Object.Index);
-        Assert.Equal(0, map.Blocks[8, 9].TileExit.Map);
+        Assert.Equal(0, map.Blocks[8, 9].TileExit.SectorId);
         Assert.True(map.Info.Changed);
     }
 }

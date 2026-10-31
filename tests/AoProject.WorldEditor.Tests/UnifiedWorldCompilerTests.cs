@@ -2,6 +2,7 @@ using AoProject.WorldEditor.Application;
 using AoProject.WorldEditor.Domain;
 using AoProject.WorldEditor.Infrastructure;
 using System.Drawing;
+using System.Text;
 using Xunit;
 
 namespace AoProject.WorldEditor.Tests;
@@ -37,16 +38,16 @@ public sealed class UnifiedWorldCompilerTests
             new Dictionary<short, string> { [1] = "mapa1.csm", [2] = "mapa2.csm" }, 1);
 
         var result = new UnifiedWorldCompiler().Compile(world);
-        var offset = result.Map.Offset(19, 19);
+        var offset = result.SectorId.Offset(19, 19);
 
-        Assert.Equal(250, result.Map.Width);
-        Assert.Equal(181, result.Map.Height);
-        Assert.Equal(100, result.Map.GraphicIndices[result.Map.GraphicOffset(offset, 0)]);
-        Assert.Equal((byte)15, result.Map.Blocked[offset]);
-        Assert.Equal((short)3, result.Map.NpcIndex[offset]);
-        Assert.Equal((short)4, result.Map.ObjectIndex[offset]);
-        Assert.Equal(5, result.Map.ParticleIndex[offset]);
-        Assert.Equal((short)4, result.Map.LightRange[offset]);
+        Assert.Equal(250, result.SectorId.Width);
+        Assert.Equal(181, result.SectorId.Height);
+        Assert.Equal(100, result.SectorId.GraphicIndices[result.SectorId.GraphicOffset(offset, 0)]);
+        Assert.Equal((byte)15, result.SectorId.Blocked[offset]);
+        Assert.Equal((short)3, result.SectorId.NpcIndex[offset]);
+        Assert.Equal((short)4, result.SectorId.ObjectIndex[offset]);
+        Assert.Equal(5, result.SectorId.ParticleIndex[offset]);
+        Assert.Equal((short)4, result.SectorId.LightRange[offset]);
         Assert.Equal(1, result.Npcs);
         Assert.Equal(1, result.Objects);
         Assert.Equal(1, result.Particles);
@@ -59,7 +60,7 @@ public sealed class UnifiedWorldCompilerTests
     public void Keeps_an_exit_to_a_map_outside_the_world_as_external()
     {
         var map = new WorldSector();
-        map.Blocks[20, 20].TileExit.Map = 999;
+        map.Blocks[20, 20].TileExit.SectorId = 999;
         map.Blocks[20, 20].TileExit.X = 40;
         map.Blocks[20, 20].TileExit.Y = 50;
         var world = new GlobalWorldDocument(
@@ -69,19 +70,19 @@ public sealed class UnifiedWorldCompilerTests
 
         var result = new UnifiedWorldCompiler().Compile(world);
 
-        var exit = Assert.Single(result.Map.Exits);
+        var exit = Assert.Single(result.SectorId.Exits);
         Assert.Equal(UnifiedWorldExitKind.External, exit.Kind);
         Assert.Equal((short)999, exit.ExternalSectorId);
         Assert.Equal((short)40, exit.ExternalX);
         Assert.Equal((short)50, exit.ExternalY);
-        Assert.Equal(1, result.Map.ExitIndex[result.Map.Offset(19, 19)]);
+        Assert.Equal(1, result.SectorId.ExitIndex[result.SectorId.Offset(19, 19)]);
     }
 
     [Fact]
     public void Removes_legacy_sector_exit_when_maps_are_physically_adjacent()
     {
         var west = new WorldSector();
-        west.Blocks[88, 20].TileExit.Map = 2;
+        west.Blocks[88, 20].TileExit.SectorId = 2;
         west.Blocks[88, 20].TileExit.X = 14;
         west.Blocks[88, 20].TileExit.Y = 20;
         var east = new WorldSector();
@@ -96,8 +97,8 @@ public sealed class UnifiedWorldCompilerTests
 
         var result = new UnifiedWorldCompiler().Compile(world);
 
-        Assert.Empty(result.Map.Exits);
-        Assert.Equal(0, result.Map.ExitIndex[result.Map.Offset(87, 19)]);
+        Assert.Empty(result.SectorId.Exits);
+        Assert.Equal(0, result.SectorId.ExitIndex[result.SectorId.Offset(87, 19)]);
     }
 
     [Fact]
@@ -129,7 +130,7 @@ public sealed class UnifiedWorldCompilerTests
     public void Keeps_negative_special_exit_on_underground_external_floor()
     {
         var map = new WorldSector();
-        map.Blocks[20, 20].TileExit.Map = -1;
+        map.Blocks[20, 20].TileExit.SectorId = -1;
         map.Blocks[20, 20].TileExit.X = 36;
         map.Blocks[20, 20].TileExit.Y = 76;
         var world = new GlobalWorldDocument(
@@ -139,7 +140,7 @@ public sealed class UnifiedWorldCompilerTests
 
         var result = new UnifiedWorldCompiler().Compile(world);
 
-        var exit = Assert.Single(result.Map.Exits);
+        var exit = Assert.Single(result.SectorId.Exits);
         Assert.Equal(UnifiedWorldExitKind.External, exit.Kind);
         Assert.Equal((short)-1, exit.ExternalSectorId);
         Assert.Equal(-1, exit.ExternalZ);
@@ -150,7 +151,7 @@ public sealed class UnifiedWorldCompilerTests
     public void Does_not_promote_missing_3000_exit_into_surface_geometry()
     {
         var source = new WorldSector();
-        source.Blocks[20, 20].TileExit.Map = 3000;
+        source.Blocks[20, 20].TileExit.SectorId = 3000;
         source.Blocks[20, 20].TileExit.X = 36;
         source.Blocks[20, 20].TileExit.Y = 76;
         var lower = new WorldSector();
@@ -370,11 +371,34 @@ public sealed class UnifiedWorldCompilerTests
     }
 
     [Fact]
+    public void Unified_world_bundle_roundtrips_embedded_settlements()
+    {
+        var bundle = new UnifiedWorldBundle();
+        bundle.Add(new UnifiedWorldMap(2, 2, 0));
+        bundle.SettlementsJson = "[{\"homeId\":1}]"u8.ToArray();
+        bundle.SectorIdDat = "[ForceUpdateAi]\n1=1"u8.ToArray();
+        bundle.UnderworldPool = "[INIT]\nUnderworldMapPool=1"u8.ToArray();
+        bundle.PhoenixPool = "[INIT]\nMaxPhoenixMaps=1"u8.ToArray();
+        var directory = Path.Combine(Path.GetTempPath(), "aogbundle-settlements-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = new UnifiedWorldBundleFileService();
+            service.Save(bundle, directory);
+            var loaded = service.Load(directory);
+            Assert.Equal("[{\"homeId\":1}]", Encoding.UTF8.GetString(loaded.SettlementsJson));
+            Assert.Equal(bundle.SectorIdDat, loaded.SectorIdDat);
+            Assert.Equal(bundle.UnderworldPool, loaded.UnderworldPool);
+            Assert.Equal(bundle.PhoenixPool, loaded.PhoenixPool);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public void Compiler_preserves_a_transfer_between_global_floors()
     {
         var surface = new WorldSector();
         surface.Info.Level = 0;
-        surface.Blocks[20, 20].TileExit.Map = 2;
+        surface.Blocks[20, 20].TileExit.SectorId = 2;
         surface.Blocks[20, 20].TileExit.X = 30;
         surface.Blocks[20, 20].TileExit.Y = 30;
         var underground = new WorldSector();

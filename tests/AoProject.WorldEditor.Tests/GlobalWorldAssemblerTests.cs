@@ -11,10 +11,10 @@ public sealed class GlobalWorldAssemblerTests
     {
         var first = new WorldSector();
         var second = new WorldSector();
-        first.Blocks[88, 50].TileExit.Map = 2;
+        first.Blocks[88, 50].TileExit.SectorId = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
-        second.Blocks[13, 50].TileExit.Map = 1;
+        second.Blocks[13, 50].TileExit.SectorId = 1;
         second.Blocks[13, 50].TileExit.X = 87;
         second.Blocks[13, 50].TileExit.Y = 50;
 
@@ -35,19 +35,19 @@ public sealed class GlobalWorldAssemblerTests
         var root = new WorldSector();
         var east = new WorldSector();
         var north = new WorldSector();
-        root.Blocks[88, 50].TileExit.Map = 2;
+        root.Blocks[88, 50].TileExit.SectorId = 2;
         root.Blocks[88, 50].TileExit.X = 14;
         root.Blocks[88, 50].TileExit.Y = 50;
-        root.Blocks[50, 10].TileExit.Map = 3;
+        root.Blocks[50, 10].TileExit.SectorId = 3;
         root.Blocks[50, 10].TileExit.X = 50;
         root.Blocks[50, 10].TileExit.Y = 90;
-        east.Blocks[13, 50].TileExit.Map = 1;
+        east.Blocks[13, 50].TileExit.SectorId = 1;
         east.Blocks[13, 50].TileExit.X = 87;
         east.Blocks[13, 50].TileExit.Y = 50;
-        east.Blocks[50, 10].TileExit.Map = 3;
+        east.Blocks[50, 10].TileExit.SectorId = 3;
         east.Blocks[50, 10].TileExit.X = 50;
         east.Blocks[50, 10].TileExit.Y = 90;
-        north.Blocks[50, 91].TileExit.Map = 1;
+        north.Blocks[50, 91].TileExit.SectorId = 1;
         north.Blocks[50, 91].TileExit.X = 50;
         north.Blocks[50, 91].TileExit.Y = 11;
 
@@ -67,22 +67,22 @@ public sealed class GlobalWorldAssemblerTests
         var first = new WorldSector();
         var second = new WorldSector();
         var third = new WorldSector();
-        first.Blocks[88, 50].TileExit.Map = 2;
+        first.Blocks[88, 50].TileExit.SectorId = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
-        first.Blocks[13, 50].TileExit.Map = 3;
+        first.Blocks[13, 50].TileExit.SectorId = 3;
         first.Blocks[13, 50].TileExit.X = 87;
         first.Blocks[13, 50].TileExit.Y = 50;
-        second.Blocks[88, 50].TileExit.Map = 3;
+        second.Blocks[88, 50].TileExit.SectorId = 3;
         second.Blocks[88, 50].TileExit.X = 14;
         second.Blocks[88, 50].TileExit.Y = 50;
-        second.Blocks[13, 50].TileExit.Map = 1;
+        second.Blocks[13, 50].TileExit.SectorId = 1;
         second.Blocks[13, 50].TileExit.X = 87;
         second.Blocks[13, 50].TileExit.Y = 50;
-        third.Blocks[88, 50].TileExit.Map = 1;
+        third.Blocks[88, 50].TileExit.SectorId = 1;
         third.Blocks[88, 50].TileExit.X = 14;
         third.Blocks[88, 50].TileExit.Y = 50;
-        third.Blocks[13, 50].TileExit.Map = 2;
+        third.Blocks[13, 50].TileExit.SectorId = 2;
         third.Blocks[13, 50].TileExit.X = 87;
         third.Blocks[13, 50].TileExit.Y = 50;
 

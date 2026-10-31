@@ -89,7 +89,7 @@ internal sealed class GlobalWorldLayoutValidator
         for (var index = 1; index <= WorldSector.Width; index++)
         {
             var exit = BorderExit(map, side, index);
-            if (exit.Map != target) continue;
+            if (exit.SectorId != target) continue;
             var canonical = side switch
             {
                 GlobalWorldSide.West => exit.X == 87,

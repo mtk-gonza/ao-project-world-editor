@@ -63,7 +63,7 @@ internal sealed class ObjectReference
 
 internal sealed class WorldPosition
 {
-    public short Map { get; set; }
+    public short SectorId { get; set; }
     public short X { get; set; }
     public short Y { get; set; }
 }

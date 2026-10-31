@@ -15,7 +15,10 @@ internal sealed record UnifiedWorldCompileResult(
     int Particles,
     int Lights,
     int RoofZones,
-    IReadOnlyList<UnifiedWorldConflict> Conflicts);
+    IReadOnlyList<UnifiedWorldConflict> Conflicts)
+{
+    public UnifiedWorldMap SectorId => Map;
+}
 
 /// <summary>
 /// Materializes the legacy sector layout into one authoritative rectangular
@@ -27,7 +30,11 @@ internal sealed class UnifiedWorldCompiler
     public UnifiedWorldBundle CompileFloors(GlobalWorldDocument world,
         WorldEditorResourceCatalog? resources = null,
         IReadOnlyDictionary<short, int>? floorAssignments = null,
-        bool applyStitching = false)
+        bool applyStitching = false,
+        byte[]? settlementsJson = null,
+        byte[]? sectorIdDat = null,
+        byte[]? underworldPool = null,
+        byte[]? phoenixPool = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -124,6 +131,10 @@ internal sealed class UnifiedWorldCompiler
                 File.Exists(infPath) ? File.ReadAllBytes(infPath) : [],
                 File.Exists(datPath) ? File.ReadAllBytes(datPath) : []));
         }
+        bundle.SettlementsJson = settlementsJson ?? [];
+        bundle.SectorIdDat = sectorIdDat ?? [];
+        bundle.UnderworldPool = underworldPool ?? [];
+        bundle.PhoenixPool = phoenixPool ?? [];
         return bundle;
     }
 
@@ -131,11 +142,63 @@ internal sealed class UnifiedWorldCompiler
         GlobalWorldDocument world,
         IReadOnlyList<(int FloorZ, GlobalWorldAssembly Assembly)> floorAssemblies)
     {
-        // CSMs outside mapsworlddata.dat remain preserved in SourcePaths and in
-        // bundle v5, but must not be appended to the playable surface. Doing so
-        // created an artificial extra column at Global X=1438 and rendered the
-        // legacy special-area building as if it were part of Z=0.
-        return floorAssemblies;
+        var official = floorAssemblies.SelectMany(item => item.Assembly.Placements)
+            .Select(item => item.SectorId).ToHashSet();
+        var sourceSectorIds = world.SourcePaths
+            .Where(item => File.Exists(item.Value))
+            .Select(item => item.Key)
+            .ToHashSet();
+        var pending = new Queue<short>(world.Maps.Keys
+            .Where(id => sourceSectorIds.Contains(id))
+            .Where(id => id > 0 && !official.Contains(id))
+            .OrderBy(id => id));
+
+        var reachable = new HashSet<short>();
+        while (pending.Count > 0)
+        {
+            var sectorId = pending.Dequeue();
+            if (official.Contains(sectorId) || !sourceSectorIds.Contains(sectorId) ||
+                !world.Maps.ContainsKey(sectorId) || !reachable.Add(sectorId)) continue;
+            EnqueuePositiveExits(world, sectorId, official, pending);
+        }
+        if (reachable.Count == 0) return floorAssemblies;
+
+        // Keep every source map playable on its own virtual floor while avoiding
+        // a fake column attached to WORLDMAP1. This includes disconnected maps:
+        // the VB6 client can receive any valid map ID and then load its CSM on
+        // demand. The ordering is stable by SectorId, so coordinates are
+        // reproducible.
+        const int columns = 19;
+        var placements = reachable.OrderBy(item => item)
+            .Select((sectorId, index) => new GlobalSectorPlacement(
+                sectorId,
+                new GlobalChunkCoordinate(index % columns, index / columns),
+                "world--3"))
+            .ToArray();
+        var rows = (placements.Length + columns - 1) / columns;
+        var assembly = new GlobalWorldAssembly
+        {
+            Width = columns,
+            Height = rows,
+            WrapX = false,
+            Placements = placements
+        };
+        return floorAssemblies.Append((-3, assembly)).ToArray();
+    }
+
+    private static void EnqueuePositiveExits(
+        GlobalWorldDocument world,
+        short sectorId,
+        IReadOnlySet<short> official,
+        Queue<short> pending)
+    {
+        if (!world.Maps.TryGetValue(sectorId, out var map)) return;
+        for (var y = 1; y <= WorldSector.Height; y++)
+        for (var x = 1; x <= WorldSector.Width; x++)
+        {
+            var target = map.Blocks[x, y]?.TileExit.SectorId ?? 0;
+            if (target > 0 && !official.Contains(target)) pending.Enqueue(target);
+        }
     }
 
     private static bool ContainsVirtualSpecialExit(WorldSector map)
@@ -143,7 +206,7 @@ internal sealed class UnifiedWorldCompiler
         for (var y = 1; y <= WorldSector.Height; y++)
         for (var x = 1; x <= WorldSector.Width; x++)
         {
-            var target = map.Blocks[x, y]?.TileExit.Map ?? 0;
+            var target = map.Blocks[x, y]?.TileExit.SectorId ?? 0;
             if (target is >= 3000 and <= 3004) return true;
         }
         return false;
@@ -186,7 +249,9 @@ internal sealed class UnifiedWorldCompiler
         var maxChunkX = coordinateSource.Max(item => item.Chunk.X);
         var maxChunkY = coordinateSource.Max(item => item.Chunk.Y);
         var floorValues = placements.Select(item =>
-            floorAssignments is not null && floorAssignments.TryGetValue(item.SectorId, out var z) ? z : forcedFloorZ ?? 0)
+            forcedFloorZ is { } explicitFloor
+                ? explicitFloor
+                : floorAssignments is not null && floorAssignments.TryGetValue(item.SectorId, out var z) ? z : 0)
             .Distinct().ToArray();
         if (floorValues.Length > 1)
             throw new InvalidDataException("La compilación de un .gmap debe contener un único piso Z.");
@@ -213,7 +278,7 @@ internal sealed class UnifiedWorldCompiler
                     var block = source.Blocks[exitX, exitY];
                     if (block is null) continue;
                     var exit = block.TileExit;
-                    if (exit.Map <= 0 || !exitPlacementByMap.TryGetValue(exit.Map, out var targetPlacement)) continue;
+                    if (exit.SectorId <= 0 || !exitPlacementByMap.TryGetValue(exit.SectorId, out var targetPlacement)) continue;
                     var target = RawGlobalTile(targetPlacement, exit.X, exit.Y, minChunkX, minChunkY,
                         stitchByChunk, applyStitching);
                     maxStitchedX = Math.Max(maxStitchedX, target.X + 1);
@@ -454,13 +519,13 @@ internal sealed class UnifiedWorldCompiler
         // VB6 uses negative map ids for special destinations (for example
         // underworld/return routes). Preserve them as external runtime exits;
         // they are not ordinary placements and must not be silently dropped.
-        if (exit.Map == 0) return null;
+        if (exit.SectorId == 0) return null;
         UnifiedWorldExit candidate;
-        if (world.Maps.TryGetValue(exit.Map, out var targetMap) && placements.TryGetValue(exit.Map, out var targetPlacement))
+        if (world.Maps.TryGetValue(exit.SectorId, out var targetMap) && placements.TryGetValue(exit.SectorId, out var targetPlacement))
         {
             var target = RawGlobalTile(targetPlacement, exit.X, exit.Y, minChunkX, minChunkY,
                 stitchByChunk, applyStitching);
-            var targetZ = floorAssignments is not null && floorAssignments.TryGetValue(exit.Map, out var assignedTargetZ)
+            var targetZ = floorAssignments is not null && floorAssignments.TryGetValue(exit.SectorId, out var assignedTargetZ)
                 ? assignedTargetZ : floorZ;
             if (targetZ == floorZ && IsPhysicalSectorSeam(sourcePlacement, targetPlacement,
                     sourceX, sourceY, exit))
@@ -484,8 +549,8 @@ internal sealed class UnifiedWorldCompiler
             else
             {
                 candidate = new UnifiedWorldExit(UnifiedWorldExitKind.External, gx, gy, -1, -1,
-                    exit.Map, exit.X, exit.Y, SourceZ: floorZ,
-                    ExternalZ: IsSpecialExternalMap(exit.Map) ? -1 : floorZ);
+                    exit.SectorId, exit.X, exit.Y, SourceZ: floorZ,
+                    ExternalZ: IsSpecialExternalMap(exit.SectorId) ? -1 : floorZ);
             }
         }
         if (!map.Exits.Contains(candidate)) map.Exits.Add(candidate);
@@ -501,7 +566,7 @@ internal sealed class UnifiedWorldCompiler
     private static bool IsSpecialExternalMap(short mapId) => mapId < 0 || mapId >= 3000;
 
     private static bool IsVirtualSpecialFloorExit(WorldPosition exit) =>
-        exit.Map is >= 3000 and <= 3004 &&
+        exit.SectorId is >= 3000 and <= 3004 &&
         exit.X is >= 1 and <= WorldSector.Width &&
         exit.Y is >= 1 and <= WorldSector.Height;
 

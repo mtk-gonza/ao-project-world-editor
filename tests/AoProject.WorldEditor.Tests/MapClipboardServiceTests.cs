@@ -11,14 +11,14 @@ public sealed class MapClipboardServiceTests
     {
         var map = new WorldSector();
         map.Blocks[4, 5].Graphics[0].GraphicIndex = 10; map.Blocks[4, 5].Graphics[3].GraphicIndex = 40;
-        map.Blocks[4, 5].Blocked = 0xF; map.Blocks[4, 5].Object.Index = 2; map.Blocks[4, 5].Trigger = 8; map.Blocks[4, 5].TileExit.Map = 7; map.Blocks[4, 5].NpcIndex = 3;
+        map.Blocks[4, 5].Blocked = 0xF; map.Blocks[4, 5].Object.Index = 2; map.Blocks[4, 5].Trigger = 8; map.Blocks[4, 5].TileExit.SectorId = 7; map.Blocks[4, 5].NpcIndex = 3;
         var clipboard = new MapClipboardService();
         clipboard.Copy(map, new TileSelection(4, 5, 4, 5));
         clipboard.Paste(map, 20, 21);
         Assert.Equal(10, map.Blocks[20, 21].Graphics[0].GraphicIndex);
         Assert.Equal(40, map.Blocks[20, 21].Graphics[3].GraphicIndex);
         Assert.Equal((byte)0xF, map.Blocks[20, 21].Blocked); Assert.Equal((short)2, map.Blocks[20, 21].Object.Index);
-        Assert.Equal((short)8, map.Blocks[20, 21].Trigger); Assert.Equal((short)7, map.Blocks[20, 21].TileExit.Map); Assert.Equal((short)0, map.Blocks[20, 21].NpcIndex);
+        Assert.Equal((short)8, map.Blocks[20, 21].Trigger); Assert.Equal((short)7, map.Blocks[20, 21].TileExit.SectorId); Assert.Equal((short)0, map.Blocks[20, 21].NpcIndex);
     }
 
     [Fact]

@@ -221,17 +221,17 @@ internal sealed class GlobalStitchAuditService
             for (var x = 1; x <= WorldSector.Width; x++)
             {
                 var exit = map.Blocks[x, y].TileExit;
-                if (exit.Map == 0) continue;
-                var classification = exit.Map < 0
+                if (exit.SectorId == 0) continue;
+                var classification = exit.SectorId < 0
                     ? "MAPA-ESPECIAL-NEGATIVO"
-                    : !world.Maps.ContainsKey(exit.Map)
+                    : !world.Maps.ContainsKey(exit.SectorId)
                         ? "MAPA-FUERA-DE-ASSEMBLY"
                         : exit.X is < 1 or > 100 || exit.Y is < 1 or > 100
                             ? (exit.X is < 1 or > 100 ? "X-EXTENDIDA" : "Y-EXTENDIDA")
                             : string.Empty;
                 if (classification.Length == 0) continue;
                 result.Add(new ExtendedExitAuditEntry(placement.SectorId, x, y,
-                    exit.Map, exit.X, exit.Y,
+                    exit.SectorId, exit.X, exit.Y,
                     classification));
             }
         }

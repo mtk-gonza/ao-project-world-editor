@@ -8,6 +8,7 @@ internal sealed class WorldEditorSettings
 {
     public int MaxGraphics { get; init; } = 49488;
     public string LastMap { get; set; } = string.Empty;
+    public string LastSectorId { get => LastMap; set => LastMap = value; }
     public int TransferObject { get; init; } = 378;
     public bool AutoCaptureTransfers { get; set; } = true;
     public bool AutoCaptureSurfaces { get; set; } = true;

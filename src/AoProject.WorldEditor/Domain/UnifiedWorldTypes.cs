@@ -103,6 +103,11 @@ internal sealed class UnifiedWorldBundle
         new Dictionary<short, int>();
     public List<UnifiedWorldSectorMetadata> SectorMetadata { get; } = [];
     public List<UnifiedWorldSectorSource> SectorSources { get; } = [];
+    /// <summary>Validated world settlements manifest embedded in the bundle.</summary>
+    public byte[] SettlementsJson { get; set; } = [];
+    public byte[] SectorIdDat { get; set; } = [];
+    public byte[] UnderworldPool { get; set; } = [];
+    public byte[] PhoenixPool { get; set; } = [];
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

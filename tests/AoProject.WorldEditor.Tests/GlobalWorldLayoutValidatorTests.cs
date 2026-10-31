@@ -47,10 +47,10 @@ public sealed class GlobalWorldLayoutValidatorTests
     {
         var first = new WorldSector();
         var second = new WorldSector();
-        first.Blocks[88, 50].TileExit.Map = 2;
+        first.Blocks[88, 50].TileExit.SectorId = 2;
         first.Blocks[88, 50].TileExit.X = 14;
         first.Blocks[88, 50].TileExit.Y = 50;
-        second.Blocks[13, 50].TileExit.Map = 1;
+        second.Blocks[13, 50].TileExit.SectorId = 1;
         second.Blocks[13, 50].TileExit.X = 87;
         second.Blocks[13, 50].TileExit.Y = 50;
         var official = new GlobalWorldAssembly
@@ -74,10 +74,10 @@ public sealed class GlobalWorldLayoutValidatorTests
     {
         var first = new WorldSector();
         var last = new WorldSector();
-        first.Blocks[13, 50].TileExit.Map = 3;
+        first.Blocks[13, 50].TileExit.SectorId = 3;
         first.Blocks[13, 50].TileExit.X = 87;
         first.Blocks[13, 50].TileExit.Y = 50;
-        last.Blocks[88, 50].TileExit.Map = 1;
+        last.Blocks[88, 50].TileExit.SectorId = 1;
         last.Blocks[88, 50].TileExit.X = 14;
         last.Blocks[88, 50].TileExit.Y = 50;
         var official = new GlobalWorldAssembly

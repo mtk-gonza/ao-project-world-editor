@@ -8,6 +8,7 @@ internal sealed class UnifiedWorldBundleFileService
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AOGBND01");
     private const int Version = 5;
+    private static readonly byte[] ExtensionMagic = Encoding.ASCII.GetBytes("AOGEXT01");
     private readonly UnifiedWorldFileService _floorFiles = new();
 
     public void Save(UnifiedWorldBundle bundle, string directory)
@@ -64,6 +65,12 @@ internal sealed class UnifiedWorldBundleFileService
                 WriteBytes(writer, source.Inf);
                 WriteBytes(writer, source.Dat);
             }
+            WriteBytes(writer, bundle.SettlementsJson);
+            writer.Write(ExtensionMagic);
+            writer.Write(3);
+            WriteExtension(writer, "SectorId", bundle.SectorIdDat);
+            WriteExtension(writer, "UnderworldPool", bundle.UnderworldPool);
+            WriteExtension(writer, "PhoenixPool", bundle.PhoenixPool);
         }
         foreach (var z in floors)
             _floorFiles.Save(bundle.Floors[z], Path.Combine(directory, FloorFileName(z)));
@@ -76,8 +83,8 @@ internal sealed class UnifiedWorldBundleFileService
         if (!reader.ReadBytes(Magic.Length).SequenceEqual(Magic))
             throw new InvalidDataException("Firma o versión de bundle inválida.");
         var version = reader.ReadInt32();
-        if (version is < 1 or > Version)
-            throw new InvalidDataException("Firma o versión de bundle inválida.");
+        if (version != Version)
+            throw new InvalidDataException("Se requiere AOGBND01 v5.");
         var active = reader.ReadInt32();
         var count = reader.ReadInt32();
         if (count is <= 0 or > 256) throw new InvalidDataException("Cantidad de pisos inválida.");
@@ -123,6 +130,24 @@ internal sealed class UnifiedWorldBundleFileService
                 bundle.SectorSources.Add(new UnifiedWorldSectorSource(
                     sectorId, sourceName, ReadBytes(reader), ReadBytes(reader), ReadBytes(reader)));
             }
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+                bundle.SettlementsJson = ReadBytes(reader);
+            if (reader.BaseStream.Position + ExtensionMagic.Length <= reader.BaseStream.Length &&
+                reader.ReadBytes(ExtensionMagic.Length).SequenceEqual(ExtensionMagic))
+            {
+                var extensionCount = reader.ReadInt32();
+                for (var i = 0; i < extensionCount; i++)
+                {
+                    var name = reader.ReadString();
+                    var payload = ReadBytes(reader);
+                    switch (name)
+                    {
+                        case "SectorId": bundle.SectorIdDat = payload; break;
+                        case "UnderworldPool": bundle.UnderworldPool = payload; break;
+                        case "PhoenixPool": bundle.PhoenixPool = payload; break;
+                    }
+                }
+            }
         }
         foreach (var z in floorZs)
         {
@@ -146,6 +171,12 @@ internal sealed class UnifiedWorldBundleFileService
     {
         writer.Write(bytes.Length);
         writer.Write(bytes);
+    }
+
+    private static void WriteExtension(BinaryWriter writer, string name, byte[] bytes)
+    {
+        writer.Write(name);
+        WriteBytes(writer, bytes);
     }
 
     private static byte[] ReadBytes(BinaryReader reader)

@@ -48,8 +48,8 @@ internal sealed class MapCleanupService
         var count = 0;
         ForEach(map, block =>
         {
-            if (block.TileExit.Map == 0) return;
-            block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0; count++;
+            if (block.TileExit.SectorId == 0) return;
+            block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0; count++;
         });
         Mark(map, count > 0);
         return count;
@@ -77,7 +77,7 @@ internal sealed class MapCleanupService
             for (var layer = 1; layer < 4; layer++) block.Graphics[layer].GraphicIndex = 0;
             block.Blocked = 0; block.CharacterIndex = 0; block.NpcIndex = 0;
             block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default;
-            block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
+            block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
             block.Light.Range = 0; block.Light.Color = 0; block.ParticleIndex = 0; block.ParticleGroup = 0; block.Trigger = 0;
         }
         map.Info.Changed = true;
@@ -98,7 +98,7 @@ internal sealed class MapCleanupService
             if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
             var block = map.Blocks[x, y]; block.Graphics[0].GraphicIndex = 1; block.Blocked = 0;
             block.NpcIndex = 0; block.CharacterIndex = 0; block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default;
-            block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0; block.Trigger = 0; count++;
+            block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0; block.Trigger = 0; count++;
         }
         if (count > 0) map.Info.Changed = true;
         return count;

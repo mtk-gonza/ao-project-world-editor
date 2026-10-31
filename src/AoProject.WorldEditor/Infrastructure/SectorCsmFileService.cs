@@ -131,7 +131,7 @@ internal sealed class SectorCsmFileService
         public short Npc => _block.NpcIndex;
         public short ObjectIndex => _block.Object.Index;
         public short ObjectAmount => _block.Object.Amount;
-        public short ExitMap => _block.TileExit.Map;
+        public short ExitMap => _block.TileExit.SectorId;
         public short ExitX => _block.TileExit.X;
         public short ExitY => _block.TileExit.Y;
     }
@@ -265,7 +265,7 @@ internal sealed class SectorCsmFileService
             var destY = reader.ReadInt16();
             if (Inside(x, y))
             {
-                world.Blocks[x, y].TileExit.Map = map;
+                world.Blocks[x, y].TileExit.SectorId = map;
                 world.Blocks[x, y].TileExit.X = destX;
                 world.Blocks[x, y].TileExit.Y = destY;
             }

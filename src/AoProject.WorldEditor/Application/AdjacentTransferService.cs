@@ -46,9 +46,9 @@ internal sealed class AdjacentTransferService
                 var y = transfer.Horizontal ? transfer.FixedCoordinate : coordinate;
                 var block = map.Blocks[x, y];
                 if ((block.Blocked & 0xF) == 0xF) continue;
-                if (block.TileExit.Map != transfer.Map || block.TileExit.X != transfer.TargetX + (transfer.Horizontal ? coordinate - start : 0) || block.TileExit.Y != transfer.TargetY + (!transfer.Horizontal ? coordinate - start : 0))
+                if (block.TileExit.SectorId != transfer.Map || block.TileExit.X != transfer.TargetX + (transfer.Horizontal ? coordinate - start : 0) || block.TileExit.Y != transfer.TargetY + (!transfer.Horizontal ? coordinate - start : 0))
                     changed++;
-                block.TileExit.Map = transfer.Map;
+                block.TileExit.SectorId = transfer.Map;
                 if (transfer.Map == 0)
                 { block.TileExit.X = 0; block.TileExit.Y = 0; }
                 else
@@ -77,12 +77,12 @@ internal sealed class AdjacentTransferService
     }
     private static short FindHorizontal(WorldSector map, int y, int start, int end)
     {
-        for (var x = start; x <= end; x++) if (map.Blocks[x, y].TileExit.Map != 0) return map.Blocks[x, y].TileExit.Map;
+        for (var x = start; x <= end; x++) if (map.Blocks[x, y].TileExit.SectorId != 0) return map.Blocks[x, y].TileExit.SectorId;
         return 0;
     }
     private static short FindVertical(WorldSector map, int x, int start, int end)
     {
-        for (var y = start; y <= end; y++) if (map.Blocks[x, y].TileExit.Map != 0) return map.Blocks[x, y].TileExit.Map;
+        for (var y = start; y <= end; y++) if (map.Blocks[x, y].TileExit.SectorId != 0) return map.Blocks[x, y].TileExit.SectorId;
         return 0;
     }
 }

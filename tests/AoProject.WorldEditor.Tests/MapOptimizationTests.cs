@@ -11,7 +11,7 @@ public sealed class MapOptimizationTests
     {
         var map = new WorldSector();
         map.Blocks[1, 1].NpcIndex = 4;
-        map.Blocks[1, 1].TileExit.Map = 9;
+        map.Blocks[1, 1].TileExit.SectorId = 9;
         map.Blocks[1, 1].Trigger = 3;
         map.Blocks[20, 20].Object.Index = 1;
         var objectGraphic = map.Blocks[20, 20].ObjectGraphic;

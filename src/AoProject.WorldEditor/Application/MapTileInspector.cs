@@ -12,7 +12,7 @@ internal sealed class MapTileInspector
             x is < 1 or > WorldSector.Width || y is < 1 or > WorldSector.Height) throw new ArgumentOutOfRangeException(nameof(x));
         var block = map.Blocks[x, y]; var text = new StringBuilder($"Posición {x},{y}");
         if (block.Blocked != 0) text.Append(" (BLOQ)");
-        if (block.TileExit.Map != 0) text.Append($" (Trans.: {block.TileExit.Map},{block.TileExit.X},{block.TileExit.Y})");
+        if (block.TileExit.SectorId != 0) text.Append($" (Trans.: {block.TileExit.SectorId},{block.TileExit.X},{block.TileExit.Y})");
         if (block.NpcIndex > 0)
         {
             var name = npcs is not null && block.NpcIndex < npcs.Count ? npcs[block.NpcIndex].Name : string.Empty;

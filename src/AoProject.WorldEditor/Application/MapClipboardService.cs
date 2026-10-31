@@ -129,7 +129,7 @@ internal sealed class MapClipboardService
         destination.ParticleGroup = source.ParticleGroup; destination.ParticleIndex = source.ParticleIndex; destination.Marked = source.Marked;
         destination.Blocked = source.Blocked; destination.Trigger = source.Trigger; destination.Red = source.Red; destination.Green = source.Green; destination.Blue = source.Blue;
         destination.Object.Index = source.Object.Index; destination.Object.Amount = source.Object.Amount;
-        destination.TileExit.Map = source.TileExit.Map; destination.TileExit.X = source.TileExit.X; destination.TileExit.Y = source.TileExit.Y;
+        destination.TileExit.SectorId = source.TileExit.SectorId; destination.TileExit.X = source.TileExit.X; destination.TileExit.Y = source.TileExit.Y;
         destination.NpcIndex = source.NpcIndex; destination.CharacterIndex = source.CharacterIndex;
     }
 

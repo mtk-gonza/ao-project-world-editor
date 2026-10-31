@@ -46,19 +46,19 @@ internal sealed class MapOptimizationService
                 if (block.NpcIndex != 0) { block.NpcIndex = 0; block.CharacterIndex = 0; removedNpcs++; }
                 if (block.Object.Index != 0 || block.Object.Amount != 0 || block.ObjectGraphic.GraphicIndex != 0)
                 { block.Object.Index = 0; block.Object.Amount = 0; block.ObjectGraphic = default; removedObjects++; }
-                if (block.TileExit.Map != 0) { ClearExit(block); removedExits++; }
+                if (block.TileExit.SectorId != 0) { ClearExit(block); removedExits++; }
                 if (block.Trigger != 0) { block.Trigger = 0; removedTriggers++; }
             }
 
             if (block.Blocked == 0xF)
             {
-                if (block.TileExit.Map != 0 && options.RemoveBlockedTransfers)
+                if (block.TileExit.SectorId != 0 && options.RemoveBlockedTransfers)
                 { ClearExit(block); removedExits++; }
                 else if (block.Trigger != 0 && options.RemoveBlockedTriggers)
                 { block.Trigger = 0; removedTriggers++; }
             }
 
-            if (block.TileExit.Map != 0 && options.RemoveTransferTriggers && block.Trigger != 0)
+            if (block.TileExit.SectorId != 0 && options.RemoveTransferTriggers && block.Trigger != 0)
             { block.Trigger = 0; removedTriggers++; }
 
             if (block.Object.Index > 0 && block.Object.Index < objects.Count)
@@ -81,6 +81,6 @@ internal sealed class MapOptimizationService
 
     private static void ClearExit(SectorTile block)
     {
-        block.TileExit.Map = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
+        block.TileExit.SectorId = 0; block.TileExit.X = 0; block.TileExit.Y = 0;
     }
 }

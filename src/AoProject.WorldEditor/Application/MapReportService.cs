@@ -32,10 +32,10 @@ internal sealed class MapReportService
                 case MapReportKind.Npcs when block.NpcIndex > 0:
                     var npcName = block.NpcIndex < (npcs?.Count ?? 0) ? npcs![block.NpcIndex].Name : string.Empty;
                     output.AppendLine($"{x},{y} tiene {npcName}{(block.NpcIndex >= 500 ? " (Hostil)" : string.Empty)}"); break;
-                case MapReportKind.Transfers when block.TileExit.Map != 0:
+                case MapReportKind.Transfers when block.TileExit.SectorId != 0:
                     var warningX = ((x < 20 && block.TileExit.X < 20) || (x > 80 && block.TileExit.X > 80)) && x != block.TileExit.X ? " (X sospechoso)" : string.Empty;
                     var warningY = ((y < 20 && block.TileExit.Y < 20) || (y > 80 && block.TileExit.Y > 80)) && y != block.TileExit.Y ? " (Y sospechoso)" : string.Empty;
-                    output.AppendLine($"{x},{y} nos traslada a la posición {block.TileExit.X},{block.TileExit.Y} del Mapa {block.TileExit.Map}{warningX}{warningY}"); break;
+                    output.AppendLine($"{x},{y} nos traslada a la posición {block.TileExit.X},{block.TileExit.Y} del Mapa {block.TileExit.SectorId}{warningX}{warningY}"); break;
                 default:
                     var layer = (int)kind - (int)MapReportKind.Layer1;
                     if (layer is >= 0 and < 4 && block.Graphics[layer].GraphicIndex > 0)

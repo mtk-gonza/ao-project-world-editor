@@ -96,10 +96,10 @@ public sealed class WorldMapAuditTests
             for (var y = 1; y <= WorldSector.Height; y++)
             {
                 var block = map.Blocks[x, y];
-                if (block.TileExit.Map > 0)
+                if (block.TileExit.SectorId > 0)
                 {
                     if (!exits.TryGetValue(mapId, out var list)) exits[mapId] = list = [];
-                    list.Add((x, y, block.TileExit.Map, block.TileExit.X, block.TileExit.Y));
+                    list.Add((x, y, block.TileExit.SectorId, block.TileExit.X, block.TileExit.Y));
                 }
                 for (var layer = 0; layer < block.Graphics.Length; layer++)
                     if (block.Graphics[layer].GraphicIndex > 0) { painted++; break; }
@@ -247,15 +247,15 @@ public sealed class WorldMapAuditTests
 
         foreach (var layout in layouts)
         {
-            var rootMap = layout.SectorIds.FirstOrDefault(id => id > 0 && files.ContainsKey(id));
-            if (rootMap <= 0) { lines.Add($"WORLDMAP{layout.WorldId}: no root"); continue; }
+            var rootSectorId = layout.SectorIds.FirstOrDefault(id => id > 0 && files.ContainsKey(id));
+            if (rootSectorId <= 0) { lines.Add($"WORLDMAP{layout.WorldId}: no root"); continue; }
             var maps = new Dictionary<short, WorldSector>();
             foreach (var mapId in layout.SectorIds.Where(id => id > 0 && files.ContainsKey(id)).Distinct())
                 try { maps[mapId] = loader.Load(files[mapId]); } catch { }
 
-            var assembly = MapsWorldDataService.BuildAssembly(layouts, files.Keys.ToArray(), rootMap)!;
-            var validatorIssues = new GlobalWorldLayoutValidator().Validate(assembly, maps, rootMap);
-            var discovered = new GlobalWorldAssembler().Assemble(maps, rootMap);
+            var assembly = MapsWorldDataService.BuildAssembly(layouts, files.Keys.ToArray(), rootSectorId)!;
+            var validatorIssues = new GlobalWorldLayoutValidator().Validate(assembly, maps, rootSectorId);
+            var discovered = new GlobalWorldAssembler().Assemble(maps, rootSectorId);
             var officialCell = new Dictionary<short, (int X, int Y)>();
             for (var index = 0; index < layout.SectorIds.Count; index++)
                 if (layout.SectorIds[index] > 0) officialCell[layout.SectorIds[index]] = (index % layout.Width, index / layout.Width);

@@ -24,12 +24,12 @@ internal sealed class TransferShiftService
     private static bool Move(WorldSector map, int sourceX, int sourceY, int destinationX, int destinationY, int destinationCoordinate, bool horizontal, ref int moved)
     {
         var source = map.Blocks[sourceX, sourceY];
-        if (source.TileExit.Map == 0) return false;
+        if (source.TileExit.SectorId == 0) return false;
         var destination = map.Blocks[destinationX, destinationY];
-        destination.TileExit.Map = source.TileExit.Map;
+        destination.TileExit.SectorId = source.TileExit.SectorId;
         destination.TileExit.X = horizontal ? source.TileExit.X : (short)destinationCoordinate;
         destination.TileExit.Y = horizontal ? (short)destinationCoordinate : source.TileExit.Y;
-        source.TileExit.Map = 0; source.TileExit.X = 0; source.TileExit.Y = 0; moved++; return true;
+        source.TileExit.SectorId = 0; source.TileExit.X = 0; source.TileExit.Y = 0; moved++; return true;
     }
 
     private static void Validate(TransferShift shift)

@@ -29,7 +29,7 @@ public sealed class MapDataAuditTests
         using var fixture = new MapFixture();
         var map = new WorldSector();
         map.Info.Name = "Salida";
-        map.Blocks[50, 50].TileExit.Map = 999;
+        map.Blocks[50, 50].TileExit.SectorId = 999;
         map.Blocks[50, 50].TileExit.X = 10;
         map.Blocks[50, 50].TileExit.Y = 10;
         fixture.Save(map, "mapa1.csm");

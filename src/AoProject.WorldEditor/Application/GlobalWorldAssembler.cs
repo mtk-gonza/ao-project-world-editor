@@ -104,15 +104,15 @@ internal sealed class GlobalWorldAssembler
              x <= Math.Clamp((int)map.CsmSectorSize.XMax, 1, WorldSector.Width); x++)
         {
             var exit = map.Blocks[x, y].TileExit;
-            if (exit.Map <= 0 || exit.Map == mapId || !maps.ContainsKey(exit.Map)) continue;
+            if (exit.SectorId <= 0 || exit.SectorId == mapId || !maps.ContainsKey(exit.SectorId)) continue;
             if (x <= WestSourceBoundary && exit.X >= EastTargetBoundary)
-                candidates.Add(new(mapId, exit.Map, GlobalWorldSide.West, 1, (short)x, (short)y, exit.X, exit.Y));
+                candidates.Add(new(mapId, exit.SectorId, GlobalWorldSide.West, 1, (short)x, (short)y, exit.X, exit.Y));
             else if (x >= EastSourceBoundary && exit.X <= WestTargetBoundary)
-                candidates.Add(new(mapId, exit.Map, GlobalWorldSide.East, 1, (short)x, (short)y, exit.X, exit.Y));
+                candidates.Add(new(mapId, exit.SectorId, GlobalWorldSide.East, 1, (short)x, (short)y, exit.X, exit.Y));
             else if (y <= NorthSourceBoundary && exit.Y >= SouthTargetBoundary)
-                candidates.Add(new(mapId, exit.Map, GlobalWorldSide.North, 1, (short)x, (short)y, exit.X, exit.Y));
+                candidates.Add(new(mapId, exit.SectorId, GlobalWorldSide.North, 1, (short)x, (short)y, exit.X, exit.Y));
             else if (y >= SouthSourceBoundary && exit.Y <= NorthTargetBoundary)
-                candidates.Add(new(mapId, exit.Map, GlobalWorldSide.South, 1, (short)x, (short)y, exit.X, exit.Y));
+                candidates.Add(new(mapId, exit.SectorId, GlobalWorldSide.South, 1, (short)x, (short)y, exit.X, exit.Y));
         }
 
         return candidates

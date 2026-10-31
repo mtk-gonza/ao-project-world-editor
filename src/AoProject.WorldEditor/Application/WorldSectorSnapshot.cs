@@ -100,7 +100,7 @@ internal sealed class WorldSectorSnapshot
             _lightValues = (int[])block.LightValues.Clone(); _colors = (int[])block.Colors.Clone();
             _light = new(block.Light.Range, block.Light.Color);
             _object = new(block.Object.Index, block.Object.Amount);
-            _exit = new(block.TileExit.Map, block.TileExit.X, block.TileExit.Y);
+            _exit = new(block.TileExit.SectorId, block.TileExit.X, block.TileExit.Y);
             _character = block.CharacterIndex; _particleGroup = block.ParticleGroup; _npc = block.NpcIndex;
             _particle = block.ParticleIndex; _marked = block.Marked; _blocked = block.Blocked;
             _red = block.Red; _green = block.Green; _blue = block.Blue; _trigger = block.Trigger;
@@ -113,7 +113,7 @@ internal sealed class WorldSectorSnapshot
             Array.Copy(_lightValues, block.LightValues, _lightValues.Length); Array.Copy(_colors, block.Colors, _colors.Length);
             block.Light.Range = _light.Range; block.Light.Color = _light.Color;
             block.Object.Index = _object.Index; block.Object.Amount = _object.Amount;
-            block.TileExit.Map = _exit.Map; block.TileExit.X = _exit.X; block.TileExit.Y = _exit.Y;
+            block.TileExit.SectorId = _exit.Map; block.TileExit.X = _exit.X; block.TileExit.Y = _exit.Y;
             block.CharacterIndex = _character; block.ParticleGroup = _particleGroup; block.NpcIndex = _npc;
             block.ParticleIndex = _particle; block.Marked = _marked; block.Blocked = _blocked;
             block.Red = _red; block.Green = _green; block.Blue = _blue; block.Trigger = _trigger;

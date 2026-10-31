@@ -168,7 +168,8 @@ internal sealed class MainForm : Form
         file.DropDownItems.Add(new ToolStripMenuItem("Nuevo mapa", null, NewMap));
          var open = new ToolStripMenuItem("Abrir mapa...", null, OpenMap);
          var openWorld = new ToolStripMenuItem("Abrir mundo completo...", null, OpenWorld);
-         var openOriginalMaps = new ToolStripMenuItem("Cargar mapas originales (/Mapas)...", null, OpenOriginalMaps);
+         var migrateMaps = new ToolStripMenuItem("Pasar /Mapas a /Sectors...", null, MigrateMapsToSectors);
+         var openOriginalMaps = new ToolStripMenuItem("Cargar /Sectors...", null, OpenOriginalMaps);
          var openUnified = new ToolStripMenuItem("Abrir mapa único (*.gmap)...", null, OpenUnifiedWorld);
          var openBundle = new ToolStripMenuItem("Abrir bundle de pisos...", null, OpenUnifiedWorldBundle);
         var switchWorld = new ToolStripMenuItem("Cambiar mundo/nivel...", null, SwitchWorldLevel);
@@ -197,6 +198,7 @@ internal sealed class MainForm : Form
         }
          file.DropDownItems.Add(open);
          file.DropDownItems.Add(openOriginalMaps);
+         file.DropDownItems.Add(migrateMaps);
          file.DropDownItems.Add(openWorld);
          file.DropDownItems.Add(new ToolStripSeparator());
          file.DropDownItems.Add(openUnified);
@@ -815,7 +817,7 @@ internal sealed class MainForm : Form
             var capture = new MapTileCaptureService().Capture(_session.CurrentMap, x, y, _settings.AutoCaptureSurfaces, _settings.AutoCaptureTransfers);
             if (capture.Layer >= 0) { _renderControl.SelectedLayer = capture.Layer; _renderControl.SelectedGraphicIndex = capture.GraphicIndex; }
             var description = new MapTileInspector().Describe(_session.CurrentMap, x, y, _session.Resources.Objects, _session.Resources.Npcs);
-            if (capture.HasTransfer) description += $" | Traslado capturado: {capture.Transfer.Map},{capture.Transfer.X},{capture.Transfer.Y}";
+            if (capture.HasTransfer) description += $" | Traslado capturado: {capture.Transfer.SectorId},{capture.Transfer.X},{capture.Transfer.Y}";
             _status.Text = description.Replace(Environment.NewLine, " ");
         }
         catch (Exception error) { _status.Text = error.Message; }
@@ -2348,6 +2350,46 @@ internal sealed class MainForm : Form
             MessageBox.Show(this, error.Message, "Error al abrir mundo", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { loading.Close(); }
+    }
+
+    private void MigrateMapsToSectors(object? sender, EventArgs e)
+    {
+        using var sourceDialog = new FolderBrowserDialog
+        {
+            Description = "Seleccione la carpeta legacy /Mapas",
+            SelectedPath = SourceMapsDirectory
+        };
+        if (sourceDialog.ShowDialog(this) != DialogResult.OK) return;
+
+        var destination = Path.Combine(_session.ResourceRoot, "sectors");
+        var overwrite = Directory.Exists(destination) &&
+            MessageBox.Show(this,
+                $"La carpeta /sectors ya existe. ¿Sobrescribir los CSM migrados?\n\n{destination}",
+                "Pasar /Mapas a /Sectors", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
+        if (Directory.Exists(destination) && !overwrite)
+        {
+            _status.Text = "Migración cancelada: /sectors ya existe.";
+            return;
+        }
+
+        try
+        {
+            var result = new MapsToSectorsMigrationService().Migrate(
+                sourceDialog.SelectedPath, destination, overwrite);
+            _status.Text = $"Migración completada: {result.Migrated} sectores | omitidos: {result.Skipped}";
+            if (result.Errors.Count > 0)
+                MessageBox.Show(this,
+                    string.Join(Environment.NewLine, result.Errors),
+                    "Errores al migrar /Mapas", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            else
+                MessageBox.Show(this,
+                    $"Se migraron {result.Migrated} mapas a:\n{destination}\n\nAhora use Archivo → Cargar /Sectors...",
+                    "Migración completada", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "Error al migrar /Mapas", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void OpenOriginalMaps(object? sender, EventArgs e)

@@ -46,8 +46,12 @@ internal sealed class MapsWorldDataService
         if (current is { } last) sections.Add(last);
         IgnoredWorldIds = sections.Where(item => totalWorlds > 0 && item.Id > totalWorlds)
             .Select(item => item.Id).ToArray();
-        return sections.Where(item => totalWorlds == 0 || item.Id <= totalWorlds)
-            .Where(item => item.Width > 0 && item.Height > 0)
+        // WORLDMAP4 is retained as the fourth runtime floor (Z=-3) even
+        // though the legacy TOTALWORLDS value is 3. It is a real world layout,
+        // not an artificial sector column. Keep IgnoredWorldIds for callers
+        // that need the legacy classification, but expose every valid layout
+        // so the floor compiler can materialize it.
+        return sections.Where(item => item.Width > 0 && item.Height > 0)
             .Select(item => new WorldLayout(item.Id, item.Width, item.Height,
                 Enumerable.Range(1, item.Width * item.Height).Select(index => item.Cells.GetValueOrDefault(index)).ToArray()))
             .ToArray();

@@ -12,7 +12,7 @@ public sealed class MapReportTests
         var map = new WorldSector();
         map.Blocks[3, 4].Object.Index = 1; map.Blocks[3, 4].Object.Amount = 2;
         map.Blocks[5, 6].Graphics[2].GraphicIndex = 700;
-        map.Blocks[10, 10].TileExit.Map = 9; map.Blocks[10, 10].TileExit.X = 11; map.Blocks[10, 10].TileExit.Y = 10;
+        map.Blocks[10, 10].TileExit.SectorId = 9; map.Blocks[10, 10].TileExit.X = 11; map.Blocks[10, 10].TileExit.Y = 10;
         var objects = new ObjectData[2]; objects[1] = new ObjectData { Name = "Poción" };
         var reports = new MapReportService();
 

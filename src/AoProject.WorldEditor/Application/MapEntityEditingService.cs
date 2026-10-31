@@ -30,7 +30,7 @@ internal sealed class MapEntityEditingService
     {
         ValidateTile(map, x, y);
         if (destinationMap < 0 || destinationX is < 0 or > 100 || destinationY is < 0 or > 100) throw new ArgumentOutOfRangeException(nameof(destinationMap));
-        var exit = map.Blocks[x, y].TileExit; exit.Map = destinationMap; exit.X = destinationMap == 0 ? (short)0 : destinationX; exit.Y = destinationMap == 0 ? (short)0 : destinationY;
+        var exit = map.Blocks[x, y].TileExit; exit.SectorId = destinationMap; exit.X = destinationMap == 0 ? (short)0 : destinationX; exit.Y = destinationMap == 0 ? (short)0 : destinationY;
         map.Info.Changed = true;
     }
 

@@ -222,7 +222,7 @@ public sealed class MinimapCoverageDiagTests
                 var layers = string.Join(" ", Enumerable.Range(0, 4)
                     .Select(layer => block.Graphics[layer].GraphicIndex));
                 lines.Add($"mapa{mapId} ({x},{y}) capas=[{layers}] obj={block.ObjectGraphic.GraphicIndex} char={block.CharacterIndex} " +
-                    $"objIndex={block.Object.Index} npc={block.NpcIndex} tileExit={block.TileExit.Map}");
+                    $"objIndex={block.Object.Index} npc={block.NpcIndex} tileExit={block.TileExit.SectorId}");
             }
         }
         var folder = Path.Combine(AppContext.BaseDirectory, "artifacts", "evidence");
@@ -457,8 +457,8 @@ public sealed class MinimapCoverageDiagTests
         var worldData = new MapsWorldDataService();
         var layouts = worldData.Load(Path.Combine(root, "init", "mapsworlddata.dat"));
         var ids = files.Select(item => item.Id).ToArray();
-        var rootMap = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, ids)).FirstOrDefault(id => id > 0);
-        var assembly = MapsWorldDataService.BuildAssembly(layouts, ids, rootMap);
+        var rootSectorId = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, ids)).FirstOrDefault(id => id > 0);
+        var assembly = MapsWorldDataService.BuildAssembly(layouts, ids, rootSectorId);
         var lines = new List<string>();
         if (assembly is null)
         {
@@ -467,7 +467,7 @@ public sealed class MinimapCoverageDiagTests
         else
         {
             lines.Add($"width={assembly.Width} height={assembly.Height} wrapX={assembly.WrapX} " +
-                $"placements={assembly.Placements.Count} conflictos={assembly.Conflicts.Count} root={rootMap}");
+                $"placements={assembly.Placements.Count} conflictos={assembly.Conflicts.Count} root={rootSectorId}");
             // Duplicate chunks and duplicate map ids.
             foreach (var group in assembly.Placements.GroupBy(item => item.Chunk).Where(g => g.Count() > 1))
                 lines.Add($"CHUNK DUPLICADO ({group.Key.X},{group.Key.Y}): " +
@@ -660,8 +660,8 @@ public sealed class MinimapCoverageDiagTests
         var worldData = new MapsWorldDataService();
         var layouts = worldData.Load(Path.Combine(root, "init", "mapsworlddata.dat"));
         var ids = files.Select(item => item.Id).ToArray();
-        var rootMap = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, ids)).FirstOrDefault(id => id > 0);
-        var assembly = MapsWorldDataService.BuildAssembly(layouts, ids, rootMap);
+        var rootSectorId = layouts.Select(layout => MapsWorldDataService.ChooseRoot(layout, ids)).FirstOrDefault(id => id > 0);
+        var assembly = MapsWorldDataService.BuildAssembly(layouts, ids, rootSectorId);
         if (assembly is null) return;
         var service = new SectorCsmFileService();
         var paths = files.ToDictionary(item => item.Id, item => item.Path);

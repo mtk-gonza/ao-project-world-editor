@@ -23,7 +23,7 @@ internal sealed class MapValidationService
                 issues.Add(new(x, y, $"NPC inválido: {block.NpcIndex}"));
             if (block.Object.Index > 0 && (objects is null || block.Object.Index >= objects.Count || objects[block.Object.Index] is null))
                 issues.Add(new(x, y, $"Objeto inválido: {block.Object.Index}"));
-            if (block.TileExit.Map != 0 && (block.TileExit.X is < 1 or > 100 || block.TileExit.Y is < 1 or > 100))
+            if (block.TileExit.SectorId != 0 && (block.TileExit.X is < 1 or > 100 || block.TileExit.Y is < 1 or > 100))
                 issues.Add(new(x, y, "Traslado con destino fuera de rango."));
             if (!IsBlocked(map, x, y) && IsBlocked(map, x - 1, y) && IsBlocked(map, x + 1, y) && IsBlocked(map, x, y - 1) && IsBlocked(map, x, y + 1))
                 issues.Add(new(x, y, "Falta bloqueo en una celda rodeada."));

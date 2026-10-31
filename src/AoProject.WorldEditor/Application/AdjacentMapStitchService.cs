@@ -22,9 +22,9 @@ internal sealed class AdjacentMapStitchService
         for (var coordinate = start; coordinate <= end; coordinate++)
         {
             var block = horizontal ? map.Blocks[coordinate, fixedCoordinate] : map.Blocks[fixedCoordinate, coordinate];
-            if (block.TileExit.Map != 0) return block.TileExit.Map;
+            if (block.TileExit.SectorId != 0) return block.TileExit.SectorId;
         }
-        return map.Blocks[fallbackX, fallbackY].TileExit.Map;
+        return map.Blocks[fallbackX, fallbackY].TileExit.SectorId;
     }
 
     public int CopySide(WorldSector source, WorldSector destination, StitchSide side)

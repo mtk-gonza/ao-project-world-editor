@@ -8,13 +8,13 @@ WorldEditor de Argentum Online, escrito originalmente en VB6 con DirectDraw/Dire
 - Referencia funcional: `reference/argentum-online-worldeditor` (submodulo).
 - Runtime destino: .NET 8 WinForms en Windows.
 - Backend grafico: Vortice.Direct3D11 (`Rendering/D3D11WorldRenderer.cs`).
-- Recursos fuente: `reference/Recursos` (solo lectura).
+- Recursos fuente: `reference/Recursos` (solo lectura). La migración del editor
+  convierte `/Mapas/mapaN.csm` a `ao-project-resources/sectors/sector-N/sector.csm`.
 - Artefactos runtime: `ao-project-resources/world` (bundle y floors generados) y
   `ao-project-resources/maps` (PNG generados, no fuente).
 - Pisos de importacion: `WORLDMAP1 -> Z=0`, `WORLDMAP2 -> Z=-1` y
   `WORLDMAP3 -> Z=-2`, derivados automaticamente de `mapsworlddata.dat`. El bundle
-  agrega `Z=-3` para CSM positivos existentes sin placement oficial; los CSM
-  especiales sin placement se preservan embebidos pero no se dibujan en `Z=0`.
+  agrega `Z=-3` para CSM validos sin placement oficial.
   No se usa un manifiesto externo de pisos.
 - Ledger de paridad: `../docs/parity/world-editor-coverage.tsv` (617 procedimientos,
   100% `Ported` al 2026-10-28).
@@ -75,7 +75,7 @@ ao-project-world-editor/
    Presentation/
       Forms/          MainForm
       Features/World/ WorldRenderControl, WorldMiniMapControl
-       tests/AoProject.WorldEditor.Tests/   xUnit (368 tests al 2026-10-30)
+   tests/AoProject.WorldEditor.Tests/   xUnit (370 tests al 2026-10-30)
 ```
 
 Rutas de runtime (centralizadas en `Infrastructure/Runtime/EditorPaths.cs`):
@@ -114,10 +114,12 @@ Flujo de arranque:
 
 | Archivo | Uso |
 | --- | --- |
-| `Mapas/mapaN.csm` | Mapa actual (CSM). El ID se extrae de los digitos del nombre. |
+| `reference/Recursos/Mapas/mapaN.csm` | Fuente legacy plana para migrar a `/sectors`. |
+| `ao-project-resources/sectors/sector-N/sector.csm` | Fuente de trabajo del editor. |
 | `init/mapsworlddata.dat` | Grilla oficial del mundo (`TOTALWORLDS`, `WORLDMAPn`, `ANCHO`, `ALTO`, celdas 1..ancho*alto). |
 | `init/*.dat`, `Dat/*.dat`, `Graficos/*.ind` | Catalogos de graficos, objetos, NPCs, cuerpos, cabezas, cascos, armas, escudos, particulas. |
-| `Dat/UnderworldMapPool.dat`, `Dat/PhoenixMapPool.dat` | Mundos especiales/portales. |
+| `world/bundle.aog` | Manifiesto, metadata, fuentes preservadas y extensiones runtime. |
+| `world/floor-*.gmap` | Geometría jugable por `FloorZ`. |
 
 ### 5.3 `mapsworlddata.dat`
 
@@ -262,10 +264,16 @@ Variables de entorno:
   [`WORLD-MAP-AUDIT.md`](WORLD-MAP-AUDIT.md).
 - El plan de correccion esta en [`PLAN.md`](PLAN.md).
 
-Deuda documental conocida:
+Estado WORLD (2026-10-30):
 
-- No existe ADR de la feature "mapa mundial".
-- `../docs/parity/world-editor-migration.md` no menciona la feature y su tabla de
-  estado asume que todo el editor es paridad VB6.
-- El ledger 617/617 cuenta procedimientos del VB6; la feature C# queda fuera y no
-  tiene metrica de cobertura propia.
+- `bundle.aog` contiene 842 CSM válidos: 799 previamente migrados y 43 mapas
+  adicionales sin placement oficial. `sector-844` es un CSM vacío y se excluye.
+- Los floors actuales son `-3:202`, `-2:109`, `-1:113` y `0:418`. El `-3`
+  combina mapas virtuales históricos con los 43 adicionales; no representa
+  mapas faltantes.
+- Los teleports positivos hacia mapas estáticos están cubiertos. Persisten como
+  categorías especiales los destinos negativos y las instancias `3000..3004`.
+- `Archivo > Pasar /Mapas a /Sectors...` crea la estructura de trabajo; `Archivo
+  > Cargar /Sectors...` carga esa estructura.
+- La auditoría completa está en `WORLD-RESOURCE-AUDIT.md` y
+  `WORLD-STITCH-AND-TELEPORT-AUDIT.md`.

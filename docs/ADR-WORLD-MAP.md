@@ -627,3 +627,28 @@ ejecutar los mapas, sin depender de `Mapas/*.csm`, `.dat` o `.inf` originales.
   fuente de datos de juego.
 - `reference/Recursos` permanece intacto y solo se usa como fuente de importación y
   auditoría.
+
+## ADR-WM-030: migración explícita de Mapas a Sectors
+
+**Decisión:** el WorldEditor ofrece `Archivo > Pasar /Mapas a /Sectors...`.
+La acción convierte cada `mapaN.csm` en `sectors/sector-N/sector.csm` y copia
+sidecars `.dat`/`.inf` cuando existen. La carga normal se denomina
+`Archivo > Cargar /Sectors...`.
+
+La migración no borra la fuente legacy. El runtime no depende de ella; se
+conserva en `reference/Recursos` para regeneración y auditoría.
+
+## ADR-WM-031: cobertura final de mapas y teleports
+
+**Decisión:** todo CSM válido debe quedar representado por un placement del
+bundle o por una fuente preservada dentro del contrato v5. El bundle actual
+contiene 842 mapas válidos; `sector-844` se excluye por estar vacío.
+
+Los 43 mapas que no tenían placement oficial se ubican en el floor virtual
+`-3`. El floor contiene además 159 mapas virtuales históricos, por lo que su
+conteo físico es 202 y no indica mapas faltantes.
+
+Los teleports positivos hacia mapas estáticos deben resolverse por
+`SectorFloors`/placements. Los destinos negativos y `3000..3004` se conservan
+como categorías especiales para retorno, instancias o eventos y no se inventan
+como CSM estáticos.

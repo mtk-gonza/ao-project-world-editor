@@ -51,10 +51,10 @@ internal sealed class WorldOutputAuditService
                     $"NameMapa 'mapa{mapId}={actualName}' != nombre del CSM '{expectedName}'."));
 
             var section = $"mapa{mapId}";
-            CheckTransfer(issues, mapId, transfers, section, "Abajo", map.Blocks[50, 91].TileExit.Map);
-            CheckTransfer(issues, mapId, transfers, section, "Arriba", map.Blocks[50, 10].TileExit.Map);
-            CheckTransfer(issues, mapId, transfers, section, "Izquierda", map.Blocks[13, 50].TileExit.Map);
-            CheckTransfer(issues, mapId, transfers, section, "Derecha", map.Blocks[88, 50].TileExit.Map);
+            CheckTransfer(issues, mapId, transfers, section, "Abajo", map.Blocks[50, 91].TileExit.SectorId);
+            CheckTransfer(issues, mapId, transfers, section, "Arriba", map.Blocks[50, 10].TileExit.SectorId);
+            CheckTransfer(issues, mapId, transfers, section, "Izquierda", map.Blocks[13, 50].TileExit.SectorId);
+            CheckTransfer(issues, mapId, transfers, section, "Derecha", map.Blocks[88, 50].TileExit.SectorId);
 
             if (!checkMinimaps) continue;
             var minimap = Path.Combine(outputDirectory, "minimapas", $"mapa{mapId}.png");

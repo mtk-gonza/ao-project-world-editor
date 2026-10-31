@@ -15,6 +15,6 @@ public sealed class MapEntityUiWorkflowTests
         var service = new MapEntityEditingService();
         service.SetObject(map, objects, 2, 3, 1, 4); service.SetNpc(map, npcs, 2, 3, 1); service.SetTrigger(map, 2, 3, 9); service.SetTransfer(map, 2, 3, 7, 20, 21);
         Assert.Equal((short)1, map.Blocks[2, 3].Object.Index); Assert.Equal((short)1, map.Blocks[2, 3].NpcIndex);
-        Assert.Equal((short)9, map.Blocks[2, 3].Trigger); Assert.Equal((short)7, map.Blocks[2, 3].TileExit.Map);
+        Assert.Equal((short)9, map.Blocks[2, 3].Trigger); Assert.Equal((short)7, map.Blocks[2, 3].TileExit.SectorId);
     }
 }

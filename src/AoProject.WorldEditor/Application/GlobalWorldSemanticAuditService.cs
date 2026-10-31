@@ -173,7 +173,7 @@ internal sealed class GlobalWorldSemanticAuditService
             CompareGraphic($"Graphics[{layer}]", block.Graphics[layer], actual.GraphicAnimations[layer], Mismatch, compareIndex: false);
         }
         var expectedExitX = -1; var expectedExitY = -1;
-        if (block.TileExit.Map > 0 && placements.TryGetValue(block.TileExit.Map, out var target))
+        if (block.TileExit.SectorId > 0 && placements.TryGetValue(block.TileExit.SectorId, out var target))
         {
             var targetGlobal = world.GlobalTileForPlacement(target, block.TileExit.X,
                 block.TileExit.Y, minChunkX, minChunkY);
@@ -267,7 +267,7 @@ internal sealed class GlobalWorldSemanticAuditService
             var sourceGlobal = world.GlobalTileForPlacement(placement, x, y, minChunkX, minChunkY);
             var sourceGlobalX = sourceGlobal.X;
             var sourceGlobalY = sourceGlobal.Y;
-            if (exit.Map == 0)
+            if (exit.SectorId == 0)
             {
                 if (exit.X != 0 || exit.Y != 0)
                     Add(issues, "EXIT-DANGLING", AuditSeverity.Warning, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, "Salida sin mapa con coordenadas residuales.");
@@ -275,20 +275,20 @@ internal sealed class GlobalWorldSemanticAuditService
             }
             if (exit.X is < 1 or > WorldSector.Width || exit.Y is < 1 or > WorldSector.Height)
             {
-                Add(issues, "EXIT-LOCAL-RANGE", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"Destino fuera de rango: {exit.Map},{exit.X},{exit.Y}.");
+                Add(issues, "EXIT-LOCAL-RANGE", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"Destino fuera de rango: {exit.SectorId},{exit.X},{exit.Y}.");
                 continue;
             }
-            if (!world.Assembly.Placements.FirstOrDefault(item => item.SectorId == exit.Map).Equals(default(GlobalSectorPlacement)))
+            if (!world.Assembly.Placements.FirstOrDefault(item => item.SectorId == exit.SectorId).Equals(default(GlobalSectorPlacement)))
             {
-                var target = world.Assembly.Placements.First(item => item.SectorId == exit.Map);
+                var target = world.Assembly.Placements.First(item => item.SectorId == exit.SectorId);
                 var targetGlobal = world.GlobalTileForPlacement(target, exit.X, exit.Y, minChunkX, minChunkY);
                 var globalX = targetGlobal.X;
                 var globalY = targetGlobal.Y;
                 if (!occupied.ContainsKey((globalX, globalY)))
                     Add(issues, "EXIT-GLOBAL-TARGET", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta a una coordenada global no ocupada: destino={globalX},{globalY}.");
             }
-            else if (exit.Map > 0)
-                Add(issues, "EXIT-MISSING-MAP", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta al mapa inexistente {exit.Map}.");
+            else if (exit.SectorId > 0)
+                Add(issues, "EXIT-MISSING-MAP", AuditSeverity.Error, placement.SectorId, x, y, sourceGlobalX, sourceGlobalY, $"La salida apunta al mapa inexistente {exit.SectorId}.");
         }
     }
 

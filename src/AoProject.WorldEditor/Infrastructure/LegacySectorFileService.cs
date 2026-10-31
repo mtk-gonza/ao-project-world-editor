@@ -54,7 +54,7 @@ internal sealed class LegacySectorFileService
             var infoFlags = inf.ReadByte();
             if ((infoFlags & 1) != 0)
             {
-                block.TileExit.Map = inf.ReadInt16();
+                block.TileExit.SectorId = inf.ReadInt16();
                 block.TileExit.X = inf.ReadInt16();
                 block.TileExit.Y = inf.ReadInt16();
             }
@@ -109,13 +109,13 @@ internal sealed class LegacySectorFileService
             if ((flags & 16) != 0) map.Write(block.Trigger);
 
             byte infoFlags = 0;
-            if (block.TileExit.Map != 0) infoFlags |= 1;
+            if (block.TileExit.SectorId != 0) infoFlags |= 1;
             if (block.NpcIndex != 0) infoFlags |= 2;
             if (block.Object.Index != 0) infoFlags |= 4;
             inf.Write(infoFlags);
             if ((infoFlags & 1) != 0)
             {
-                inf.Write(block.TileExit.Map);
+                inf.Write(block.TileExit.SectorId);
                 inf.Write(block.TileExit.X);
                 inf.Write(block.TileExit.Y);
             }

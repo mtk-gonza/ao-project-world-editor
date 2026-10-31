@@ -101,8 +101,8 @@ internal sealed class UnifiedWorldFileService
         if (!reader.ReadBytes(Magic.Length).SequenceEqual(Magic))
             throw new InvalidDataException("Firma AOGMAP inválida.");
         var version = reader.ReadInt32();
-        if (version is < 1 or > Version)
-            throw new InvalidDataException("Versión AOGMAP no soportada.");
+        if (version != Version)
+            throw new InvalidDataException("Se requiere AOGMAP01 v4.");
         var width = reader.ReadInt32();
         var height = reader.ReadInt32();
         var floorZ = version >= 2 ? reader.ReadInt32() : 0;
