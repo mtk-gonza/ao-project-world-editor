@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using AoProject.WorldEditor.Domain;
 
@@ -16,7 +17,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         var payloads = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
         {
             ["events.dat"] = bundle.Events,
-            ["treasures.dat"] = bundle.Treasures,
+            ["treasures.json"] = NormalizeTreasures(bundle.Treasures),
             ["quests.dat"] = bundle.Quests,
             ["npcs.dat"] = bundle.Npcs,
             ["objects.dat"] = bundle.Objects,
@@ -55,6 +56,83 @@ internal sealed class UnifiedWorldRuntimeDataService
             Catalog = "castles",
             Items = root
         }, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static byte[] NormalizeTreasures(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(new { Schema = 1, Catalog = "treasures", TreasureSectors = Array.Empty<int>(), Treasures = Array.Empty<object>(), GiftSectors = Array.Empty<int>(), Gifts = Array.Empty<object>(), NpcNumbers = Array.Empty<short>(), NpcSectors = Array.Empty<int>() });
+        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var treasureSectors = ReadSectors(sections, "Tesoros");
+        var giftSectors = ReadSectors(sections, "Regalos");
+        var treasures = ReadRewards(sections, "Tesoros", "TiposDeTesoros", "Tesoro");
+        var gifts = ReadRewards(sections, "Regalos", "TiposDeRegalos", "Regalo");
+        var creature = GetSection(sections, "Criatura");
+        var npcCount = ParseInt(Get(creature, "NPCs"));
+        var npcNumbers = Enumerable.Range(1, Math.Max(0, npcCount))
+            .Select(index => ParseInt(Get(creature, "NPC" + index))).Where(value => value > 0).Select(value => (short)value).ToArray();
+        var npcSectors = ReadSectors(sections, "Criatura");
+        return JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            Schema = 1, Catalog = "treasures", TreasureSectors = treasureSectors,
+            Treasures = treasures, GiftSectors = giftSectors, Gifts = gifts,
+            NpcNumbers = npcNumbers, NpcSectors = npcSectors
+        }, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> ParseIni(byte[] payload)
+    {
+        var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string>? current = null;
+        foreach (var raw in Encoding.UTF8.GetString(payload).Split('\n'))
+        {
+            var line = raw.Trim().TrimEnd('\r');
+            if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                result[line[1..^1].Trim()] = current;
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator > 0 && current is not null)
+                current[line[..separator].Trim()] = line[(separator + 1)..].Trim();
+        }
+        return result;
+    }
+
+    private static int[] ReadSectors(Dictionary<string, Dictionary<string, string>> sections, string section)
+    {
+        var values = GetSection(sections, section);
+        var count = Math.Max(0, ParseInt(Get(values, "CantidadMapas")));
+        return Enumerable.Range(1, count).Select(index => ParseInt(Get(values, "Mapa" + index))).Where(value => value > 0).ToArray();
+    }
+
+    private static object[] ReadRewards(Dictionary<string, Dictionary<string, string>> sections, string section, string countKey, string prefix)
+    {
+        var values = GetSection(sections, section);
+        var count = Math.Max(0, ParseInt(Get(values, countKey)));
+        return Enumerable.Range(1, count).Select(index => Get(values, prefix + index).Split('-', 2))
+            .Where(parts => parts.Length == 2).Select(parts => new { ObjectIndex = ParseInt(parts[0]), Amount = ParseInt(parts[1]) })
+            .Where(reward => reward.ObjectIndex > 0).ToArray();
+    }
+
+    private static Dictionary<string, string> GetSection(Dictionary<string, Dictionary<string, string>> sections, string name) =>
+        sections.GetValueOrDefault(name) ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    private static string Get(Dictionary<string, string> section, string key) => section.GetValueOrDefault(key) ?? "";
+
+    private static int ParseInt(string value)
+    {
+        var text = value.Trim();
+        var sign = text.StartsWith('-') ? -1 : 1;
+        var start = text.StartsWith('+') || text.StartsWith('-') ? 1 : 0;
+        var end = start;
+        while (end < text.Length && char.IsDigit(text[end])) end++;
+        return end == start || !int.TryParse(text[start..end], out var number) ? 0 : sign * number;
     }
 
     private static bool HasProperty(JsonElement element, string name) =>
