@@ -79,6 +79,48 @@ public sealed class UnifiedWorldCompilerTests
     }
 
     [Fact]
+    public void Keeps_only_the_first_canonical_exit_for_a_merged_tile()
+    {
+        var first = new WorldSector();
+        first.Blocks[20, 20].TileExit.SectorId = 999;
+        first.Blocks[20, 20].TileExit.X = 40;
+        first.Blocks[20, 20].TileExit.Y = 50;
+
+        var duplicate = new WorldSector();
+        duplicate.Blocks[20, 20].TileExit.SectorId = 3;
+        duplicate.Blocks[20, 20].TileExit.X = 20;
+        duplicate.Blocks[20, 20].TileExit.Y = 20;
+
+        var world = new GlobalWorldDocument(
+            new GlobalWorldAssembly
+            {
+                Width = 1, Height = 1,
+                Placements =
+                [
+                    new(1, new(0, 0), "first"),
+                    new(2, new(0, 0), "duplicate"),
+                    new(3, new(0, 0), "target")
+                ]
+            },
+            new Dictionary<short, WorldSector>
+            {
+                [1] = first, [2] = duplicate, [3] = new()
+            },
+            new Dictionary<short, string>
+            {
+                [1] = "mapa1.csm", [2] = "mapa2.csm", [3] = "mapa3.csm"
+            }, 1);
+
+        var result = new UnifiedWorldCompiler().Compile(world);
+
+        var exit = Assert.Single(result.SectorId.Exits);
+        Assert.Equal(UnifiedWorldExitKind.External, exit.Kind);
+        Assert.Equal((short)999, exit.ExternalSectorId);
+        var offset = result.SectorId.Offset(19, 19);
+        Assert.Equal(1, result.SectorId.ExitIndex[offset]);
+    }
+
+    [Fact]
     public void Removes_legacy_sector_exit_when_maps_are_physically_adjacent()
     {
         var west = new WorldSector();

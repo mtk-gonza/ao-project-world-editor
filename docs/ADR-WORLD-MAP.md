@@ -651,4 +651,12 @@ conteo físico es 202 y no indica mapas faltantes.
 Los teleports positivos hacia mapas estáticos deben resolverse por
 `SectorFloors`/placements. Los destinos negativos y `3000..3004` se conservan
 como categorías especiales para retorno, instancias o eventos y no se inventan
-como CSM estáticos.
+ como CSM estáticos.
+
+## ADR-WM-032: una salida canónica por tile global
+
+**Decisión:** cada tile compilado puede referenciar una sola salida mediante
+`ExitIndex`. Cuando varias representaciones legacy llegan al mismo tile por un
+seam, se conserva la primera salida seleccionada y se descartan las siguientes,
+aunque difieran en tipo o destino. Esto evita que un `CrossFloor` válido quede
+acompañado por un `Internal` duplicado en la lista física de exits.

@@ -515,6 +515,16 @@ internal sealed class UnifiedWorldCompiler
         bool applyStitching = false,
         IReadOnlySet<int>? availableFloorZs = null)
     {
+        // A global tile has one canonical exit.  Stitched borders can expose
+        // the same tile through more than one source sector; once the selected
+        // exit has been assigned, later records must not append a different
+        // representation for that tile (for example Internal after
+        // CrossFloor).  ExitIndex is deliberately the authority here rather
+        // than value equality, because the duplicate may differ in kind or
+        // destination while still referring to the same global tile.
+        if (map.ExitIndex[offset] != 0)
+            return null;
+
         var exit = sourceBlock.TileExit;
         // VB6 uses negative map ids for special destinations (for example
         // underworld/return routes). Preserve them as external runtime exits;
