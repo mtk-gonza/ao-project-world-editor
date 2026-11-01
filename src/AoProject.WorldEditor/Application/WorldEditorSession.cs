@@ -87,11 +87,30 @@ internal sealed class WorldEditorSession
             ReadData(dat, "Eventos.dat"), ReadData(dat, "Tesoros.dat"), ReadData(dat, "Quests.DAT"),
             ReadData(dat, "NPCs.dat"), ReadData(dat, "obj.dat"), ReadData(dat, "Castles.json"),
             ReadData(dat, "Hechizos.dat"), ReadData(dat, "EffectsOverTime.dat"),
-            ReadData(dat, "GlobalQuests.dat"), ReadScenarios(dat));
+            ReadData(dat, "GlobalQuests.dat"), ReadScenarios(dat),
+            ReadData(dat, "rangos_faccion.dat"), ReadData(dat, "recompensas_faccion.dat"),
+            ReadNamedData(dat, ["ArmasHerrero.dat", "ArmadurasHerrero.dat",
+                "BlackSmithElementalRunes.dat", "ObjCarpintero.dat", "ObjAlquimista.dat", "ObjSastre.dat"]),
+            ReadData(dat, "EquipamientoInicial.dat"),
+            ReadNamedData(dat, ["pesca.dat", "RecursosEspeciales.dat"]));
     }
 
     private static byte[] ReadData(string directory, string fileName) =>
         File.Exists(Path.Combine(directory, fileName)) ? File.ReadAllBytes(Path.Combine(directory, fileName)) : [];
+
+    /// <summary>Lee un conjunto de .dat legacy, indexado por nombre de archivo.</summary>
+    private static IReadOnlyDictionary<string, byte[]> ReadNamedData(string directory, IReadOnlyList<string> fileNames)
+    {
+        var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in fileNames)
+        {
+            var path = Path.Combine(directory, fileName);
+            if (File.Exists(path))
+                result[fileName] = File.ReadAllBytes(path);
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// <c>ScenarioStore.Load</c> solo lee estos cuatro INI; el editor publica

@@ -15,11 +15,12 @@ entrada de compilación; ningún servicio runtime vuelve a resolver mapas vecino
 ni abre esos archivos fuente.
 
 Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects`,
-`Castles`, `Spells`, `EffectsOverTime`, `GlobalQuests` y `Scenarios` se generan
-como sidecars en `world/runtime-data/`, junto con un `manifest.json` de hashes
-SHA-256. Esto evita inflar `bundle.aog` y evita que el
-servidor reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas
-antiguas quedan solo como fallback de compatibilidad.
+`Castles`, `Spells`, `EffectsOverTime`, `GlobalQuests`, `Scenarios`,
+`FactionRanks`, `FactionRewards`, `CraftingLists`, `InitialEquipment` y `Fishing`
+se generan como sidecars en `world/runtime-data/`, junto con un `manifest.json` de
+hashes SHA-256 (15 entradas obligatorias). Esto evita inflar `bundle.aog` y evita
+que el servidor reconstruya gameplay desde `DatDirectory`. Las extensiones
+embebidas antiguas quedan solo como fallback de compatibilidad.
 
 **Formato de catálogo:** cada sidecar es un documento JSON versionado
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` con propiedades en PascalCase. El
@@ -851,3 +852,50 @@ desde `DatDirectory` y se publican como `runtime-data/globalquests.json` y
 `Dat/Scenarios/`; `ReferenceConfig` todavía lee `Dat/Collectiblecards.dat` para
 los bonos de cartas, que se migrarán en el lote de configuración antes de borrar
 `ao-project-resources/Dat`.
+
+## ADR-WM-038: facción, crafteo, equipamiento inicial y pesca como catálogos canónicos
+
+**Estado:** aceptado 2026-11-01.
+
+**Decisión:** cinco lecturas que corrían contra `DatDirectory` se publican como
+sidecars tipados en `runtime-data/` y dejan de reconstruir gameplay desde los
+`.dat`:
+
+- `FactionRankStore.LoadBytes` lee `factionranks.json`
+  (`Royal`/`Chaos` con `{Rank,RequiredLevel,RequiredScore,Title}`), en paridad 1:1
+  con `rangos_faccion.dat` (7 rangos por bando).
+- `FactionRewardStore.LoadBytes` lee `factionrewards.json`
+  (`Rewards:[{Rank,ObjectIndex}]`) y descarta las entradas inválidas con el mismo
+  criterio que el lector DAT (`Rank>0 && ObjectIndex>0`), conservando el orden
+  (46 recompensas).
+- `new CraftingJobLists(byte[])` lee `craftinglists.json` con las seis listas del
+  crafteo directo (`BlacksmithWeapons`, `BlacksmithArmors`,
+  `BlacksmithElementalRunes`, `CarpenterObjects`, `AlchemyObjects`,
+  `TailorObjects`). El constructor por `datDirectory` queda como transición.
+- `InitialEquipment.LoadBytes` lee `initialequipment.json`
+  (`Common:[{Index,Amount,Equipped}]` y
+  `Classes:[{Class,Items,Spells}]`), reconstruyendo el mismo inventario por clase.
+- `FishingConfig.Load(ReferenceConfig, byte[])` lee `fishing.json`
+  (`MaxRodLevel`, `RodPowerByLevel`, `Fish`, `UniqueMapFish`,
+  `SpecialRewards`) y mantiene las claves de `Configuracion.ini [PESCA]` vía
+  `ReferenceConfig`. La clave corrupta `Maxlvlcaña` se resuelve por prefijo tanto
+  en el editor como en el runtime.
+
+**Decisión de alcance:** `Meditaciones.dat` **no** forma parte de este lote. Se
+consume desde `ReferenceConfig` junto a `Balance.dat`/`Configuracion.ini`, así que
+se migra completo en el lote de configuración (`ReferenceConfig`), no aquí.
+
+**Efecto medido:** `bundle.aog` no cambia (byte-idéntico, SHA-256 `1F1DBD70...`).
+Se añaden `factionranks.json`, `factionrewards.json`, `craftinglists.json`,
+`initialequipment.json` y `fishing.json`, y sus hashes en
+`runtime-data/manifest.json` (15 entradas). Smoke real de los cinco loaders contra
+los sidecars generados: 7+7 rangos, 46 recompensas, listas 33/37/4/31/7/33, 5
+objetos comunes + clases 1..12 y 34 peces con `MaxRodLevel=6`.
+
+**Consecuencia:** el servidor deja de depender de `Dat/rangos_faccion.dat`,
+`recompensas_faccion.dat`, `pesca.dat`, `RecursosEspeciales.dat`,
+`EquipamientoInicial.dat` y las seis listas de crafteo. `ReferenceConfig` todavía
+lee `Dat/Balance.dat`, `Meditaciones.dat`, `pesca.dat`, `Tesoros.dat`,
+`RecursosEspeciales.dat`, `Collectiblecards.dat`, `Eventos.dat`, `GlobalQuests.dat`,
+`rangos_faccion.dat` y `recompensas_faccion.dat` para sus `Settings`; se migran en
+el lote de configuración antes de borrar `ao-project-resources/Dat`.

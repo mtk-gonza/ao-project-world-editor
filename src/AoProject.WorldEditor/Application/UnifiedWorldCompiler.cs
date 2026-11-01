@@ -44,7 +44,12 @@ internal sealed class UnifiedWorldCompiler
         byte[]? spells = null,
         byte[]? effectsOverTime = null,
         byte[]? globalQuests = null,
-        IReadOnlyDictionary<string, byte[]>? scenarios = null)
+        IReadOnlyDictionary<string, byte[]>? scenarios = null,
+        byte[]? factionRanks = null,
+        byte[]? factionRewards = null,
+        IReadOnlyDictionary<string, byte[]>? craftingLists = null,
+        byte[]? initialEquipment = null,
+        IReadOnlyDictionary<string, byte[]>? fishing = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -148,6 +153,11 @@ internal sealed class UnifiedWorldCompiler
         bundle.EffectsOverTime = effectsOverTime ?? [];
         bundle.GlobalQuests = globalQuests ?? [];
         bundle.Scenarios = scenarios ?? new Dictionary<string, byte[]>();
+        bundle.FactionRanks = factionRanks ?? [];
+        bundle.FactionRewards = factionRewards ?? [];
+        bundle.CraftingLists = craftingLists ?? new Dictionary<string, byte[]>();
+        bundle.InitialEquipment = initialEquipment ?? [];
+        bundle.Fishing = fishing ?? new Dictionary<string, byte[]>();
         return bundle;
     }
 

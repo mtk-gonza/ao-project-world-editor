@@ -121,6 +121,13 @@ internal sealed class UnifiedWorldBundle
     public byte[] GlobalQuests { get; set; } = [];
     /// <summary>INI sources of the scenario catalog, keyed by file name.</summary>
     public IReadOnlyDictionary<string, byte[]> Scenarios { get; set; } = new Dictionary<string, byte[]>();
+    public byte[] FactionRanks { get; set; } = [];
+    public byte[] FactionRewards { get; set; } = [];
+    /// <summary>CraftingJobLists DAT sources, keyed by file name.</summary>
+    public IReadOnlyDictionary<string, byte[]> CraftingLists { get; set; } = new Dictionary<string, byte[]>();
+    public byte[] InitialEquipment { get; set; } = [];
+    /// <summary>Fishing DAT sources (pesca.dat, RecursosEspeciales.dat), keyed by file name.</summary>
+    public IReadOnlyDictionary<string, byte[]> Fishing { get; set; } = new Dictionary<string, byte[]>();
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

@@ -53,7 +53,12 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["spells.json"] = NormalizeSpells(bundle.Spells),
             ["effectsovertime.json"] = NormalizeEffectsOverTime(bundle.EffectsOverTime),
             ["globalquests.json"] = NormalizeGlobalQuests(bundle.GlobalQuests),
-            ["scenarios.json"] = NormalizeScenarios(bundle.Scenarios)
+            ["scenarios.json"] = NormalizeScenarios(bundle.Scenarios),
+            ["factionranks.json"] = NormalizeFactionRanks(bundle.FactionRanks),
+            ["factionrewards.json"] = NormalizeFactionRewards(bundle.FactionRewards),
+            ["craftinglists.json"] = NormalizeCraftingLists(bundle.CraftingLists),
+            ["initialequipment.json"] = NormalizeInitialEquipment(bundle.InitialEquipment),
+            ["fishing.json"] = NormalizeFishing(bundle.Fishing)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var payload in payloads)
@@ -382,6 +387,287 @@ internal sealed class UnifiedWorldRuntimeDataService
             new { Schema = 1, Catalog = "scenarios", Items = items },
             new JsonSerializerOptions { WriteIndented = true });
     }
+
+    private static byte[] NormalizeFactionRanks(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "factionranks", Royal = Array.Empty<object>(), Chaos = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Clamp(ParseInt(Get(init, "NumRangos")), 0, 255);
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                Schema = 1,
+                Catalog = "factionranks",
+                Royal = ReadRanks(sections, "ArmadaReal", count),
+                Chaos = ReadRanks(sections, "LegionCaos", count)
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static object[] ReadRanks(Dictionary<string, Dictionary<string, string>> sections, string section, int count)
+    {
+        var values = GetSection(sections, section);
+        var ranks = new List<object>(count);
+        for (var rank = 1; rank <= count; rank++)
+        {
+            var fields = Get(values, rank.ToString(CultureInfo.InvariantCulture) + "Rango")
+                .Split('-', 3, StringSplitOptions.TrimEntries);
+            if (fields.Length < 2 ||
+                !int.TryParse(fields[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var level) ||
+                !int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var score))
+                continue;
+            ranks.Add(new
+            {
+                Rank = rank,
+                RequiredLevel = Math.Max(1, level),
+                RequiredScore = Math.Max(0, score),
+                Title = fields.Length > 2 ? fields[2] : ""
+            });
+        }
+
+        return ranks.ToArray();
+    }
+
+    private static byte[] NormalizeFactionRewards(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "factionrewards", Rewards = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Clamp(ParseInt(Get(init, "NumRecompensas")), 0, 255);
+        var values = GetSection(sections, "Recompensas");
+        var rewards = new List<object>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var fields = Get(values, "Recompensa" + index.ToString(CultureInfo.InvariantCulture))
+                .Split('-', 2, StringSplitOptions.TrimEntries);
+            if (fields.Length != 2 ||
+                !int.TryParse(fields[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rank) ||
+                !short.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var objectIndex) ||
+                rank <= 0 || objectIndex <= 0)
+                continue;
+            rewards.Add(new { Rank = rank, ObjectIndex = objectIndex });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "factionrewards", Rewards = rewards },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static byte[] NormalizeCraftingLists(IReadOnlyDictionary<string, byte[]> lists) =>
+        JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                Schema = 1,
+                Catalog = "craftinglists",
+                BlacksmithWeapons = ReadCraftingList(lists, "ArmasHerrero.dat", "NumArmas", "Arma"),
+                BlacksmithArmors = ReadCraftingList(lists, "ArmadurasHerrero.dat", "NumArmaduras", "Armadura"),
+                BlacksmithElementalRunes = ReadCraftingList(lists, "BlackSmithElementalRunes.dat", "NumRunas", "Runa"),
+                CarpenterObjects = ReadCraftingList(lists, "ObjCarpintero.dat", "NumObjs", "Obj"),
+                AlchemyObjects = ReadCraftingList(lists, "ObjAlquimista.dat", "NumObjs", "Obj"),
+                TailorObjects = ReadCraftingList(lists, "ObjSastre.dat", "NumObjs", "Obj")
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+
+    private static short[] ReadCraftingList(
+        IReadOnlyDictionary<string, byte[]> lists, string fileName, string countKey, string entryPrefix)
+    {
+        if (!lists.TryGetValue(fileName, out var payload) || payload.Length == 0)
+            return [];
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Clamp(ParseInt(Get(init, countKey)), 0, 5000);
+        var result = new List<short>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var value = ParseInt(Get(GetSection(sections, entryPrefix + index.ToString(CultureInfo.InvariantCulture)), "Index"));
+            if (value > 0 && value <= short.MaxValue)
+                result.Add((short)value);
+        }
+
+        return result.ToArray();
+    }
+
+    private static byte[] NormalizeInitialEquipment(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "initialequipment", Common = Array.Empty<object>(), Classes = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var common = new List<object>();
+        var classes = new List<object>();
+        foreach (var (name, values) in sections)
+        {
+            if (name.Equals("COMMON", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var key in values.Keys)
+                    if (key.StartsWith("Obj", StringComparison.OrdinalIgnoreCase) &&
+                        TryEquipmentItem(values[key], out var item))
+                        common.Add(item);
+                continue;
+            }
+
+            if (!name.StartsWith("CLASS", StringComparison.OrdinalIgnoreCase) ||
+                !byte.TryParse(name[5..], out var characterClass))
+                continue;
+
+            var items = new List<object>();
+            var spells = new List<short>();
+            foreach (var key in values.Keys)
+            {
+                var value = values[key];
+                if (key.StartsWith("Spell", StringComparison.OrdinalIgnoreCase) &&
+                    short.TryParse(value, out var spell) && spell > 0)
+                {
+                    spells.Add(spell);
+                    continue;
+                }
+
+                if (!key.StartsWith("Obj", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (TryEquipmentItem(value, out var item))
+                    items.Add(item);
+            }
+
+            classes.Add(new { Class = characterClass, Items = items, Spells = spells });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "initialequipment", Common = common, Classes = classes },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static bool TryEquipmentItem(string value, out object item)
+    {
+        item = null!;
+        var parts = value.Split(',');
+        if (parts.Length < 2 ||
+            !short.TryParse(parts[0], out var index) ||
+            !short.TryParse(parts[1], out var amount) ||
+            index <= 0 || amount <= 0)
+            return false;
+        var equipped = parts.Length > 2 && parts[2].Trim() is "1" or "true" or "True";
+        item = new { Index = index, Amount = amount, Equipped = equipped };
+        return true;
+    }
+
+    private static byte[] NormalizeFishing(IReadOnlyDictionary<string, byte[]> fishing)
+    {
+        if (fishing.Count == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    Schema = 1, Catalog = "fishing", MaxRodLevel = 0,
+                    RodPowerByLevel = Array.Empty<int>(), Fish = Array.Empty<object>(),
+                    UniqueMapFish = Array.Empty<short>(), SpecialRewards = Array.Empty<object>()
+                });
+        if (fishing.Count == 1 && DecodeLegacyText(fishing.Values.First()).TrimStart().StartsWith('{'))
+            return fishing.Values.First();
+
+        var pesca = ParseIni(NamedPayload(fishing, "pesca.dat"));
+        var recursos = ParseIni(NamedPayload(fishing, "RecursosEspeciales.dat"));
+        var peces = GetSection(pesca, "PECES");
+
+        // FileIO.bas:3013: la clave viene corrupta por el encoding ANSI; se resuelve
+        // por prefijo igual que el runtime.
+        var maxRodValue = Get(peces, "Maxlvlcaña");
+        if (maxRodValue.Length == 0)
+        {
+            var maxRodKey = peces.Keys.FirstOrDefault(key => key.StartsWith("Maxlvlca", StringComparison.OrdinalIgnoreCase));
+            if (maxRodKey is not null)
+                maxRodValue = Get(peces, maxRodKey);
+        }
+        var maxRodLevel = Math.Clamp(ParseInt(maxRodValue), 0, 100);
+
+        var fishCount = Math.Clamp(ParseInt(Get(peces, "NumPeces")), 0, 10000);
+        var fish = new List<object>(fishCount);
+        for (var index = 1; index <= fishCount; index++)
+        {
+            var entry = ParseFish(Get(peces, "Pez" + index.ToString(CultureInfo.InvariantCulture)), maxRodLevel);
+            if (entry is not null)
+                fish.Add(entry);
+        }
+
+        var rodPower = new int[maxRodLevel + 1];
+        var powerSection = GetSection(pesca, "POWERCANAS");
+        for (var index = 1; index <= maxRodLevel; index++)
+            rodPower[index] = ParseInt(Get(powerSection, "Power" + index.ToString(CultureInfo.InvariantCulture)));
+
+        var uniqueFish = new List<short>();
+        var uniqueSection = GetSection(pesca, "UNIQUEMAPFISH");
+        // FileIO.bas:3059-3070: corta en la primera clave vacia.
+        for (var index = 1; index <= 1000; index++)
+        {
+            var raw = Get(uniqueSection, "UniqueMapfish" + index.ToString(CultureInfo.InvariantCulture)).Trim();
+            if (raw.Length == 0)
+                break;
+            var value = ParseInt(raw);
+            if (value > 0)
+                uniqueFish.Add((short)Math.Clamp(value, 0, short.MaxValue));
+        }
+
+        var specialSection = GetSection(recursos, "Pesca");
+        var specialCount = Math.Clamp(ParseInt(Get(specialSection, "Items")), 0, 1000);
+        var rewards = new List<object>(specialCount);
+        for (var index = 1; index <= specialCount; index++)
+        {
+            var fields = Get(specialSection, "Item" + index.ToString(CultureInfo.InvariantCulture)).Split('-');
+            var objectIndex = ParseIntField(fields, 0);
+            var probability = ParseIntField(fields, 1);
+            if (objectIndex > 0 && probability > 0)
+                rewards.Add(new
+                {
+                    ObjectIndex = (short)Math.Clamp(objectIndex, 0, short.MaxValue),
+                    Probability = probability
+                });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                Schema = 1, Catalog = "fishing", MaxRodLevel = maxRodLevel,
+                RodPowerByLevel = rodPower, Fish = fish,
+                UniqueMapFish = uniqueFish, SpecialRewards = rewards
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static object? ParseFish(string raw, int maxRodLevel)
+    {
+        var comment = raw.IndexOf('\'');
+        if (comment >= 0)
+            raw = raw[..comment];
+        var fields = raw.Split('-');
+        var objectIndex = ParseIntField(fields, 0);
+        if (objectIndex <= 0)
+            return null;
+        return new
+        {
+            ObjectIndex = (short)Math.Clamp(objectIndex, 0, short.MaxValue),
+            Weight = Math.Max(0, ParseIntField(fields, 1)),
+            RodLevel = Math.Clamp(ParseIntField(fields, 2), 0, maxRodLevel),
+            IsSpecial = ParseIntField(fields, 3) == 1
+        };
+    }
+
+    private static int ParseIntField(string[] fields, int index) =>
+        index < fields.Length ? ParseInt(fields[index]) : 0;
+
+    private static byte[] NamedPayload(IReadOnlyDictionary<string, byte[]> files, string name) =>
+        files.TryGetValue(name, out var payload) ? payload : [];
 
     private static short[] ReadDashShorts(string value) => value
         .Split('-', StringSplitOptions.RemoveEmptyEntries)

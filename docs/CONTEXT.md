@@ -196,7 +196,9 @@ El bundle v6 ya no contiene los payloads fuente de los sectores (ADR-WM-034). Lo
 catálogos grandes de gameplay se generan aparte en `world/runtime-data/`:
 `events.json`, `treasures.json`, `quests.json`, `npcs.json`, `objects.json`,
 `castles.json`, `spells.json`, `effectsovertime.json`, `globalquests.json`,
-`scenarios.json` y `manifest.json` con hashes SHA-256.
+`scenarios.json`, `factionranks.json`, `factionrewards.json`, `craftinglists.json`,
+`initialequipment.json`, `fishing.json` y `manifest.json` con hashes SHA-256
+(15 entradas obligatorias).
 
 Cada catálogo es un documento JSON versionado con la forma
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` y propiedades en PascalCase. El
@@ -214,6 +216,12 @@ catálogo runtime.
 - El bundle conserva extensiones de gameplay antiguas solo para compatibilidad;
   el runtime nuevo consume `world/runtime-data/`. `reference/Recursos` y `Dat` son
   entradas de importación/compilación.
+- `ReferenceConfig` sigue leyendo `Dat/Balance.dat`, `Meditaciones.dat`,
+  `pesca.dat`, `Tesoros.dat`, `RecursosEspeciales.dat`, `Collectiblecards.dat`,
+  `Eventos.dat`, `GlobalQuests.dat`, `rangos_faccion.dat` y
+  `recompensas_faccion.dat`; se migra completo en el lote de configuración. El
+  resto de los catálogos de gameplay (spells, effects, quests globales, escenarios,
+  facción, crafteo, equipamiento inicial y pesca) ya se leen de `runtime-data/`.
 - `FloorZ=-3` continúa siendo un piso virtual de importación pendiente de decisión
   definitiva de layout.
 
