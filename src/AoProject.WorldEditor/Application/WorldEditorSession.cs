@@ -70,15 +70,17 @@ internal sealed class WorldEditorSession
 
     public UnifiedWorldMap LoadUnifiedWorld(string path) => new UnifiedWorldFileService().Load(path);
 
-    public UnifiedWorldBundle CompileUnifiedWorldBundle(bool applyStitching = false, string? settlementsPath = null)
+    public UnifiedWorldBundle CompileUnifiedWorldBundle(bool applyStitching = false)
     {
         if (CurrentWorld is null) throw new InvalidOperationException("No hay un mundo global cargado.");
         var assignments = new UnifiedWorldFloorAssignmentService()
             .Detect(CurrentWorld);
-        var settlements = settlementsPath ?? Path.Combine(ResourceRoot, "world", "settlements.json");
         var dat = Path.Combine(ReferenceResourceRoot, "Dat");
+        // Los settlements se importan en memoria desde Ciudades.Dat; el intermedio
+        // legacy con coordenadas de sector no se persiste.
+        var settlements = new SettlementManifestService().Build(Path.Combine(dat, "Ciudades.Dat"));
         return new UnifiedWorldCompiler().CompileFloors(CurrentWorld, Resources, assignments, applyStitching,
-            File.Exists(settlements) ? File.ReadAllBytes(settlements) : [],
+            settlements,
             File.Exists(Path.Combine(dat, "Map.dat")) ? File.ReadAllBytes(Path.Combine(dat, "Map.dat")) : [],
             File.Exists(Path.Combine(dat, "UnderworldMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "UnderworldMapPool.dat")) : [],
             File.Exists(Path.Combine(dat, "PhoenixMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "PhoenixMapPool.dat")) : [],
@@ -91,9 +93,9 @@ internal sealed class WorldEditorSession
 
     public UnifiedWorldBundle CompileStitchedWorldBundle() => CompileUnifiedWorldBundle(true);
 
-    public UnifiedWorldBundle SaveUnifiedWorldBundle(string directory, bool applyStitching = false, string? settlementsPath = null)
+    public UnifiedWorldBundle SaveUnifiedWorldBundle(string directory, bool applyStitching = false)
     {
-        var bundle = CompileUnifiedWorldBundle(applyStitching, settlementsPath);
+        var bundle = CompileUnifiedWorldBundle(applyStitching);
         new UnifiedWorldRuntimeDataService().Save(bundle, directory);
         new UnifiedWorldBundleFileService().Save(bundle, directory);
         new WorldArtifactManifestService().Save(directory);

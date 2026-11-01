@@ -11,12 +11,16 @@ internal sealed class SettlementManifestService
         "Arkhein", "Forgat", "Eldoria", "Penthar", "Morgrim"
     ];
 
-    public int Generate(string ciudadesPath, string outputPath)
+    /// <summary>
+    /// Convierte Ciudades.Dat al manifiesto de settlements en memoria. Devuelve
+    /// vacío si el archivo no existe, de forma que el WORLD se pueda compilar sin
+    /// settlements. El intermedio legacy nunca se persiste: se transforma a
+    /// coordenadas globales y se embebe en el bundle.
+    /// </summary>
+    public byte[] Build(string ciudadesPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ciudadesPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
-        if (!File.Exists(ciudadesPath))
-            throw new FileNotFoundException("No se encontró Ciudades.Dat.", ciudadesPath);
+        if (!File.Exists(ciudadesPath)) return [];
 
         var document = IniDocument.Load(ciudadesPath);
         var settlements = new List<object>();
@@ -51,13 +55,10 @@ internal sealed class SettlementManifestService
         if (settlements.Count == 0)
             throw new InvalidDataException("Ciudades.Dat no contiene settlements utilizables.");
 
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
-        var json = JsonSerializer.Serialize(settlements, new JsonSerializerOptions
+        return JsonSerializer.SerializeToUtf8Bytes(settlements, new JsonSerializerOptions
         {
             WriteIndented = true
         });
-        File.WriteAllText(outputPath, json + Environment.NewLine);
-        return settlements.Count;
     }
 
     private static object Position(int sectorId, int x, int y) => new

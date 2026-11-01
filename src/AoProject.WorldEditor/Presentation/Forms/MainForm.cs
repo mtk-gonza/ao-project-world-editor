@@ -1938,23 +1938,9 @@ internal sealed class MainForm : Form
         var directory = Path.Combine(dialog.SelectedPath, "world");
         try
         {
-            var settlementsPath = Path.Combine(directory, "settlements.json");
-            if (!File.Exists(settlementsPath) || new FileInfo(settlementsPath).Length == 0)
-            {
-                using var settlementsDialog = new OpenFileDialog
-                {
-                    Filter = "Catálogo de ciudades (*.dat)|*.dat|Todos los archivos (*.*)|*.*",
-                    InitialDirectory = Path.Combine(_session.ReferenceResourceRoot, "Dat"),
-                    FileName = "Ciudades.Dat",
-                    Title = "Seleccione Ciudades.Dat para importar los settlements"
-                };
-                if (settlementsDialog.ShowDialog(this) != DialogResult.OK) return;
-                new SettlementManifestService().Generate(settlementsDialog.FileName, settlementsPath);
-            }
-
             UseWaitCursor = true;
             _status.Text = "Generando mundo con pisos desde los mapas originales...";
-            var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory, applyStitching: true, settlementsPath));
+            var bundle = await Task.Run(() => _session.SaveUnifiedWorldBundle(directory, applyStitching: true));
             await OpenBundlePreviewDirectory(directory);
             _status.Text = $"Mundo guardado: {bundle.Floors.Count} pisos | Z=0 activo";
             MessageBox.Show(this,

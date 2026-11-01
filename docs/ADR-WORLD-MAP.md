@@ -766,3 +766,24 @@ ignoraban al cargar, y sólo el editor las escribía/leía, duplicando
 **Consecuencia:** el cambio de v5 a v6 obliga a regenerar el WORLD.
 `manifest.json` declara `"BundleFormat": "AOGBND01/v6"` y los tres repos validan
 ese valor.
+
+## ADR-WM-035: settlements importados en memoria, sin intermedio legacy
+
+**Decisión:** los settlements del WORLD se importan en memoria desde el original
+`reference/Recursos/Dat/Ciudades.Dat` y se transforman a coordenadas globales
+(`GlobalSettlementManifestService`) para embeberlos en `bundle.aog`. El editor
+deja de persistir el intermedio `world/settlements.json`, que contenía
+coordenadas de sector (`sectorId/x/y`) dentro del árbol generado, no figuraba en
+ningún manifest y era 100% regenerable desde `Ciudades.Dat`.
+
+- `SettlementManifestService.Build` devuelve el manifiesto como bytes; ya no se
+  escribe a disco ni se pide por diálogo.
+- El bundle regenerado desde `Ciudades.Dat` es byte-idéntico al generado antes
+  desde `world/settlements.json`.
+- El cliente deja de arrastrar `init/mapsworlddata.dat`: se elimina
+  `LegacyWorldMapCatalog`, que era código muerto y su único lector.
+- El servidor nunca leyó `world/settlements.json` (los settlements salen de
+  `bundle.Settlements`); se corrige el comentario obsoleto en `ReferenceConfig`.
+
+**Consecuencia:** se borra `ao-project-resources/world/settlements.json` y las
+auditorías `world/*.tsv` quedan ignoradas por git.
