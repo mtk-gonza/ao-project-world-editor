@@ -96,6 +96,7 @@ internal sealed class WorldEditorSession
         var bundle = CompileUnifiedWorldBundle(applyStitching, settlementsPath);
         new UnifiedWorldRuntimeDataService().Save(bundle, directory);
         new UnifiedWorldBundleFileService().Save(bundle, directory);
+        new WorldArtifactManifestService().Save(directory);
         var mapsDirectory = Path.Combine(Directory.GetParent(Path.GetFullPath(directory))?.FullName ?? directory, "maps");
         new UnifiedWorldImageService().Save(bundle, Resources, mapsDirectory);
         SaveStitchAudits(directory);
