@@ -42,7 +42,9 @@ internal sealed class UnifiedWorldCompiler
         byte[]? objects = null,
         byte[]? castles = null,
         byte[]? spells = null,
-        byte[]? effectsOverTime = null)
+        byte[]? effectsOverTime = null,
+        byte[]? globalQuests = null,
+        IReadOnlyDictionary<string, byte[]>? scenarios = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -144,6 +146,8 @@ internal sealed class UnifiedWorldCompiler
         bundle.Castles = castles ?? [];
         bundle.Spells = spells ?? [];
         bundle.EffectsOverTime = effectsOverTime ?? [];
+        bundle.GlobalQuests = globalQuests ?? [];
+        bundle.Scenarios = scenarios ?? new Dictionary<string, byte[]>();
         return bundle;
     }
 

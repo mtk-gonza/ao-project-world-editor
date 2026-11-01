@@ -118,6 +118,9 @@ internal sealed class UnifiedWorldBundle
     public byte[] Castles { get; set; } = [];
     public byte[] Spells { get; set; } = [];
     public byte[] EffectsOverTime { get; set; } = [];
+    public byte[] GlobalQuests { get; set; } = [];
+    /// <summary>INI sources of the scenario catalog, keyed by file name.</summary>
+    public IReadOnlyDictionary<string, byte[]> Scenarios { get; set; } = new Dictionary<string, byte[]>();
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

@@ -51,7 +51,9 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["objects.json"] = NormalizeObjects(bundle.Objects, spatial),
             ["castles.json"] = NormalizeCastles(bundle.Castles),
             ["spells.json"] = NormalizeSpells(bundle.Spells),
-            ["effectsovertime.json"] = NormalizeEffectsOverTime(bundle.EffectsOverTime)
+            ["effectsovertime.json"] = NormalizeEffectsOverTime(bundle.EffectsOverTime),
+            ["globalquests.json"] = NormalizeGlobalQuests(bundle.GlobalQuests),
+            ["scenarios.json"] = NormalizeScenarios(bundle.Scenarios)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var payload in payloads)
@@ -322,6 +324,71 @@ internal sealed class UnifiedWorldRuntimeDataService
             new { Schema = 1, Catalog = "effectsovertime", Items = items },
             new JsonSerializerOptions { WriteIndented = true });
     }
+
+    private static byte[] NormalizeGlobalQuests(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "globalquests", Count = 0, Items = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Clamp(ParseInt(Get(init, "NumGlobalQuest")), 0, 100);
+        var items = new List<Dictionary<string, object?>>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var section = GetSection(sections, "GlobalQuest" + index.ToString(CultureInfo.InvariantCulture));
+            items.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["Index"] = index,
+                ["Name"] = Get(section, "Name"),
+                ["GatheringThreshold"] = ParseInt(Get(section, "GatheringThreshold")),
+                ["GatheringInitialInstallments"] = ParseInt(Get(section, "GatheringInitialInstallments")),
+                ["BossIndexes"] = ReadDashShorts(Get(section, "BossIndex")),
+                // El DAT solo trae BossSpawnMap: el runtime lee BossSpawnSector
+                // (queda en 0, comportamiento legacy) y el mapa se conserva como
+                // provenance.
+                ["BossSpawnSector"] = ParseInt(Get(section, "BossSpawnSector")),
+                ["BossSpawnMap"] = ParseInt(Get(section, "BossSpawnMap")),
+                ["BossSpawnTopLeftX"] = ParseInt(Get(section, "BossSpawnPositionTopLeftX")),
+                ["BossSpawnTopLeftY"] = ParseInt(Get(section, "BossSpawnPositionTopLeftY")),
+                ["BossSpawnBottomRightX"] = ParseInt(Get(section, "BossSpawnPositionBottomRightX")),
+                ["BossSpawnBottomRightY"] = ParseInt(Get(section, "BossSpawnPositionBottomRightY")),
+                ["FinishOnThresholdReach"] = ParseInt(Get(section, "FinishOnThresholdReach")) != 0,
+                // Se emite el string crudo del DAT y se parsea en el loader.
+                ["StartDate"] = Get(section, "StartDate"),
+                ["EndDate"] = Get(section, "EndDate"),
+                ["ObjectIndex"] = ParseInt(Get(section, "ObjectIndex"))
+            });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "globalquests", Count = count, Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static byte[] NormalizeScenarios(IReadOnlyDictionary<string, byte[]> scenarios)
+    {
+        // El servidor reconstruye el IniFile desde Sections y reutiliza su
+        // parseo tipado; se conservan todas las claves, incluidas las que el
+        // runtime todavia no consume.
+        var items = scenarios
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => new { Name = Path.GetFileNameWithoutExtension(pair.Key), Sections = ParseIni(pair.Value) })
+            .ToArray();
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "scenarios", Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static short[] ReadDashShorts(string value) => value
+        .Split('-', StringSplitOptions.RemoveEmptyEntries)
+        .Select(ParseInt)
+        .Where(number => number > 0)
+        .Select(number => (short)Math.Clamp(number, 0, short.MaxValue))
+        .ToArray();
 
     private static byte[] NormalizeSpells(byte[] payload)
     {

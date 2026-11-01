@@ -86,11 +86,31 @@ internal sealed class WorldEditorSession
             File.Exists(Path.Combine(dat, "PhoenixMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "PhoenixMapPool.dat")) : [],
             ReadData(dat, "Eventos.dat"), ReadData(dat, "Tesoros.dat"), ReadData(dat, "Quests.DAT"),
             ReadData(dat, "NPCs.dat"), ReadData(dat, "obj.dat"), ReadData(dat, "Castles.json"),
-            ReadData(dat, "Hechizos.dat"), ReadData(dat, "EffectsOverTime.dat"));
+            ReadData(dat, "Hechizos.dat"), ReadData(dat, "EffectsOverTime.dat"),
+            ReadData(dat, "GlobalQuests.dat"), ReadScenarios(dat));
     }
 
     private static byte[] ReadData(string directory, string fileName) =>
         File.Exists(Path.Combine(directory, fileName)) ? File.ReadAllBytes(Path.Combine(directory, fileName)) : [];
+
+    /// <summary>
+    /// <c>ScenarioStore.Load</c> solo lee estos cuatro INI; el editor publica
+    /// exactamente esa lista para preservar el comportamiento del servidor
+    /// (por ejemplo, <c>RoomRush.ini</c> existe pero no se referencia).
+    /// </summary>
+    private static IReadOnlyDictionary<string, byte[]> ReadScenarios(string datDirectory)
+    {
+        var directory = Path.Combine(datDirectory, "Scenarios");
+        var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in new[] { "DeathMatch.ini", "NavalBattle.ini", "NpcHunt.ini", "snakes.ini" })
+        {
+            var path = Path.Combine(directory, fileName);
+            if (File.Exists(path))
+                result[fileName] = File.ReadAllBytes(path);
+        }
+
+        return result;
+    }
 
     public UnifiedWorldBundle CompileStitchedWorldBundle() => CompileUnifiedWorldBundle(true);
 

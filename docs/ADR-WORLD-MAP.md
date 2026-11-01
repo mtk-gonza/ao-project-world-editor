@@ -15,8 +15,9 @@ entrada de compilación; ningún servicio runtime vuelve a resolver mapas vecino
 ni abre esos archivos fuente.
 
 Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects`,
-`Castles`, `Spells` y `EffectsOverTime` se generan como sidecars en
-`world/runtime-data/`, junto con un `manifest.json` de hashes SHA-256. Esto evita inflar `bundle.aog` y evita que el
+`Castles`, `Spells`, `EffectsOverTime`, `GlobalQuests` y `Scenarios` se generan
+como sidecars en `world/runtime-data/`, junto con un `manifest.json` de hashes
+SHA-256. Esto evita inflar `bundle.aog` y evita que el
 servidor reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas
 antiguas quedan solo como fallback de compatibilidad.
 
@@ -818,3 +819,35 @@ resto de los catálogos (1:1, derivados tipados, claves crudas conservadas).
 **Consecuencia:** el servidor deja de depender de `Dat/Hechizos.dat` y
 `Dat/EffectsOverTime.dat`; todavía quedan catálogos cuyos lectores apuntan a
 `Dat/` antes de poder borrar `ao-project-resources/Dat`.
+
+## ADR-WM-037: quests globales y escenarios como catálogos canónicos
+
+**Estado:** aceptado 2026-11-01.
+
+**Decisión:** `GlobalQuests.dat` y el directorio `Scenarios/` dejan de leerse
+desde `DatDirectory` y se publican como `runtime-data/globalquests.json` y
+`runtime-data/scenarios.json`.
+
+- `GlobalQuestStore` acepta un payload `byte[]` y deserializa
+  `GlobalQuestCatalogDocument`. Cada ítem conserva los campos tipados y el
+  `BossSpawnMap` original como provenance. El runtime sigue leyendo
+  `BossSpawnSector` (el DAT no define la clave, queda en 0), por lo que el spawn
+  de bosses conserva exactamente el comportamiento legacy. `StartDate`/`EndDate`
+  se emiten como el string crudo del DAT y se parsean en el loader.
+- `ScenarioStore.LoadBytes` reconstruye un `IniFile` desde las secciones
+  normalizadas (`IniFile.FromSections`) y reutiliza el parseo tipado. El editor
+  emite exactamente los cuatro INI que lee el servidor (`DeathMatch.ini`,
+  `NavalBattle.ini`, `NpcHunt.ini`, `snakes.ini`); `RoomRush.ini` existe pero no
+  se referencia en código y no se publica.
+- Los dos estados mutables que vivían en `Dat/` se mueven a `data/state/`:
+  `GlobalQuests.state.json` → `data/state/globalquests.json` y
+  `CollectibleCards.json` → `data/state/collectiblecards.json`. El estado de
+  gameplay nunca se escribe en los catálogos ni en `Dat/`.
+- Efecto medido en el WORLD regenerado: `bundle.aog` no cambia (byte-idéntico,
+  SHA-256 `1F1DBD70...`); se añaden `globalquests.json` (~2.3 KB) y
+  `scenarios.json` (~13.7 KB) y sus hashes en `runtime-data/manifest.json`.
+
+**Consecuencia:** el servidor deja de depender de `Dat/GlobalQuests.dat` y
+`Dat/Scenarios/`; `ReferenceConfig` todavía lee `Dat/Collectiblecards.dat` para
+los bonos de cartas, que se migrarán en el lote de configuración antes de borrar
+`ao-project-resources/Dat`.

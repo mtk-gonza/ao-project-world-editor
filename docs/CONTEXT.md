@@ -195,8 +195,8 @@ Cliente y servidor cargan el runtime desde `world` sin reabrir los sectores para
 El bundle v6 ya no contiene los payloads fuente de los sectores (ADR-WM-034). Los
 catálogos grandes de gameplay se generan aparte en `world/runtime-data/`:
 `events.json`, `treasures.json`, `quests.json`, `npcs.json`, `objects.json`,
-`castles.json`, `spells.json`, `effectsovertime.json` y `manifest.json` con hashes
-SHA-256.
+`castles.json`, `spells.json`, `effectsovertime.json`, `globalquests.json`,
+`scenarios.json` y `manifest.json` con hashes SHA-256.
 
 Cada catálogo es un documento JSON versionado con la forma
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` y propiedades en PascalCase. El

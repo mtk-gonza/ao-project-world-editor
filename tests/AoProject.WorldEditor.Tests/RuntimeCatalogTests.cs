@@ -35,7 +35,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -105,7 +107,9 @@ public sealed class RuntimeCatalogTests
                     """),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -166,7 +170,9 @@ public sealed class RuntimeCatalogTests
                 Objects = payload.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -229,7 +235,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -298,7 +306,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -373,7 +383,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -414,7 +426,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[{\"Id\":3,\"Name\":\"Castle\"}]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -463,7 +477,9 @@ public sealed class RuntimeCatalogTests
                     """),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -532,7 +548,9 @@ public sealed class RuntimeCatalogTests
                 Objects = "# objects"u8.ToArray(),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -618,7 +636,9 @@ public sealed class RuntimeCatalogTests
                     """),
                 Castles = "[]"u8.ToArray(),
                 Spells = "# spells"u8.ToArray(),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
             bundle.Add(new UnifiedWorldMap(400, 200, 0));
             bundle.SetPlacements(
@@ -717,7 +737,9 @@ public sealed class RuntimeCatalogTests
                     en_Nombre=Magic Dart
                     en_Desc=Deals 5 to 10 hit points to the target.
                     """),
-                EffectsOverTime = "# eot"u8.ToArray()
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -799,7 +821,9 @@ public sealed class RuntimeCatalogTests
                     Limit=3
                     Override=0
                     BuffType=5
-                    """)
+                    """),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -824,6 +848,156 @@ public sealed class RuntimeCatalogTests
             Assert.Equal(5, trap.GetProperty("Type").GetInt32());
             Assert.Equal(1, trap.GetProperty("SubType").GetInt32());
             Assert.False(trap.GetProperty("Override").GetBoolean());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_converts_legacy_global_quests_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-globalquests-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = Encoding.UTF8.GetBytes("""
+                    ' encabezado de comentarios del legacy
+
+                    [INIT]
+                    NumGlobalQuest=2
+
+                    [GlobalQuest1]
+                    Name=Rescatando la Navidad
+                    GatheringThreshold=500000
+                    GatheringInitialInstallments=2500
+                    BossSpawnMap=1
+                    BossSpawnPositionBottomRightX=55
+                    BossSpawnPositionBottomRightY=55
+                    BossSpawnPositionTopLeftX=45
+                    BossSpawnPositionTopLeftY=45
+                    BossIndex=1600
+                    FinishOnThresholdReach=0
+                    StartDate=2025-12-23 21:00:00
+                    EndDate=2026-01-01 21:00:00
+                    ObjectIndex=6233
+
+                    [GlobalQuest2]
+                    Name=
+                    """),
+                Scenarios = new Dictionary<string, byte[]>()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "globalquests.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal(1, rootElement.GetProperty("Schema").GetInt32());
+            Assert.Equal("globalquests", rootElement.GetProperty("Catalog").GetString());
+            // NumGlobalQuest manda: se conservan las secciones sin Name.
+            Assert.Equal(2, rootElement.GetProperty("Count").GetInt32());
+            Assert.Equal(2, rootElement.GetProperty("Items").GetArrayLength());
+
+            var quest = rootElement.GetProperty("Items")[0];
+            Assert.Equal(1, quest.GetProperty("Index").GetInt32());
+            Assert.Equal("Rescatando la Navidad", quest.GetProperty("Name").GetString());
+            Assert.Equal(500000, quest.GetProperty("GatheringThreshold").GetInt32());
+            Assert.Equal(2500, quest.GetProperty("GatheringInitialInstallments").GetInt32());
+            Assert.Equal(1600, quest.GetProperty("BossIndexes")[0].GetInt32());
+            // El DAT trae BossSpawnMap: se conserva como provenance.
+            Assert.Equal(1, quest.GetProperty("BossSpawnMap").GetInt32());
+            Assert.Equal(0, quest.GetProperty("BossSpawnSector").GetInt32());
+            Assert.Equal(45, quest.GetProperty("BossSpawnTopLeftX").GetInt32());
+            Assert.Equal(55, quest.GetProperty("BossSpawnBottomRightY").GetInt32());
+            Assert.False(quest.GetProperty("FinishOnThresholdReach").GetBoolean());
+            Assert.Equal("2025-12-23 21:00:00", quest.GetProperty("StartDate").GetString());
+            Assert.Equal("2026-01-01 21:00:00", quest.GetProperty("EndDate").GetString());
+            Assert.Equal(6233, quest.GetProperty("ObjectIndex").GetInt32());
+
+            var empty = rootElement.GetProperty("Items")[1];
+            Assert.Equal(2, empty.GetProperty("Index").GetInt32());
+            Assert.Equal("", empty.GetProperty("Name").GetString());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_converts_legacy_scenario_ini_files_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-scenarios-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray(),
+                GlobalQuests = "# global quests"u8.ToArray(),
+                Scenarios = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["DeathMatch.ini"] = Encoding.UTF8.GetBytes("""
+                        [INIT]
+                        MapNumber=49
+                        TargetScore=100
+                        MaxTime=300
+                        PlayerRespawnTime=2
+                        SpawnItems=1
+                        PlayerAreaIncreaseModifier=10
+                        MinArenaSize=8
+                        RingLimiterHItemID=3763
+
+                        [FORBIDDEN]
+                        Count=1
+                        ItemId1=36
+
+                        [SpawnItem1]
+                        ItemId=891
+                        ItemCount=30
+                        StackCount=5
+                        InitialStacks=4
+                        SpawnInterval=10
+                        """)
+                }
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "scenarios.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal(1, rootElement.GetProperty("Schema").GetInt32());
+            Assert.Equal("scenarios", rootElement.GetProperty("Catalog").GetString());
+            var items = rootElement.GetProperty("Items");
+            Assert.Equal(1, items.GetArrayLength());
+
+            var deathMatch = items[0];
+            Assert.Equal("DeathMatch", deathMatch.GetProperty("Name").GetString());
+            var init = deathMatch.GetProperty("Sections").GetProperty("INIT");
+            Assert.Equal("49", init.GetProperty("MapNumber").GetString());
+            // Las claves que el runtime no consume se conservan 1:1.
+            Assert.Equal("3763", init.GetProperty("RingLimiterHItemID").GetString());
+            var spawn = deathMatch.GetProperty("Sections").GetProperty("SpawnItem1");
+            Assert.Equal("891", spawn.GetProperty("ItemId").GetString());
+            Assert.Equal("5", spawn.GetProperty("StackCount").GetString());
         }
         finally
         {
