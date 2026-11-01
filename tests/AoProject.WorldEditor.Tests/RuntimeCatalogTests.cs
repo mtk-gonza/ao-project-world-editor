@@ -415,4 +415,246 @@ public sealed class RuntimeCatalogTests
             try { Directory.Delete(root.FullName, true); } catch (IOException) { }
         }
     }
+
+    [Fact]
+    public void Runtime_data_preserves_client_only_object_and_localization_fields()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-objects-client-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumOBJs=1
+
+                    [OBJ1]
+                    Name=Iglesia
+                    ObjType=1
+                    Apuñala=1
+                    Peso=10
+                    Permanente=4
+                    NoWiki=1
+                    PuntosCofre=1
+                    LightRadius=160
+                    LightColorR=0.2
+                    LightFlickerEnabled=1
+                    LocaleID=37
+                    en_Name=Church
+                    en_Info=Church information
+                    """),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "objects.json")));
+            var item = document.RootElement.GetProperty("Items")[0];
+            // La clave real del DAT lleva enie; antes se leia "Apunala".
+            Assert.True(item.GetProperty("Stabs").GetBoolean());
+            Assert.Equal(10, item.GetProperty("Peso").GetInt32());
+            Assert.Equal(4, item.GetProperty("Permanente").GetInt32());
+            Assert.True(item.GetProperty("NoWiki").GetBoolean());
+            Assert.True(item.GetProperty("PuntosCofre").GetBoolean());
+            Assert.Equal(160, item.GetProperty("LightRadius").GetInt32());
+            Assert.Equal(0.2, item.GetProperty("LightColorR").GetDouble(), 3);
+            Assert.True(item.GetProperty("LightFlickerEnabled").GetBoolean());
+            Assert.Equal(37, item.GetProperty("LocaleID").GetInt32());
+            var localization = item.GetProperty("Localization").GetProperty("en");
+            Assert.Equal("Church", localization.GetProperty("Name").GetString());
+            Assert.Equal("Church information", localization.GetProperty("Info").GetString());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_preserves_client_only_npc_and_quest_fields()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-npc-quest-client-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumQuests=1
+
+                    [QUEST1]
+                    Nombre=Prueba
+                    DescAudio=1048
+                    DescFinalAudio=1049
+                    NoWiki=1
+                    RequiredFactionScore=2
+                    RequiredKills=1
+                    RequiredKill1=5-3
+                    en_Nombre=Test
+                    """),
+                Npcs = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumNPCs=1
+
+                    [NPC1]
+                    Name=Comerciante
+                    DescClose=Adios
+                    WikiSellerType=Pociones
+                    Miedo=5
+                    NpcFaceGrh=7016
+                    BodyIdle=6235
+                    NoMapInfo=1
+                    fr_Name=Marchand
+                    """),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+            var data = Path.Combine(root.FullName, "runtime-data");
+
+            using (var npcs = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "npcs.json"))))
+            {
+                var npc = npcs.RootElement.GetProperty("Items")[0];
+                Assert.Equal("Adios", npc.GetProperty("DescClose").GetString());
+                Assert.Equal("Pociones", npc.GetProperty("WikiSellerType").GetString());
+                Assert.Equal(5, npc.GetProperty("Miedo").GetInt32());
+                Assert.Equal(7016, npc.GetProperty("NpcFaceGrh").GetInt32());
+                Assert.Equal(6235, npc.GetProperty("BodyIdle").GetInt32());
+                Assert.True(npc.GetProperty("NoMapInfo").GetBoolean());
+                Assert.Equal("Marchand", npc.GetProperty("Localization").GetProperty("fr").GetProperty("Name").GetString());
+            }
+
+            using (var quests = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "quests.json"))))
+            {
+                var quest = quests.RootElement.GetProperty("Items")[0];
+                Assert.Equal(1048, quest.GetProperty("DescAudio").GetInt32());
+                Assert.Equal(1049, quest.GetProperty("DescFinalAudio").GetInt32());
+                Assert.True(quest.GetProperty("NoWiki").GetBoolean());
+                Assert.Equal(2, quest.GetProperty("RequiredFactionScore").GetInt32());
+                Assert.Equal(1, quest.GetProperty("RequiredKillCount").GetInt32());
+                Assert.Equal(5, quest.GetProperty("RequiredKillTargets")[0].GetProperty("Index").GetInt32());
+                Assert.Equal(3, quest.GetProperty("RequiredKillTargets")[0].GetProperty("Amount").GetInt32());
+                Assert.Equal("Test", quest.GetProperty("Localization").GetProperty("en").GetProperty("Nombre").GetString());
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_resolves_legacy_maps_to_world_coordinates()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-spatial-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = Encoding.UTF8.GetBytes("""
+                    [Tesoros]
+                    CantidadMapas=1
+                    Mapa1=400
+                    TiposDeTesoros=1
+                    Tesoro1=100-5
+                    """),
+                Quests = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumQuests=1
+
+                    [QUEST1]
+                    Nombre=Global
+                    PosMap=400
+                    """),
+                Npcs = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumNPCs=1
+
+                    [NPC1]
+                    Name=Barquero
+                    MapTargetEntry=400
+                    MapTargetEntryX=5
+                    MapTargetEntryY=6
+                    CityCount=1
+                    City1=Ciudad-400-10-20-100
+                    """),
+                Objects = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumOBJs=1
+
+                    [OBJ1]
+                    Name=Pasaje
+                    ObjType=36
+                    SectorId=399
+                    X=50
+                    Y=60
+                    """),
+                Castles = "[]"u8.ToArray()
+            };
+            bundle.Add(new UnifiedWorldMap(400, 200, 0));
+            bundle.SetPlacements(
+            [
+                new GlobalSectorPlacement(399, new GlobalChunkCoordinate(0, 0), "surface"),
+                new GlobalSectorPlacement(400, new GlobalChunkCoordinate(1, 0), "surface")
+            ]);
+            bundle.SetSectorFloors(
+            [
+                new KeyValuePair<short, int>(399, 0),
+                new KeyValuePair<short, int>(400, 0)
+            ]);
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+            var data = Path.Combine(root.FullName, "runtime-data");
+
+            using (var treasures = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "treasures.json"))))
+            {
+                var areas = treasures.RootElement.GetProperty("TreasureAreas");
+                Assert.Equal(1, areas.GetArrayLength());
+                Assert.Equal(400, areas[0].GetProperty("SectorId").GetInt32());
+                Assert.Equal(0, areas[0].GetProperty("FloorZ").GetInt32());
+                Assert.Equal(75, areas[0].GetProperty("MinX").GetInt32());
+                Assert.Equal(174, areas[0].GetProperty("MaxX").GetInt32());
+                Assert.Equal(99, areas[0].GetProperty("MaxY").GetInt32());
+                // La clave legacy se conserva para provenance.
+                Assert.Equal(400, treasures.RootElement.GetProperty("TreasureSectors")[0].GetInt32());
+            }
+
+            using (var objects = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "objects.json"))))
+            {
+                var destination = objects.RootElement.GetProperty("Items")[0].GetProperty("DestinationGlobal");
+                Assert.Equal(0, destination.GetProperty("FloorZ").GetInt32());
+                Assert.Equal(49, destination.GetProperty("GlobalX").GetInt32());
+                Assert.Equal(59, destination.GetProperty("GlobalY").GetInt32());
+            }
+
+            using (var quests = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "quests.json"))))
+            {
+                Assert.Equal(0, quests.RootElement.GetProperty("Items")[0].GetProperty("PosFloorZ").GetInt32());
+            }
+
+            using (var npcs = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(data, "npcs.json"))))
+            {
+                var npc = npcs.RootElement.GetProperty("Items")[0];
+                var city = npc.GetProperty("TransportCities")[0];
+                Assert.Equal(84, city.GetProperty("Global").GetProperty("GlobalX").GetInt32());
+                Assert.Equal(19, city.GetProperty("Global").GetProperty("GlobalY").GetInt32());
+                var target = npc.GetProperty("TargetGlobal");
+                Assert.Equal(79, target.GetProperty("GlobalX").GetInt32());
+                Assert.Equal(5, target.GetProperty("GlobalY").GetInt32());
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
 }

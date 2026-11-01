@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AoProject.WorldEditor.Application;
 using AoProject.WorldEditor.Domain;
 
 namespace AoProject.WorldEditor.Infrastructure;
@@ -10,13 +11,14 @@ internal sealed class GlobalSpecialManifestService
     public byte[] TransformUnderworld(byte[] source, UnifiedWorldBundle bundle)
     {
         if (source.Length == 0) return [];
+        var spatial = new WorldSpatialResolver(bundle);
         var sections = ReadSections(source);
         var portals = sections
             .Where(item => item.Name.StartsWith("Portal", StringComparison.OrdinalIgnoreCase))
             .Select(item => new
             {
-                source = Position(item.Values, "SourceMap", "SourceX", "SourceY", bundle),
-                destination = Position(item.Values, "DestinationMap", "DestinationX", "DestinationY", bundle)
+                source = Position(item.Values, "SourceMap", "SourceX", "SourceY", spatial),
+                destination = Position(item.Values, "DestinationMap", "DestinationX", "DestinationY", spatial)
             }).ToArray();
         var init = sections.FirstOrDefault(item => item.Name.Equals("INIT", StringComparison.OrdinalIgnoreCase));
         return JsonSerializer.SerializeToUtf8Bytes(new
@@ -32,13 +34,14 @@ internal sealed class GlobalSpecialManifestService
     public byte[] TransformPhoenix(byte[] source, UnifiedWorldBundle bundle)
     {
         if (source.Length == 0) return [];
+        var spatial = new WorldSpatialResolver(bundle);
         var sections = ReadSections(source);
         var maps = sections.FirstOrDefault(item => item.Name.Equals("Maps", StringComparison.OrdinalIgnoreCase));
         var areas = maps.Values
             .Where(item => item.Key.StartsWith("Map", StringComparison.OrdinalIgnoreCase))
             .Select(item => short.TryParse(item.Value, out var id) ? id : (short)0)
             .Where(id => id > 0).Distinct()
-            .Select(id => Area(id, bundle)).ToArray();
+            .Select(id => Area(id, spatial)).ToArray();
         return JsonSerializer.SerializeToUtf8Bytes(new
         {
             version = 1,
@@ -48,53 +51,34 @@ internal sealed class GlobalSpecialManifestService
     }
 
     private static object Position(IReadOnlyDictionary<string, string> values,
-        string mapKey, string xKey, string yKey, UnifiedWorldBundle bundle)
+        string mapKey, string xKey, string yKey, WorldSpatialResolver spatial)
     {
         var map = ReadShort(values, mapKey);
         var x = ReadInt(values, xKey);
         var y = ReadInt(values, yKey);
-        return Resolve(map, x, y, bundle, mapKey);
+        return Resolve(map, x, y, spatial, mapKey);
     }
 
-    private static object Area(short sectorId, UnifiedWorldBundle bundle)
+    private static object Area(short sectorId, WorldSpatialResolver spatial)
     {
-        if (!bundle.Placements.TryGetValue(sectorId, out var placement) ||
-            !bundle.SectorFloors.TryGetValue(sectorId, out var floorZ) ||
-            !bundle.Floors.TryGetValue(floorZ, out var floor))
+        if (!spatial.TryResolveArea(sectorId, out var area))
             throw new InvalidDataException($"Pool Phoenix referencia el sector {sectorId} sin placement global.");
-        var min = GlobalTile(placement, 1, 1, bundle);
-        var max = GlobalTile(placement, WorldSector.Width, WorldSector.Height, bundle);
         return new
         {
-            floorZ,
-            minGlobalX = Math.Max(0, min.X),
-            minGlobalY = Math.Max(0, min.Y),
-            maxGlobalX = Math.Min(floor.Width - 1, max.X),
-            maxGlobalY = Math.Min(floor.Height - 1, max.Y)
+            floorZ = area.FloorZ,
+            minGlobalX = area.MinX,
+            minGlobalY = area.MinY,
+            maxGlobalX = area.MaxX,
+            maxGlobalY = area.MaxY
         };
     }
 
     private static object Resolve(short sectorId, int localX, int localY,
-        UnifiedWorldBundle bundle, string field)
+        WorldSpatialResolver spatial, string field)
     {
-        if (!bundle.Placements.TryGetValue(sectorId, out var placement) ||
-            !bundle.SectorFloors.TryGetValue(sectorId, out var floorZ) ||
-            !bundle.Floors.TryGetValue(floorZ, out var floor))
+        if (!spatial.TryResolve(sectorId, localX, localY, out var point))
             throw new InvalidDataException($"Pool especial referencia {field} del sector {sectorId} sin placement global.");
-        var global = GlobalTile(placement, localX, localY, bundle);
-        if (global.X < 0 || global.Y < 0 || global.X >= floor.Width || global.Y >= floor.Height)
-            throw new InvalidDataException($"Pool especial referencia un tile fuera de Z={floorZ}: ({global.X},{global.Y}).");
-        return new { floorZ, globalX = global.X, globalY = global.Y };
-    }
-
-    private static (int X, int Y) GlobalTile(GlobalSectorPlacement placement, int x, int y,
-        UnifiedWorldBundle bundle)
-    {
-        var floorZ = bundle.SectorFloors[placement.SectorId];
-        var minX = bundle.Placements.Values.Where(item => bundle.SectorFloors[item.SectorId] == floorZ).Min(item => item.Chunk.X);
-        var minY = bundle.Placements.Values.Where(item => bundle.SectorFloors[item.SectorId] == floorZ).Min(item => item.Chunk.Y);
-        return ((placement.Chunk.X - minX) * GlobalChunkGeometry.WidthTiles + x - 1 - placement.StitchX,
-            (placement.Chunk.Y - minY) * GlobalChunkGeometry.HeightTiles + y - 1 - placement.StitchY);
+        return new { floorZ = point.FloorZ, globalX = point.GlobalX, globalY = point.GlobalY };
     }
 
     private static short ReadShort(IReadOnlyDictionary<string, string> values, string key) =>

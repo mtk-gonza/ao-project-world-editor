@@ -706,3 +706,38 @@ como categorías especiales para retorno, instancias o eventos y no se inventan
 seam, se conserva la primera salida seleccionada y se descartan las siguientes,
 aunque difieran en tipo o destino. Esto evita que un `CrossFloor` válido quede
 acompañado por un `Internal` duplicado en la lista física de exits.
+
+## ADR-WM-033: parseo 1:1 de los DAT y referencias legacy resueltas al WORLD
+
+**Decisión:** la importación de los catálogos de gameplay es 1:1 con los DAT.
+Ninguna clave de `obj.dat`, `npcs.dat`, `Quests.DAT`, `Tesoros.dat` ni
+`Eventos.dat` puede perderse, aunque el runtime todavía no la consuma:
+
+- Las claves de cliente (render de luz `Light*`, metadatos `LocaleID`,
+  `NoWiki`, `Peso`, `Puntos*`, `Raices`, `TipoRuna`, `CofreIndex`,
+  `CollectibleCardImgPathing`, `ExtraStr`, `Info`, `Permanente`, etc.) se
+  emiten como campos tipados.
+- Las localizaciones (`en/fr/it/pt_*`) se agrupan en un objeto `Localization`
+  por idioma, declarando las claves como datos para que la conversión siga
+  siendo auditable.
+- Se corrige la clave de apuñalar: el DAT usa `Apuñala` (con eñe), no
+  `Apunala` como leían los lectores previos.
+
+Como consecuencia, `El runtime data` deja de ser un subconjunto del DAT y pasa
+a ser una representación completa y versionada del mismo.
+
+**Referencias espaciales:** los campos que apuntan a mapas o coordenadas legacy
+(`MapaN`, `HastaMap/X/Y`, `DesdeMap`, `MapTargetEntry/X/Y`, `CityN`, `PosMap`)
+se conservan para provenance y además se resuelven al contrato del WORLD
+(`FloorZ`, `GlobalX`, `GlobalY`) con `WorldSpatialResolver`, que aplica la misma
+fórmula que `SectorCoordinateService` del servidor:
+
+```
+global = (chunk - minChunkDelPiso) * stride - stitch + local - 1
+```
+
+Los catálogos ganan `TreasureAreas`/`GiftAreas`/`NpcAreas` (áreas globales),
+`DestinationGlobal`/`SourceFloorZ` en objetos, `TargetGlobal` y `Global` por
+ciudad en NPCs, y `PosFloorZ` en quests. El servidor sigue consumiendo en la
+frontera sector (`TreasureStore.CreateTreasureSearch` recibe un adaptador
+WORLD→sector y sortea el tile en coordenadas globales cuando hay áreas).

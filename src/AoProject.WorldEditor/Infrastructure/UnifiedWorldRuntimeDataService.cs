@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AoProject.WorldEditor.Application;
 using AoProject.WorldEditor.Domain;
 
 namespace AoProject.WorldEditor.Infrastructure;
@@ -38,13 +39,16 @@ internal sealed class UnifiedWorldRuntimeDataService
     {
         var directory = Path.Combine(worldDirectory, "runtime-data");
         Directory.CreateDirectory(directory);
+        // Referencias legacy (SectorId/coordenadas) se resuelven al contrato del
+        // WORLD al mismo tiempo que se conservan 1:1 los campos originales.
+        var spatial = new WorldSpatialResolver(bundle);
         var payloads = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
         {
             ["events.json"] = NormalizeEvents(bundle.Events),
-            ["treasures.json"] = NormalizeTreasures(bundle.Treasures),
-            ["quests.json"] = NormalizeQuests(bundle.Quests),
-            ["npcs.json"] = NormalizeNpcs(bundle.Npcs),
-            ["objects.json"] = NormalizeObjects(bundle.Objects),
+            ["treasures.json"] = NormalizeTreasures(bundle.Treasures, spatial),
+            ["quests.json"] = NormalizeQuests(bundle.Quests, spatial),
+            ["npcs.json"] = NormalizeNpcs(bundle.Npcs, spatial),
+            ["objects.json"] = NormalizeObjects(bundle.Objects, spatial),
             ["castles.json"] = NormalizeCastles(bundle.Castles)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -82,10 +86,10 @@ internal sealed class UnifiedWorldRuntimeDataService
         }, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static byte[] NormalizeTreasures(byte[] payload)
+    private static byte[] NormalizeTreasures(byte[] payload, WorldSpatialResolver? spatial)
     {
         if (payload.Length == 0)
-            return JsonSerializer.SerializeToUtf8Bytes(new { Schema = 1, Catalog = "treasures", TreasureSectors = Array.Empty<int>(), Treasures = Array.Empty<object>(), GiftSectors = Array.Empty<int>(), Gifts = Array.Empty<object>(), NpcNumbers = Array.Empty<short>(), NpcSectors = Array.Empty<int>() });
+            return JsonSerializer.SerializeToUtf8Bytes(new { Schema = 1, Catalog = "treasures", TreasureSectors = Array.Empty<int>(), TreasureAreas = Array.Empty<object>(), Treasures = Array.Empty<object>(), GiftSectors = Array.Empty<int>(), GiftAreas = Array.Empty<object>(), Gifts = Array.Empty<object>(), NpcNumbers = Array.Empty<short>(), NpcSectors = Array.Empty<int>(), NpcAreas = Array.Empty<object>() });
         if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
             return payload;
 
@@ -102,9 +106,43 @@ internal sealed class UnifiedWorldRuntimeDataService
         return JsonSerializer.SerializeToUtf8Bytes(new
         {
             Schema = 1, Catalog = "treasures", TreasureSectors = treasureSectors,
-            Treasures = treasures, GiftSectors = giftSectors, Gifts = gifts,
-            NpcNumbers = npcNumbers, NpcSectors = npcSectors
+            TreasureAreas = ResolveAreas(spatial, treasureSectors),
+            Treasures = treasures, GiftSectors = giftSectors,
+            GiftAreas = ResolveAreas(spatial, giftSectors),
+            Gifts = gifts,
+            NpcNumbers = npcNumbers, NpcSectors = npcSectors,
+            NpcAreas = ResolveAreas(spatial, npcSectors)
         }, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>Maps legacy a areas globales; omite los que el WORLD no conoce.</summary>
+    private static object[] ResolveAreas(WorldSpatialResolver? spatial, IReadOnlyList<int> sectors)
+    {
+        if (spatial is null || sectors.Count == 0) return [];
+        var areas = new List<object>(sectors.Count);
+        foreach (var sector in sectors)
+        {
+            if (sector is <= 0 or > short.MaxValue) continue;
+            if (spatial.TryResolveArea((short)sector, out var area))
+                areas.Add(new { area.SectorId, area.FloorZ, area.MinX, area.MinY, area.MaxX, area.MaxY });
+        }
+        return areas.ToArray();
+    }
+
+    /// <summary>Resuelve un tile legacy al contrato global; null si no aplica.</summary>
+    private static SpatialPoint? ResolvePoint(WorldSpatialResolver? spatial, int map, int x, int y)
+    {
+        if (spatial is null || map is <= 0 or > short.MaxValue || x <= 0 || y <= 0) return null;
+        return spatial.TryResolve((short)map, x, y, out var point) ? point : null;
+    }
+
+    /// <summary>Piso global de un mapa legacy; null si el WORLD no lo conoce.</summary>
+    private static int? ResolveFloor(WorldSpatialResolver? spatial, int map)
+    {
+        if (spatial is null || map is <= 0 or > short.MaxValue) return null;
+        return spatial.Contains((short)map) && spatial.TryGetFloorZ((short)map, out var floorZ)
+            ? floorZ
+            : null;
     }
 
     private static byte[] NormalizeEvents(byte[] payload)
@@ -203,7 +241,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         _ => null
     };
 
-    private static byte[] NormalizeNpcs(byte[] payload)
+    private static byte[] NormalizeNpcs(byte[] payload, WorldSpatialResolver? spatial)
     {
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
@@ -222,6 +260,9 @@ internal sealed class UnifiedWorldRuntimeDataService
 
             var spellCount = Math.Clamp(Int(section, "LanzaSpells"), 0, 32);
             var animationCount = Math.Clamp(Int(section, "Animaciones"), 0, 32);
+            var targetMap = Short(section, "MapTargetEntry");
+            var targetX = Byte(section, "MapTargetEntryX", 50);
+            var targetY = Byte(section, "MapTargetEntryY", 50);
 
             return new
             {
@@ -348,7 +389,30 @@ internal sealed class UnifiedWorldRuntimeDataService
                 SectorTargetEntryY = Byte(section, "MapTargetEntryY", 50),
                 ArenaEnabled = Int(section, "ArenaEnabled") != 0,
                 TransporterLevel = Int(section, "TransporterLevel"),
-                TransportCities = ReadTransportCities(section)
+                TransportCities = ReadTransportCities(section, spatial),
+                TargetGlobal = targetMap > 0 ? ResolvePoint(spatial, targetMap, targetX, targetY) : null,
+
+                // Claves conservadas 1:1 aunque el cliente sea quien las use:
+                // cuerpos alternativos, metadatos y localizacion.
+                Ataque1 = Short(section, "Ataque1"),
+                Ataque2 = Short(section, "Ataque2"),
+                AttackFreeNpc = Int(section, "AttackFreeNpc") != 0,
+                BodyIdle = Short(section, "BodyIdle"),
+                BodyOnLand = Short(section, "BodyOnLand"),
+                BodyOnWater = Short(section, "BodyOnWater"),
+                BodyOnWaterIdle = Short(section, "BodyOnWaterIdle"),
+                CambioAIdle = Int(section, "CambioAIdle"),
+                DescClose = Get(section, "DescClose"),
+                LocaleID = Int(section, "LocaleID"),
+                Miedo = Int(section, "Miedo"),
+                Minimap = Int(section, "Minimap") != 0,
+                NoMapInfo = Int(section, "NoMapInfo") != 0,
+                NoWiki = Int(section, "NoWiki") != 0,
+                NpcFaceGrh = Int(section, "NpcFaceGrh"),
+                PosOrig = Int(section, "PosOrig"),
+                SubeSupervivencia = Int(section, "SubeSupervivencia") != 0,
+                WikiSellerType = Get(section, "WikiSellerType"),
+                Localization = ReadLocalization(section, NpcLocalizationKeys)
             };
         }).Where(npc => npc is not null).Select(npc => npc!).ToArray();
 
@@ -399,20 +463,24 @@ internal sealed class UnifiedWorldRuntimeDataService
             .Select(index => new { NpcIndex = Short(section, "CI" + index), Name = Get(section, "CN" + index) })
             .Where(creature => creature.NpcIndex > 0 && creature.Name.Length > 0).ToArray();
 
-    private static object[] ReadTransportCities(Dictionary<string, string> section)
+    private static object[] ReadTransportCities(Dictionary<string, string> section, WorldSpatialResolver? spatial)
     {
         var cities = new List<object>();
         for (var index = 1; index <= Math.Clamp(Int(section, "CityCount"), 0, 32); index++)
         {
             var parts = Get(section, "City" + index).Split('-');
             if (parts.Length < 5) continue;
+            var sectorId = (short)ParseInt(parts[1]);
+            var x = (byte)Math.Clamp(ParseInt(parts[2]), 0, byte.MaxValue);
+            var y = (byte)Math.Clamp(ParseInt(parts[3]), 0, byte.MaxValue);
             cities.Add(new
             {
-                SectorId = (short)ParseInt(parts[1]),
-                X = (byte)Math.Clamp(ParseInt(parts[2]), 0, byte.MaxValue),
-                Y = (byte)Math.Clamp(ParseInt(parts[3]), 0, byte.MaxValue),
+                SectorId = sectorId,
+                X = x,
+                Y = y,
                 Price = ParseInt(parts[4]),
-                Name = parts[0]
+                Name = parts[0],
+                Global = ResolvePoint(spatial, sectorId, x, y)
             });
         }
         return cities.ToArray();
@@ -479,7 +547,7 @@ internal sealed class UnifiedWorldRuntimeDataService
 
     private static int NormalizeInterval(int value, int fallback) => value > 0 ? value : fallback;
 
-    private static byte[] NormalizeObjects(byte[] payload)
+    private static byte[] NormalizeObjects(byte[] payload, WorldSpatialResolver? spatial)
     {
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
@@ -496,7 +564,7 @@ internal sealed class UnifiedWorldRuntimeDataService
             var section = GetSection(sections, "OBJ" + index);
             var name = Get(section, "Name");
             if (name.Length == 0) continue;
-            items.Add(ReadObject(section, (short)index, name));
+            items.Add(ReadObject(section, (short)index, name, spatial));
         }
 
         return JsonSerializer.SerializeToUtf8Bytes(
@@ -505,7 +573,7 @@ internal sealed class UnifiedWorldRuntimeDataService
     }
 
     private static Dictionary<string, object?> ReadObject(
-        Dictionary<string, string> section, short index, string name)
+        Dictionary<string, string> section, short index, string name, WorldSpatialResolver? spatial)
     {
         var objectType = ObjInt(section, "ObjType");
         // FileIO.bas:1448-1455: pasajes, donador y quest guardan el destino en
@@ -521,6 +589,14 @@ internal sealed class UnifiedWorldRuntimeDataService
         var skSastreria = ObjShort(section, "SKSastreria");
         if (skSastreria == 0) skSastreria = ObjShort(section, "SkSastreria");
         var map = (short)Math.Clamp(FirstNonZero(section, "Map", "SectorId"), short.MinValue, short.MaxValue);
+        var desdeMap = ObjShort(section, "DesdeMap");
+        var hastaMap = (short)Math.Clamp(
+            destinationInMap ? FirstNonZero(section, "Map", "SectorId") : ObjInt(section, "HastaMap"),
+            short.MinValue, short.MaxValue);
+        var hastaX = (byte)Math.Clamp(
+            destinationInMap ? FirstNonZero(section, "X") : ObjInt(section, "HastaX"), 0, byte.MaxValue);
+        var hastaY = (byte)Math.Clamp(
+            destinationInMap ? FirstNonZero(section, "Y") : ObjInt(section, "HastaY"), 0, byte.MaxValue);
 
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -587,7 +663,8 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["DwarfClothing"] = ObjInt(section, "RazaEnana") != 0,
             ["DrowClothing"] = ObjInt(section, "RazaDrow") != 0,
             ["StaffPower"] = ObjInt(section, "StaffPower"),
-            ["Stabs"] = ObjInt(section, "Apunala") != 0,
+            // FileIO.bas:1412: la clave del DAT lleva enie (Apuñala), no "Apunala".
+            ["Stabs"] = ObjInt(section, "Apuñala") != 0,
             ["Slashes"] = ObjInt(section, "Acuchilla") != 0,
             ["Guante"] = ObjInt(section, "Guante") != 0,
             ["TeleportRadius"] = ObjShort(section, "Radio"),
@@ -703,17 +780,14 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["MaxHp"] = ObjShort(section, "MaxHP"),
             ["MinSt"] = ObjShort(section, "MinST"),
             ["MinAgu"] = ObjShort(section, "MinAgu"),
-            ["DesdeMap"] = ObjShort(section, "DesdeMap"),
+            ["DesdeMap"] = desdeMap,
             ["Map"] = map,
-            ["HastaMap"] = (short)Math.Clamp(
-                destinationInMap ? FirstNonZero(section, "Map", "SectorId") : ObjInt(section, "HastaMap"),
-                short.MinValue, short.MaxValue),
-            ["HastaX"] = (byte)Math.Clamp(
-                destinationInMap ? FirstNonZero(section, "X") : ObjInt(section, "HastaX"),
-                0, byte.MaxValue),
-            ["HastaY"] = (byte)Math.Clamp(
-                destinationInMap ? FirstNonZero(section, "Y") : ObjInt(section, "HastaY"),
-                0, byte.MaxValue),
+            ["HastaMap"] = hastaMap,
+            ["HastaX"] = hastaX,
+            ["HastaY"] = hastaY,
+            // Referencias al WORLD resueltas desde las claves legacy de arriba.
+            ["DestinationGlobal"] = ResolvePoint(spatial, hastaMap, hastaX, hastaY),
+            ["SourceFloorZ"] = ResolveFloor(spatial, desdeMap),
             ["SectorId"] = ObjShort(section, "SectorId"),
             ["X"] = (byte)Math.Clamp(ObjInt(section, "X"), 0, byte.MaxValue),
             ["Y"] = (byte)Math.Clamp(ObjInt(section, "Y"), 0, byte.MaxValue),
@@ -762,7 +836,40 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["VGrande"] = ObjInt(section, "VGrande") != 0,
             ["Elfico"] = ObjInt(section, "Elfico") != 0,
             ["Dorada"] = ObjInt(section, "Dorada") != 0,
-            ["Nft"] = ObjInt(section, "NFT") != 0
+            ["Nft"] = ObjInt(section, "NFT") != 0,
+
+            // Claves conservadas 1:1 aunque el runtime no las consuma todavia:
+            // render de luz del cliente, metadatos y localizacion.
+            ["ClientOverwritebody"] = ObjInt(section, "ClientOverwritebody"),
+            ["CofreIndex"] = ObjInt(section, "CofreIndex"),
+            ["CollectibleCardImgPathing"] = Get(section, "CollectibleCardImgPathing"),
+            ["ExtraStr"] = Get(section, "ExtraStr"),
+            ["Info"] = Get(section, "Info"),
+            ["ItemSeasonSpecial"] = ObjInt(section, "ItemSeasonSpecial") != 0,
+            ["LocaleID"] = ObjInt(section, "LocaleID"),
+            ["NoConsumeInCombatZones"] = ObjInt(section, "NoConsumeInCombatZones") != 0,
+            ["NotConsumable"] = ObjInt(section, "NotConsumable") != 0,
+            ["NoWiki"] = ObjInt(section, "NoWiki") != 0,
+            ["NpcOnly"] = ObjInt(section, "NpcOnly") != 0,
+            ["Permanente"] = ObjInt(section, "Permanente"),
+            ["Peso"] = ObjInt(section, "Peso"),
+            ["PuntosBufon"] = ObjInt(section, "PuntosBufón") != 0,
+            ["PuntosBusqueda"] = ObjInt(section, "PuntosBusqueda") != 0,
+            ["PuntosCofre"] = ObjInt(section, "PuntosCofre") != 0,
+            ["PuntosConsejeros"] = ObjInt(section, "PuntosConsejeros") != 0,
+            ["Raices"] = ObjInt(section, "Raices"),
+            ["TipoRuna"] = ObjInt(section, "TipoRuna"),
+            ["LightEnabled"] = ObjInt(section, "LightEnabled") != 0,
+            ["LightRadius"] = ObjInt(section, "LightRadius"),
+            ["LightColorR"] = (float)LegacyDouble(Get(section, "LightColorR")),
+            ["LightColorG"] = (float)LegacyDouble(Get(section, "LightColorG")),
+            ["LightColorB"] = (float)LegacyDouble(Get(section, "LightColorB")),
+            ["LightIntensity"] = (float)LegacyDouble(Get(section, "LightIntensity")),
+            ["LightFlickerEnabled"] = ObjInt(section, "LightFlickerEnabled") != 0,
+            ["LightFlickerSpeed"] = (float)LegacyDouble(Get(section, "LightFlickerSpeed")),
+            ["LightFlickerIntensityAmplitude"] = (float)LegacyDouble(Get(section, "LightFlickerIntensityAmplitude")),
+            ["LightFlickerRadiusAmplitude"] = (float)LegacyDouble(Get(section, "LightFlickerRadiusAmplitude")),
+            ["Localization"] = ReadLocalization(section, ObjectLocalizationKeys)
         };
     }
 
@@ -866,6 +973,49 @@ internal sealed class UnifiedWorldRuntimeDataService
         ["Orco"] = 6
     };
 
+    /// <summary>
+    /// Claves de localizacion de obj.dat. Se declaran como datos para que la
+    /// conversion siga siendo 1:1 y auditable clave por clave.
+    /// </summary>
+    private static readonly (string Code, string Field, string Key)[] ObjectLocalizationKeys =
+    [
+        ("en", "Name", "en_Name"), ("en", "Nombre", "en_Nombre"), ("en", "Texto", "en_Texto"), ("en", "Info", "en_Info"),
+        ("fr", "Name", "fr_Name"), ("fr", "Nombre", "fr_Nombre"), ("fr", "Texto", "fr_Texto"),
+        ("it", "Name", "it_Name"), ("it", "Nombre", "it_Nombre"), ("it", "Texto", "it_Texto"),
+        ("pt", "Name", "pt_Name"), ("pt", "Nombre", "pt_Nombre"), ("pt", "Texto", "pt_Texto")
+    ];
+
+    private static readonly (string Code, string Field, string Key)[] NpcLocalizationKeys =
+    [
+        ("en", "Name", "en_Name"), ("en", "Desc", "en_Desc"), ("en", "DescClose", "en_DescClose"),
+        ("fr", "Name", "fr_Name"), ("fr", "Desc", "fr_Desc"), ("fr", "DescClose", "fr_DescClose"),
+        ("it", "Name", "it_Name"), ("it", "Desc", "it_Desc"), ("it", "DescClose", "it_DescClose"),
+        ("pt", "Name", "pt_Name"), ("pt", "Desc", "pt_Desc"), ("pt", "DescClose", "pt_DescClose")
+    ];
+
+    private static readonly (string Code, string Field, string Key)[] QuestLocalizationKeys =
+    [
+        ("en", "Nombre", "en_Nombre"), ("en", "Desc", "en_Desc"), ("en", "DescFinal", "en_DescFinal"),
+        ("fr", "Nombre", "fr_Nombre"), ("fr", "Desc", "fr_Desc"), ("fr", "DescFinal", "fr_DescFinal"),
+        ("it", "Nombre", "it_Nombre"), ("it", "Desc", "it_Desc"), ("it", "DescFinal", "it_DescFinal"),
+        ("pt", "Nombre", "pt_Nombre"), ("pt", "Desc", "pt_Desc"), ("pt", "DescFinal", "pt_DescFinal")
+    ];
+
+    private static Dictionary<string, Dictionary<string, string>> ReadLocalization(
+        Dictionary<string, string> section, (string Code, string Field, string Key)[] map)
+    {
+        var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var (code, field, key) in map)
+        {
+            var value = Get(section, key);
+            if (value.Length == 0) continue;
+            if (!result.TryGetValue(code, out var fields))
+                result[code] = fields = new Dictionary<string, string>(StringComparer.Ordinal);
+            fields[field] = value;
+        }
+        return result;
+    }
+
     private static byte ClassId(string name) =>
         name.Length > 0 && ObjectClassNames.TryGetValue(name.Trim(), out var id) ? id : (byte)0;
 
@@ -954,7 +1104,7 @@ internal sealed class UnifiedWorldRuntimeDataService
             : 0;
     }
 
-    private static byte[] NormalizeQuests(byte[] payload)
+    private static byte[] NormalizeQuests(byte[] payload, WorldSpatialResolver? spatial)
     {
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
@@ -968,6 +1118,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         var items = Enumerable.Range(1, count).Select(index =>
         {
             var section = GetSection(sections, "QUEST" + index);
+            var posMap = ParseInt(Get(section, "PosMap"));
             return new
             {
                 Index = index,
@@ -999,7 +1150,18 @@ internal sealed class UnifiedWorldRuntimeDataService
                     .Where(value => value > 0)
                     .Select(value => new { Index = value, Amount = (short)1 }).ToArray(),
                 GlobalQuestIndex = ParseInt(Get(section, "GlobalQuestIndex")),
-                GlobalQuestThresholdNeeded = ParseInt(Get(section, "GlobalQuestThresholdNeeded"))
+                GlobalQuestThresholdNeeded = ParseInt(Get(section, "GlobalQuestThresholdNeeded")),
+
+                // Claves conservadas 1:1 aunque el runtime no las consuma todavia.
+                DescAudio = ParseInt(Get(section, "DescAudio")),
+                DescFinalAudio = ParseInt(Get(section, "DescFinalAudio")),
+                NoWiki = ParseInt(Get(section, "NoWiki")) != 0,
+                PosMap = posMap,
+                PosFloorZ = ResolveFloor(spatial, posMap),
+                RequiredFactionScore = ParseInt(Get(section, "RequiredFactionScore")),
+                RequiredKillCount = ParseInt(Get(section, "RequiredKills")),
+                RequiredKillTargets = ReadRequirements(section, "RequiredKills", "RequiredKill"),
+                Localization = ReadLocalization(section, QuestLocalizationKeys)
             };
         }).Where(quest => quest.Name.Length > 0).ToArray();
 
