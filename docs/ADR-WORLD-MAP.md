@@ -14,9 +14,9 @@ sectores CSM y los archivos DAT/INF originales solo sirven como provenance o
 entrada de compilación; ningún servicio runtime vuelve a resolver mapas vecinos
 ni abre esos archivos fuente.
 
-Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects` y
-`Castles` se generan como sidecars en `world/runtime-data/`, junto con un
-`manifest.json` de hashes SHA-256. Esto evita inflar `bundle.aog` y evita que el
+Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects`,
+`Castles`, `Spells` y `EffectsOverTime` se generan como sidecars en
+`world/runtime-data/`, junto con un `manifest.json` de hashes SHA-256. Esto evita inflar `bundle.aog` y evita que el
 servidor reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas
 antiguas quedan solo como fallback de compatibilidad.
 
@@ -787,3 +787,34 @@ ningún manifest y era 100% regenerable desde `Ciudades.Dat`.
 
 **Consecuencia:** se borra `ao-project-resources/world/settlements.json` y las
 auditorías `world/*.tsv` quedan ignoradas por git.
+
+## ADR-WM-036: hechizos y efectos por tiempo como catálogos canónicos
+
+**Estado:** aceptado 2026-11-01.
+
+**Decisión:** `Hechizos.dat` y `EffectsOverTime.dat` dejan de leerse desde
+`DatDirectory` y pasan a publicarse como `runtime-data/spells.json` y
+`runtime-data/effectsovertime.json`. El editor sigue siendo el único importador:
+parsea los originales de `reference/Recursos/Dat` con el mismo criterio que el
+resto de los catálogos (1:1, derivados tipados, claves crudas conservadas).
+
+- `SpellStore` y `EffectOverTimeStore` aceptan un payload `byte[]`; si el payload
+  empieza con `{` se deserializa el documento versionado y, si no, se conserva el
+  lector INI transitorio. `GameServer` usa `runtimeData.Spells`/
+  `runtimeData.EffectsOverTime` y sólo cae a `Dat/` cuando el WORLD no trae el
+  sidecar.
+- El catálogo de hechizos incluye las `NumeroHechizos` secciones aunque estén
+  vacías (el servidor enumera `1..N`) y conserva 1:1 las claves que el runtime
+  todavía no consume (`HechizeroMsg`, `TargetMsg`, `PropioMsg`, `IconoIndex`,
+  `NoWiki`, `Resis`, `LightOrbObject`, `LightOrbCastRange`, `CdEffectIve`) junto
+  con la localización `en/pt/fr/it` agrupada en `Localization`.
+- El catálogo de EOT conserva además `AffectedByPhysicalBonus`,
+  `AffectedByPhysicalReduction`, `AffectedBySpeedModifier` y `Limits`, y acepta
+  `SubType`/`Subtype` (el original escribe algunos en minúscula).
+- Efecto medido en el WORLD regenerado: `bundle.aog` no cambia (byte-idéntico,
+  SHA-256 `1F1DBD70…`); se añaden `spells.json` (~1.4 MB) y
+  `effectsovertime.json` (~95 KB) y sus hashes en `runtime-data/manifest.json`.
+
+**Consecuencia:** el servidor deja de depender de `Dat/Hechizos.dat` y
+`Dat/EffectsOverTime.dat`; todavía quedan catálogos cuyos lectores apuntan a
+`Dat/` antes de poder borrar `ao-project-resources/Dat`.

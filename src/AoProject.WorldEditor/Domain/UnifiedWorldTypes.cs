@@ -116,6 +116,8 @@ internal sealed class UnifiedWorldBundle
     public byte[] Npcs { get; set; } = [];
     public byte[] Objects { get; set; } = [];
     public byte[] Castles { get; set; } = [];
+    public byte[] Spells { get; set; } = [];
+    public byte[] EffectsOverTime { get; set; } = [];
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

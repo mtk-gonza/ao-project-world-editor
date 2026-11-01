@@ -187,15 +187,16 @@ grilla determinista del piso virtual `Z=-3`. La incorporacion es transitiva: tam
 se agregan los CSM positivos alcanzables desde esos mapas. Asi, el bundle no deja
 destinos positivos existentes fuera del sistema de coordenadas global.
 
-`bundle.aog` es versión 5. Cada floor es `AOGMAP01` versión 4 y transporta los arrays
+`bundle.aog` es versión 6. Cada floor es `AOGMAP01` versión 4 y transporta los arrays
 completos por tile: gráficos, luces, colores, bloqueo, trigger, entidades, ambiente,
 techos, agua, lava y salidas. El manifiesto conserva por `MapId` todos los campos de
 `SectorInfo`, `MapEnvironment`, `CsmSectorSize`, piso, placement y offsets de stitching.
 Cliente y servidor cargan el runtime desde `world` sin reabrir los sectores para jugar.
-El bundle v5 contiene los payloads fuente de los sectores para preservación y
-auditoría. Los catálogos grandes de gameplay se generan aparte en
-`world/runtime-data/`: `events.json`, `treasures.json`, `quests.json`, `npcs.json`,
-`objects.json`, `castles.json` y `manifest.json` con hashes SHA-256.
+El bundle v6 ya no contiene los payloads fuente de los sectores (ADR-WM-034). Los
+catálogos grandes de gameplay se generan aparte en `world/runtime-data/`:
+`events.json`, `treasures.json`, `quests.json`, `npcs.json`, `objects.json`,
+`castles.json`, `spells.json`, `effectsovertime.json` y `manifest.json` con hashes
+SHA-256.
 
 Cada catálogo es un documento JSON versionado con la forma
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` y propiedades en PascalCase. El

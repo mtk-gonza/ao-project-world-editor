@@ -40,7 +40,9 @@ internal sealed class UnifiedWorldCompiler
         byte[]? quests = null,
         byte[]? npcs = null,
         byte[]? objects = null,
-        byte[]? castles = null)
+        byte[]? castles = null,
+        byte[]? spells = null,
+        byte[]? effectsOverTime = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -140,6 +142,8 @@ internal sealed class UnifiedWorldCompiler
         bundle.Npcs = npcs ?? [];
         bundle.Objects = objects ?? [];
         bundle.Castles = castles ?? [];
+        bundle.Spells = spells ?? [];
+        bundle.EffectsOverTime = effectsOverTime ?? [];
         return bundle;
     }
 

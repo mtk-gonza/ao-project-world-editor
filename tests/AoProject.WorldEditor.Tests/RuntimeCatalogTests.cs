@@ -33,7 +33,9 @@ public sealed class RuntimeCatalogTests
                 Quests = "# quests"u8.ToArray(),
                 Npcs = "# npcs"u8.ToArray(),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -101,7 +103,9 @@ public sealed class RuntimeCatalogTests
                     HastaX=1
                     HastaY=1
                     """),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -160,7 +164,9 @@ public sealed class RuntimeCatalogTests
                 Quests = "# quests"u8.ToArray(),
                 Npcs = "# npcs"u8.ToArray(),
                 Objects = payload.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -221,7 +227,9 @@ public sealed class RuntimeCatalogTests
                     City1=Ciudad-35-50-50-100
                     """),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -288,7 +296,9 @@ public sealed class RuntimeCatalogTests
                 Quests = "# quests"u8.ToArray(),
                 Npcs = "# npcs"u8.ToArray(),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -361,7 +371,9 @@ public sealed class RuntimeCatalogTests
                     """),
                 Npcs = "# npcs"u8.ToArray(),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -400,7 +412,9 @@ public sealed class RuntimeCatalogTests
                 Quests = "# quests"u8.ToArray(),
                 Npcs = "# npcs"u8.ToArray(),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[{\"Id\":3,\"Name\":\"Castle\"}]"u8.ToArray()
+                Castles = "[{\"Id\":3,\"Name\":\"Castle\"}]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -447,7 +461,9 @@ public sealed class RuntimeCatalogTests
                     en_Name=Church
                     en_Info=Church information
                     """),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -514,7 +530,9 @@ public sealed class RuntimeCatalogTests
                     fr_Name=Marchand
                     """),
                 Objects = "# objects"u8.ToArray(),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
 
             new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
@@ -598,7 +616,9 @@ public sealed class RuntimeCatalogTests
                     X=50
                     Y=60
                     """),
-                Castles = "[]"u8.ToArray()
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = "# eot"u8.ToArray()
             };
             bundle.Add(new UnifiedWorldMap(400, 200, 0));
             bundle.SetPlacements(
@@ -651,6 +671,159 @@ public sealed class RuntimeCatalogTests
                 Assert.Equal(79, target.GetProperty("GlobalX").GetInt32());
                 Assert.Equal(5, target.GetProperty("GlobalY").GetInt32());
             }
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_converts_legacy_spell_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-spells-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray(),
+                Spells = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumeroHechizos=3
+
+                    [HECHIZO1]
+                    Nombre=Dardo Magico
+                    Desc=Causa 5 a 10 puntos de dano.
+                    PalabrasMagicas=OHL VOR PEK
+                    HechizeroMsg=Has lanzado Dardo Magico sobre
+                    TargetMsg=lanzo Dardo Magico sobre vos.
+                    IconoIndex=74714
+                    ManaRequerido=10
+                    StaRequerido=5
+                    MinHP=5
+                    MaxHP=10
+                    SubeHP=2
+                    Target=3
+                    TargetEffectType=1
+                    Tipo=1
+                    IsBindable=1
+                    EOTID=2
+                    RequireShield=1
+                    en_Nombre=Magic Dart
+                    en_Desc=Deals 5 to 10 hit points to the target.
+                    """),
+                EffectsOverTime = "# eot"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "spells.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal(1, rootElement.GetProperty("Schema").GetInt32());
+            Assert.Equal("spells", rootElement.GetProperty("Catalog").GetString());
+            // NumeroHechizos incluye secciones vacias: se conservan todas.
+            Assert.Equal(3, rootElement.GetProperty("Items").GetArrayLength());
+
+            var spell = rootElement.GetProperty("Items")[0];
+            Assert.Equal(1, spell.GetProperty("Index").GetInt32());
+            Assert.Equal("Dardo Magico", spell.GetProperty("Name").GetString());
+            Assert.Equal(10, spell.GetProperty("ManaCost").GetInt32());
+            Assert.Equal(5, spell.GetProperty("StaminaCost").GetInt32());
+            Assert.Equal(5, spell.GetProperty("MinEffect").GetInt32());
+            Assert.Equal(10, spell.GetProperty("MaxEffect").GetInt32());
+            // SubeHP=2 => el hechizo se dana a si mismo.
+            Assert.True(spell.GetProperty("DamagesUser").GetBoolean());
+            Assert.False(spell.GetProperty("Heals").GetBoolean());
+            Assert.True(spell.GetProperty("Negative").GetBoolean());
+            Assert.True(spell.GetProperty("Bindable").GetBoolean());
+            Assert.Equal(2, spell.GetProperty("EotId").GetInt32());
+            Assert.True(spell.GetProperty("RequireShield").GetBoolean());
+            // Claves que el runtime no consume se conservan 1:1.
+            Assert.Equal("Has lanzado Dardo Magico sobre", spell.GetProperty("HechizeroMsg").GetString());
+            Assert.Equal(74714, spell.GetProperty("IconoIndex").GetInt32());
+            Assert.Equal("Magic Dart", spell.GetProperty("Localization").GetProperty("en").GetProperty("Nombre").GetString());
+
+            var empty = rootElement.GetProperty("Items")[2];
+            Assert.Equal(3, empty.GetProperty("Index").GetInt32());
+            Assert.Equal("", empty.GetProperty("Name").GetString());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_converts_legacy_effects_over_time_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-eot-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray(),
+                Spells = "# spells"u8.ToArray(),
+                EffectsOverTime = Encoding.UTF8.GetBytes("""
+                    ' cabecera de comentarios previa a [INIT]
+                    [INIT]
+                    EffectCount=2
+
+                    [EOT1] 'restauracion mayor
+                    Type=1
+                    TickPowerMin=8
+                    TickPowerMax=12
+                    Ticks=10
+                    TickTime=3000
+                    Limit=1
+                    TickFX=144
+                    Override=1
+                    BuffType=1
+                    AffectedByMagicHealing=1
+                    ClientEffectTypeId=1
+
+                    [EOT2]
+                    Type=5
+                    TickTime=10000
+                    Subtype=1
+                    Limit=3
+                    Override=0
+                    BuffType=5
+                    """)
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "effectsovertime.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal(1, rootElement.GetProperty("Schema").GetInt32());
+            Assert.Equal("effectsovertime", rootElement.GetProperty("Catalog").GetString());
+            Assert.Equal(2, rootElement.GetProperty("Items").GetArrayLength());
+
+            var buff = rootElement.GetProperty("Items")[0];
+            Assert.Equal(1, buff.GetProperty("Index").GetInt32());
+            Assert.Equal(1, buff.GetProperty("Type").GetInt32());
+            Assert.Equal(144, buff.GetProperty("TickFx").GetInt32());
+            Assert.True(buff.GetProperty("Override").GetBoolean());
+            Assert.Equal(8, buff.GetProperty("TickPowerMin").GetInt32());
+            Assert.True(buff.GetProperty("AffectedByMagicHealing").GetBoolean());
+
+            // El legacy escribe "Subtype" en minuscula.
+            var trap = rootElement.GetProperty("Items")[1];
+            Assert.Equal(5, trap.GetProperty("Type").GetInt32());
+            Assert.Equal(1, trap.GetProperty("SubType").GetInt32());
+            Assert.False(trap.GetProperty("Override").GetBoolean());
         }
         finally
         {

@@ -85,7 +85,8 @@ internal sealed class WorldEditorSession
             File.Exists(Path.Combine(dat, "UnderworldMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "UnderworldMapPool.dat")) : [],
             File.Exists(Path.Combine(dat, "PhoenixMapPool.dat")) ? File.ReadAllBytes(Path.Combine(dat, "PhoenixMapPool.dat")) : [],
             ReadData(dat, "Eventos.dat"), ReadData(dat, "Tesoros.dat"), ReadData(dat, "Quests.DAT"),
-            ReadData(dat, "NPCs.dat"), ReadData(dat, "obj.dat"), ReadData(dat, "Castles.json"));
+            ReadData(dat, "NPCs.dat"), ReadData(dat, "obj.dat"), ReadData(dat, "Castles.json"),
+            ReadData(dat, "Hechizos.dat"), ReadData(dat, "EffectsOverTime.dat"));
     }
 
     private static byte[] ReadData(string directory, string fileName) =>

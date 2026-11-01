@@ -49,7 +49,9 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["quests.json"] = NormalizeQuests(bundle.Quests, spatial),
             ["npcs.json"] = NormalizeNpcs(bundle.Npcs, spatial),
             ["objects.json"] = NormalizeObjects(bundle.Objects, spatial),
-            ["castles.json"] = NormalizeCastles(bundle.Castles)
+            ["castles.json"] = NormalizeCastles(bundle.Castles),
+            ["spells.json"] = NormalizeSpells(bundle.Spells),
+            ["effectsovertime.json"] = NormalizeEffectsOverTime(bundle.EffectsOverTime)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var payload in payloads)
@@ -240,6 +242,240 @@ internal sealed class UnifiedWorldRuntimeDataService
         "oeste" => "WEST",
         _ => null
     };
+
+    private static byte[] NormalizeEffectsOverTime(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "effectsovertime", Items = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Max(0, ParseInt(Get(init, "EffectCount")));
+        var items = new List<Dictionary<string, object?>>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var section = GetSection(sections, "EOT" + index.ToString(CultureInfo.InvariantCulture));
+            items.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["Index"] = index,
+                ["Type"] = Val(section, "Type"),
+                ["SubType"] = Val(section, "SubType", Val(section, "Subtype")),
+                ["SharedTypeId"] = Val(section, "SharedTypeId"),
+                ["TickPowerMin"] = ValDouble(section, "TickPowerMin"),
+                ["TickPowerMax"] = ValDouble(section, "TickPowerMax"),
+                ["Ticks"] = Val(section, "Ticks"),
+                ["TickTime"] = Val(section, "TickTime"),
+                ["TickFx"] = ValShort(section, "TickFX"),
+                ["TickManaConsumption"] = Val(section, "TickManaConsumption"),
+                ["TickStaminaConsumption"] = Val(section, "TickStaminaConsumption"),
+                ["OnHitFx"] = ValShort(section, "OnHitFx"),
+                ["OnHitWav"] = ValShort(section, "OnHitWAV"),
+                ["OnRemoveFx"] = ValShort(section, "OnRemoveFx"),
+                ["OnRemoveWav"] = ValShort(section, "OnRemoveWav"),
+                ["Override"] = Val(section, "Override") != 0,
+                ["Limit"] = Val(section, "Limit"),
+                ["PhysicalDamageReduction"] = ValDouble(section, "PhysicalDamageReduction"),
+                ["MagicDamageReduction"] = ValDouble(section, "MagicDamageReduction"),
+                ["PhysicalDamageDone"] = ValDouble(section, "PhysicalDamageDone"),
+                ["MagicDamageDone"] = ValDouble(section, "MagicDamageDone"),
+                ["SpeedModifier"] = ValDouble(section, "SpeedModifier"),
+                ["HitModifier"] = Val(section, "HitModifier"),
+                ["EvasionModifier"] = Val(section, "EvasionModifier"),
+                ["SelfHealingBonus"] = ValDouble(section, "SelfHealingBonus"),
+                ["MagicHealingBonus"] = ValDouble(section, "MagicHealingBonus"),
+                ["DefenseBonus"] = ValDouble(section, "DefenseBonus"),
+                ["PhysicalLinearBonus"] = ValDouble(section, "PhysicalLinearBonus"),
+                ["PhysicalBonusPveOnly"] = Val(section, "PhysicalBonusPveOnly") != 0,
+                ["BuffType"] = Val(section, "BuffType"),
+                ["Area"] = Val(section, "Area"),
+                ["Aura"] = Get(section, "Aura"),
+                ["ApplyEffectId"] = Val(section, "ApplyeffectID"),
+                ["ClientEffectTypeId"] = Val(section, "ClientEffectTypeId"),
+                ["SecondaryEffectId"] = Val(section, "SecondaryEffectId"),
+                ["SecondaryTargetModifier"] = ValDouble(section, "SecondaryTargetModifier"),
+                ["RequireTransform"] = Val(section, "RequireTransform"),
+                ["RequireArmor"] = Val(section, "RequireArmor") != 0,
+                ["RequireShield"] = Val(section, "RequireShield") != 0,
+                ["RequireWeapon"] = Val(section, "RequireWeapon") != 0,
+                ["AffectedByMagicBonus"] = Val(section, "AffectedByMagicBonus") != 0,
+                ["AffectedByMagicReduction"] = Val(section, "AffectedByMagicReduction") != 0,
+                ["AffectedByMagicHealing"] = Val(section, "AffectedByMagicHealing") != 0,
+                ["AffectedBySelfHealing"] = Val(section, "AffectedBySelfHealing") != 0,
+                ["LimitCastOnlyOnSelf"] = Val(section, "LimitCastOnlyOnSelf") != 0,
+                ["ApplyStatusMask"] = Val(section, "ApplyStatusMask"),
+                ["CcImmunity"] = Val(section, "CCInmunity"),
+                ["NpcId"] = Val(section, "NpcId"),
+                ["Transform"] = Val(section, "Transform"),
+
+                // Claves conservadas 1:1 aunque el runtime no las consuma todavia.
+                ["AffectedByPhysicalBonus"] = Val(section, "AffectedByPhysicalBonus") != 0,
+                ["AffectedByPhysicalReduction"] = Val(section, "AffectedByPhysicalReduction") != 0,
+                ["AffectedBySpeedModifier"] = Val(section, "AffectedBySpeedModifier") != 0,
+                ["Limits"] = Val(section, "Limits")
+            });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "effectsovertime", Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static byte[] NormalizeSpells(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "spells", Items = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Max(0, ParseInt(Get(init, "NumeroHechizos")));
+        var items = new List<Dictionary<string, object?>>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var section = GetSection(sections, "HECHIZO" + index.ToString(CultureInfo.InvariantCulture));
+            var subeHp = Val(section, "SubeHP");
+            var min = Val(section, "MinHP");
+            var max = Math.Max(min, Val(section, "MaxHP", min));
+            var manaMin = Val(section, "MinMana");
+            var manaMax = Math.Max(manaMin, Val(section, "MaxMana", manaMin));
+            var staminaMin = Val(section, "MinSta");
+            var staminaMax = Math.Max(staminaMin, Val(section, "MaxSta", staminaMin));
+            items.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["Index"] = index,
+                ["ManaCost"] = Val(section, "ManaRequerido"),
+                ["StaminaCost"] = Val(section, "StaRequerido"),
+                ["MinSkill"] = Val(section, "MinSkill"),
+                ["TargetType"] = Val(section, "Target"),
+                ["Heals"] = subeHp == 1,
+                ["RestoresMana"] = Val(section, "SubeMana") != 0,
+                ["RestoresStamina"] = Val(section, "SubeSta") != 0,
+                ["MinEffect"] = min,
+                ["MaxEffect"] = max,
+                ["MinManaEffect"] = manaMin,
+                ["MaxManaEffect"] = manaMax,
+                ["MinStaminaEffect"] = staminaMin,
+                ["MaxStaminaEffect"] = staminaMax,
+                ["Revives"] = Val(section, "Revivir") != 0,
+                ["DamagesUser"] = subeHp == 2,
+                ["SpellType"] = Math.Clamp(Val(section, "Tipo"), 0, 255),
+                ["Mimics"] = Val(section, "Mimetiza") != 0,
+                ["MagicPowerNeeded"] = Val(section, "MagicPowerNeeded"),
+                ["AreaRadius"] = Math.Max(0, Val(section, "AreaRadio")),
+                ["CuresPoison"] = Val(section, "CuraVeneno") != 0,
+                ["Poisons"] = Val(section, "Envenena") != 0,
+                ["Incinerates"] = Val(section, "Incinera") != 0,
+                ["Paralyzes"] = Val(section, "Paraliza") != 0,
+                ["Immobilizes"] = Val(section, "Inmoviliza") != 0,
+                ["RemovesParalysis"] = Val(section, "RemoverParalisis") != 0,
+                ["GrantsInvisibility"] = Val(section, "Invisibilidad") != 0,
+                ["CursesTarget"] = Val(section, "Maldicion") != 0,
+                ["RemovesCurse"] = Val(section, "RemoverMaldicion") != 0,
+                ["RemovesPartialInvisibility"] = Val(section, "RemueveInvisibilidadParcial") != 0,
+                ["BlindsTarget"] = Val(section, "Ceguera") != 0,
+                ["DumbsTarget"] = Val(section, "Estupidez") != 0,
+                ["RemovesDumbness"] = Val(section, "RemoverEstupidez") != 0,
+                ["InvokeMode"] = Math.Clamp(Val(section, "Invoca"), 0, 2),
+                ["SummonNpc"] = ValShort(section, "NumNpc"),
+                ["SummonCount"] = ValByte(section, "Cant"),
+                ["DurationSeconds"] = Math.Max(0, Val(section, "Duration")),
+                ["Particle"] = Math.Max(0, Val(section, "Particle")),
+                ["AutoCast"] = Val(section, "AutoLanzar") != 0,
+                ["Bindable"] = Val(section, "IsBindable") != 0,
+                ["CooldownSeconds"] = Math.Max(0, Val(section, "Cooldown")),
+                ["CooldownEffectId"] = Math.Max(0, Val(section, "CdEffectId")),
+                ["MaxLevelCasteable"] = ValByte(section, "MaxLevelCasteable"),
+                ["RequiredHp"] = Math.Max(0, Val(section, "RequiredHP")),
+                ["RequireWeaponType"] = ValByte(section, "RequireWeaponType"),
+                ["RequireTransform"] = Math.Max(0, Val(section, "RequireTransform")),
+                ["FxGrh"] = ValShort(section, "Fxgrh"),
+                ["FxLoops"] = ValShort(section, "Loops"),
+                ["TravelParticle"] = ValShort(section, "ParticleViaje"),
+                ["ParticleTime"] = Math.Max(0, Val(section, "TimeParticula")),
+                ["Wave"] = ValShort(section, "WAV"),
+                ["ScreenColor"] = Val(section, "ScreenColor"),
+                ["ScreenTime"] = Val(section, "TimeEfect"),
+                ["Negative"] = Val(section, "TargetEffectType") == 1,
+                ["IgnoresMagicResistance"] = Val(section, "AntiRm") != 0,
+                ["StaminaPercent"] = Math.Clamp(Val(section, "StaPercentRequired"), 0, 100),
+                ["NeedsObject"] = ValShort(section, "NecesitaObj"),
+                ["NeedsObject2"] = ValShort(section, "NecesitaObj2"),
+                ["Name"] = Get(section, "Nombre"),
+                ["Description"] = Get(section, "Desc"),
+                ["MagicWords"] = Get(section, "PalabrasMagicas"),
+                ["SpeedModifier"] = ValDouble(section, "Velocidad"),
+                ["SkillType"] = Val(section, "SkillType"),
+                ["MaterializeObject"] = ValShort(section, "MaterializaObj"),
+                ["MaterializeCount"] = Math.Max(0, Val(section, "MaterializaCant")),
+                ["Teleports"] = Val(section, "Teleport"),
+                ["TeleportSector"] = ValShort(section, "TeleportSector"),
+                ["TeleportMap"] = ValShort(section, "TeleportMap"),
+                ["TeleportDestinationX"] = ValShort(section, "TeleportX"),
+                ["TeleportDestinationY"] = ValShort(section, "TeleportY"),
+                ["AreaAffects"] = Math.Clamp(Val(section, "AreaAfecta"), 0, 3),
+                ["Healing"] = Val(section, "Sanacion"),
+                ["Disenchants"] = Val(section, "desencantar") != 0,
+                ["RemovesDebuff"] = Val(section, "RemoveDebuff") != 0,
+                ["StealsBuff"] = Val(section, "StealBuff") != 0,
+                ["CancelsActiveEffect"] = Val(section, "CancelActiveEffect") != 0,
+                ["AdjustsStatsWithCaster"] = Val(section, "AdjustStatsWithCaster") != 0,
+                ["TogglesCleave"] = Val(section, "ToggleCleave") != 0,
+                ["TogglesDivineBlood"] = Val(section, "ToggleDivineBlood") != 0,
+                ["PreciseHit"] = Val(section, "GolpeCertero") != 0,
+                ["IsElementalTagsOnly"] = Val(section, "IsElementalTagsOnly") != 0,
+                ["EotId"] = Math.Max(0, Val(section, "EOTID")),
+                ["RequireArmor"] = Val(section, "RequireArmor") != 0,
+                ["RequireHelmet"] = Val(section, "RequireHelm") != 0,
+                ["RequireShield"] = Val(section, "RequireShield") != 0,
+                ["RequireWeapon"] = Val(section, "RequireWeapon") != 0,
+                ["RequireKnuckles"] = Val(section, "RequireKnucle") != 0,
+                ["RequireProjectile"] = Val(section, "RequireProjectile") != 0,
+                ["RequireMagicItem"] = Val(section, "RequireMagicItem") != 0,
+                ["RequireShip"] = Val(section, "RequireShip") != 0,
+                ["RequireTargetOnLand"] = Val(section, "RequireTargetOnLand") != 0,
+                ["RequireTargetOnWater"] = Val(section, "RequireTargetOnWater") != 0,
+                ["WorkOnDead"] = Val(section, "WorkOnDead") != 0,
+                ["IsSkill"] = Val(section, "IsSkill") != 0,
+                ["RaiseAgility"] = Val(section, "SubeAG"),
+                ["MinAgility"] = Val(section, "MinAG"),
+                ["MaxAgility"] = Val(section, "MaxAG"),
+                ["RaiseStrength"] = Val(section, "SubeFU"),
+                ["MinStrength"] = Val(section, "MinFU"),
+                ["MaxStrength"] = Val(section, "MaxFU"),
+                ["RaiseCharisma"] = Val(section, "SubeCA"),
+                ["MinCharisma"] = Val(section, "MinCA"),
+                ["MaxCharisma"] = Val(section, "MaxCA"),
+                ["RaiseHunger"] = Val(section, "SubeHam"),
+                ["MinHunger"] = Val(section, "MinHam"),
+                ["MaxHunger"] = Val(section, "MaxHam"),
+                ["RaiseThirst"] = Val(section, "SubeSed"),
+                ["MinThirst"] = Val(section, "MinSed"),
+                ["MaxThirst"] = Val(section, "MaxSed"),
+
+                // Claves conservadas 1:1 aunque el runtime no las consuma todavia:
+                // mensajes, icono, metadatos y localizacion.
+                ["HechizeroMsg"] = Get(section, "HechizeroMsg"),
+                ["TargetMsg"] = Get(section, "TargetMsg"),
+                ["PropioMsg"] = Get(section, "PropioMsg"),
+                ["IconoIndex"] = Val(section, "IconoIndex"),
+                ["NoWiki"] = Val(section, "NoWiki") != 0,
+                ["Resis"] = Val(section, "Resis"),
+                ["LightOrbObject"] = Val(section, "LightOrbObject"),
+                ["LightOrbCastRange"] = Val(section, "LightOrbCastRange"),
+                ["CdEffectIve"] = Val(section, "CdEffectIve"),
+                ["Localization"] = ReadLocalization(section, SpellLocalizationKeys)
+            });
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "spells", Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
 
     private static byte[] NormalizeNpcs(byte[] payload, WorldSpatialResolver? spatial)
     {
@@ -544,6 +780,40 @@ internal sealed class UnifiedWorldRuntimeDataService
     private static double Double(Dictionary<string, string> section, string key) =>
         double.TryParse(Get(section, key), System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : 0;
+
+    /// <summary>Igual que <c>Val()</c> de VB6/SpellStore: prefijo numerico aun con comentarios.</summary>
+    private static int Val(Dictionary<string, string> section, string key, int fallback = 0)
+    {
+        var text = Get(section, key).Trim();
+        var length = 0;
+        while (length < text.Length && (char.IsDigit(text[length]) || text[length] is '-' or '+')) length++;
+        return length > 0 && int.TryParse(text[..length], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : fallback;
+    }
+
+    private static double ValDouble(Dictionary<string, string> section, string key)
+    {
+        var text = Get(section, key).Trim();
+        var length = 0;
+        var separator = false;
+        while (length < text.Length)
+        {
+            var current = text[length];
+            if (char.IsDigit(current) || current is '-' or '+') { length++; continue; }
+            if (current is '.' or ',' && !separator) { separator = true; length++; continue; }
+            break;
+        }
+
+        return length > 0 && double.TryParse(text[..length].Replace(',', '.'), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var value) ? value : 0;
+    }
+
+    private static short ValShort(Dictionary<string, string> section, string key) =>
+        (short)Math.Clamp(Val(section, key), 0, short.MaxValue);
+
+    private static byte ValByte(Dictionary<string, string> section, string key) =>
+        (byte)Math.Clamp(Val(section, key), 0, byte.MaxValue);
 
     private static int NormalizeInterval(int value, int fallback) => value > 0 ? value : fallback;
 
@@ -999,6 +1269,18 @@ internal sealed class UnifiedWorldRuntimeDataService
         ("fr", "Nombre", "fr_Nombre"), ("fr", "Desc", "fr_Desc"), ("fr", "DescFinal", "fr_DescFinal"),
         ("it", "Nombre", "it_Nombre"), ("it", "Desc", "it_Desc"), ("it", "DescFinal", "it_DescFinal"),
         ("pt", "Nombre", "pt_Nombre"), ("pt", "Desc", "pt_Desc"), ("pt", "DescFinal", "pt_DescFinal")
+    ];
+
+    private static readonly (string Code, string Field, string Key)[] SpellLocalizationKeys =
+    [
+        ("en", "Nombre", "en_Nombre"), ("en", "Desc", "en_Desc"), ("en", "HechizeroMsg", "en_HechizeroMsg"),
+        ("en", "TargetMsg", "en_TargetMsg"), ("en", "PropioMsg", "en_PropioMsg"), ("en", "Name", "en_Name"), ("en", "Texto", "en_Texto"),
+        ("pt", "Nombre", "pt_Nombre"), ("pt", "Desc", "pt_Desc"), ("pt", "HechizeroMsg", "pt_HechizeroMsg"),
+        ("pt", "TargetMsg", "pt_TargetMsg"), ("pt", "PropioMsg", "pt_PropioMsg"), ("pt", "Name", "pt_Name"), ("pt", "Texto", "pt_Texto"),
+        ("fr", "Nombre", "fr_Nombre"), ("fr", "Desc", "fr_Desc"), ("fr", "HechizeroMsg", "fr_HechizeroMsg"),
+        ("fr", "TargetMsg", "fr_TargetMsg"), ("fr", "PropioMsg", "fr_PropioMsg"), ("fr", "Name", "fr_Name"), ("fr", "Texto", "fr_Texto"),
+        ("it", "Nombre", "it_Nombre"), ("it", "Desc", "it_Desc"), ("it", "HechizeroMsg", "it_HechizeroMsg"),
+        ("it", "TargetMsg", "it_TargetMsg"), ("it", "PropioMsg", "it_PropioMsg"), ("it", "Name", "it_Name"), ("it", "Texto", "it_Texto")
     ];
 
     private static Dictionary<string, Dictionary<string, string>> ReadLocalization(
