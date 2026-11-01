@@ -20,6 +20,13 @@ Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects` y
 servidor reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas
 antiguas quedan solo como fallback de compatibilidad.
 
+**Formato de catálogo:** cada sidecar es un documento JSON versionado
+`{ "Schema": 1, "Catalog": "<nombre>", ... }` con propiedades en PascalCase. El
+editor es el único importador autoritativo de los `.dat` legacy; el servidor lee
+el JSON canónico y mantiene el lector INI únicamente como transición para mundos
+compilados antes de la migración. El estado mutable de gameplay se persiste
+aparte en `data/state/`, nunca dentro del catálogo runtime (que es inmutable).
+
 **Contrato espacial:** toda entidad y mutación usa `GlobalPosition(FloorZ, GlobalX,
 GlobalY)`. `SectorId/X/Y` se permiten únicamente en importadores, migraciones de
 persistencia, provenance y adaptadores de protocolo legacy.

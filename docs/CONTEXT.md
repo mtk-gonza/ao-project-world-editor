@@ -194,8 +194,16 @@ techos, agua, lava y salidas. El manifiesto conserva por `MapId` todos los campo
 Cliente y servidor cargan el runtime desde `world` sin reabrir los sectores para jugar.
 El bundle v5 contiene los payloads fuente de los sectores para preservación y
 auditoría. Los catálogos grandes de gameplay se generan aparte en
-`world/runtime-data/`: `events.dat`, `treasures.dat`, `quests.dat`, `npcs.dat`,
-`objects.dat`, `castles.json` y `manifest.json` con hashes SHA-256.
+`world/runtime-data/`: `events.json`, `treasures.json`, `quests.json`, `npcs.json`,
+`objects.json`, `castles.json` y `manifest.json` con hashes SHA-256.
+
+Cada catálogo es un documento JSON versionado con la forma
+`{ "Schema": 1, "Catalog": "<nombre>", ... }` y propiedades en PascalCase. El
+editor es el único importador de los `.dat` legacy; el servidor lee el JSON
+canónico y solo conserva el lector INI como compatibilidad temporal con mundos
+compilados antes de la migración. El estado mutable de gameplay (por ejemplo
+castillos conquistados) se persiste aparte en `data/state/`, nunca dentro del
+catálogo runtime.
 
 ### Estado de integración runtime (2026-11-01)
 
