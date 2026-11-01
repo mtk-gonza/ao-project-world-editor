@@ -222,6 +222,10 @@ catálogo runtime.
   `runtime-data/legacycatalogs.json` (ADR-WM-039). El estado mutable
   (`Motd.ini`, `consultas.dat`, `baneos.dat`, `records.dat`, llaves de casa
   vendidas) vive en `data/state/`.
+- El cliente lee del mismo sidecar `zonas.dat`, `Meditaciones.dat` y los nombres de
+  `npcs.dat` mediante `LegacyDatCatalog`; `colores.dat`, el índice localizado de
+  objetos, `FXs.ini` y `ProjectileDef.dat` ya viven en `init/` (ADR-WM-040). `Dat/`
+  queda solo como fallback de fixtures sin bundle.
 - `FloorZ=-3` continúa siendo un piso virtual de importación pendiente de decisión
   definitiva de layout.
 

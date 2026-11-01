@@ -17,7 +17,8 @@ ni abre esos archivos fuente.
 Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects`,
 `Castles`, `Spells`, `EffectsOverTime`, `GlobalQuests`, `Scenarios`,
 `FactionRanks`, `FactionRewards`, `CraftingLists`, `InitialEquipment`, `Fishing`
-y `LegacyCatalogs` (los `.dat/.ini/.txt` no espaciales, ADR-WM-039) se generan como
+y `LegacyCatalogs` (los `.dat/.ini/.txt` no espaciales compartidos por servidor y
+cliente, ADR-WM-039/040) se generan como
 sidecars en `world/runtime-data/`, junto con un `manifest.json` de hashes SHA-256
 (16 entradas obligatorias). Esto evita inflar `bundle.aog` y evita que el servidor
 reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas antiguas
@@ -946,6 +947,49 @@ añade `legacycatalogs.json` (~75 KB) al manifiesto (16 entradas). Smoke real:
 `TipoRuna > 0`.
 
 **Consecuencia:** ningún consumidor del servidor abre `Dat/` en producción; los usos
-restantes de `options.DatDirectory` son backfills de fixtures sin bundle. Queda el
-lote 5 (catálogos del cliente: `zonas.dat`, `colores.dat`, `Meditaciones.dat` local,
-índice local de NPCs/obj) y el lote 6 (borrar `ao-project-resources/Dat`).
+restantes de `options.DatDirectory` son backfills de fixtures sin bundle. El lote 5
+(catálogos del cliente) se cierra en ADR-WM-040 y queda el lote 6 (borrar
+`ao-project-resources/Dat`).
+
+## ADR-WM-040: catálogos legacy del cliente sobre el sidecar compartido
+
+**Estado:** aceptado 2026-11-01. Lote 5 ("catálogos del cliente").
+
+**Hallazgo:** tras el lote 4 el cliente todavía abría tres archivos de `Dat/`:
+`zonas.dat` (`LegacyZoneCatalog`/`CargarZonas`), `Meditaciones.dat`
+(`LegacyMeditationCatalog`/`AddComposedMetitation`) y `npcs.dat`
+(`LegacyNpcCatalog`/`CargarNPCsMapData`). Los demás candidatos ya no dependen de
+`Dat/`: `colores.dat`, `<idioma>_localindex.dat`, `FXs.ini` y `ProjectileDef.dat`
+viven en `init/` y tienen prioridad; `obj.dat` es solo un fallback muerto cuando
+falta el índice localizado. Los `.txt` de `Dat/` no tienen ningún lector en el
+cliente, el servidor ni el world editor VB6 salvo `NombresInvalidos.txt` y
+`BlockedWordsDescription.txt`, ya migrados en el lote 4; el resto son borradores de
+diseño (`Quests_2023.txt`, `npcs_libres.txt`, `Variables de NPCs.txt`,
+`NuevoSastre.txt`, `RopajesNuevo.txt`, `Haracin Pesca Facil.txt`) y quedan fuera.
+
+**Decisión:** se reutiliza el único sidecar `runtime-data/legacycatalogs.json` del
+lote 4 en vez de crear un artefacto aparte para el cliente. El importador del editor
+añade `zonas.dat` y `npcs.dat` a `LegacyCatalogFileNames` (`Meditaciones.dat` ya
+estaba) y publica los tres 1:1 con `Sections` + `Lines`. El cliente incorpora
+`LegacyDatCatalog`, el equivalente de `WorldRuntimeLoader`/`LegacyDatCatalog` del
+servidor: valida `Schema=1`/`Catalog=legacycatalogs`, reconstruye un
+`LegacyIniFile` con `FromSections` y expone `Lines`/`Contains`. `Dat/` queda como
+fallback únicamente cuando el fixture no trae bundle.
+
+- `LegacyZoneCatalog` y `LegacyMeditationCatalog` ganan una sobrecarga que recibe el
+  catálogo; `Load(rootPath)` sigue existiendo y resuelve sidecar + fallback.
+- `LegacyNpcCatalog` lee `Lines("npcs.dat")` con el mismo parser que el archivo.
+- `LegacyResourceCatalog.LegacyData` cachea el catálogo y `LegacyStartupLoader` lo
+  usa para la carga inicial.
+
+**Efecto medido:** `bundle.aog` sigue byte-idéntico (SHA-256
+`1F1DBD7060DFECBDBE09154EEA9575866F72B6D85057FBE62C6F3E04452F2802`).
+`legacycatalogs.json` pasa de 75 306 a 1 652 825 bytes y el manifiesto raíz se
+regenera con el hash correcto de `runtime-data/manifest.json`. Paridad verificada
+contra los `.dat` reales: 24 zonas (todos sus campos), niveles 1..80 de meditación y
+los 1954 nombres de NPC coinciden 1:1. Cliente 1002/1002 y editor 395/395.
+
+**Consecuencia:** ningún consumidor del cliente abre `Dat/` en producción; los
+únicos usos restantes son los fallbacks de `LegacyDatCatalog`/`ReadObjects` para
+fixtures sin bundle. Queda el lote 6: borrar `ao-project-resources/Dat` y retirar los
+fallbacks que ya no tengan fixture asociado.

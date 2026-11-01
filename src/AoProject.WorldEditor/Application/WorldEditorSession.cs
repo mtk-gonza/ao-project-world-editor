@@ -93,17 +93,20 @@ internal sealed class WorldEditorSession
                 "BlackSmithElementalRunes.dat", "ObjCarpintero.dat", "ObjAlquimista.dat", "ObjSastre.dat"]),
             ReadData(dat, "EquipamientoInicial.dat"),
             ReadNamedData(dat, ["pesca.dat", "RecursosEspeciales.dat"]),
-            ReadNamedData(dat, LegacyCatalogFiles));
+            ReadNamedData(dat, LegacyCatalogFileNames));
     }
 
     /// <summary>
-    /// .dat/.ini/.txt no espaciales que el servidor sigue consumiendo. Se
-    /// publican 1:1 en runtime-data/legacycatalogs.json; los ausentes se omiten.
+    /// .dat/.ini/.txt no espaciales que el servidor o el cliente siguen
+    /// consumiendo. Se publican 1:1 en runtime-data/legacycatalogs.json; los
+    /// ausentes se omiten.
     /// </summary>
-    private static readonly string[] LegacyCatalogFiles =
+    internal static readonly string[] LegacyCatalogFileNames =
     [
         "Balance.dat",
         "Meditaciones.dat",
+        "zonas.dat",
+        "npcs.dat",
         "pesca.dat",
         "Tesoros.dat",
         "RecursosEspeciales.dat",
