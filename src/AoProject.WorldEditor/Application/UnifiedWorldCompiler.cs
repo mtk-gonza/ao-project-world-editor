@@ -31,10 +31,16 @@ internal sealed class UnifiedWorldCompiler
         WorldEditorResourceCatalog? resources = null,
         IReadOnlyDictionary<short, int>? floorAssignments = null,
         bool applyStitching = false,
-        byte[]? settlementsJson = null,
-        byte[]? sectorIdDat = null,
+        byte[]? settlements = null,
+        byte[]? sector = null,
         byte[]? underworldPool = null,
-        byte[]? phoenixPool = null)
+        byte[]? phoenixPool = null,
+        byte[]? events = null,
+        byte[]? treasures = null,
+        byte[]? quests = null,
+        byte[]? npcs = null,
+        byte[]? objects = null,
+        byte[]? castles = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -131,10 +137,20 @@ internal sealed class UnifiedWorldCompiler
                 File.Exists(infPath) ? File.ReadAllBytes(infPath) : [],
                 File.Exists(datPath) ? File.ReadAllBytes(datPath) : []));
         }
-        bundle.SettlementsJson = settlementsJson ?? [];
-        bundle.SectorIdDat = sectorIdDat ?? [];
-        bundle.UnderworldPool = underworldPool ?? [];
-        bundle.PhoenixPool = phoenixPool ?? [];
+        bundle.Settlements = settlements is { Length: > 0 }
+            ? new GlobalSettlementManifestService().Transform(settlements, bundle)
+            : [];
+        bundle.Sector = sector ?? [];
+        bundle.UnderworldPool = underworldPool is { Length: > 0 }
+            ? new GlobalSpecialManifestService().TransformUnderworld(underworldPool, bundle) : [];
+        bundle.PhoenixPool = phoenixPool is { Length: > 0 }
+            ? new GlobalSpecialManifestService().TransformPhoenix(phoenixPool, bundle) : [];
+        bundle.Events = events ?? [];
+        bundle.Treasures = treasures ?? [];
+        bundle.Quests = quests ?? [];
+        bundle.Npcs = npcs ?? [];
+        bundle.Objects = objects ?? [];
+        bundle.Castles = castles ?? [];
         return bundle;
     }
 

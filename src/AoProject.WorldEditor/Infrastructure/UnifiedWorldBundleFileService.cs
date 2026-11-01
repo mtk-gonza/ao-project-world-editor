@@ -65,10 +65,10 @@ internal sealed class UnifiedWorldBundleFileService
                 WriteBytes(writer, source.Inf);
                 WriteBytes(writer, source.Dat);
             }
-            WriteBytes(writer, bundle.SettlementsJson);
+            WriteBytes(writer, bundle.Settlements);
             writer.Write(ExtensionMagic);
             writer.Write(3);
-            WriteExtension(writer, "SectorId", bundle.SectorIdDat);
+            WriteExtension(writer, "Sector", bundle.Sector);
             WriteExtension(writer, "UnderworldPool", bundle.UnderworldPool);
             WriteExtension(writer, "PhoenixPool", bundle.PhoenixPool);
         }
@@ -131,7 +131,8 @@ internal sealed class UnifiedWorldBundleFileService
                     sectorId, sourceName, ReadBytes(reader), ReadBytes(reader), ReadBytes(reader)));
             }
             if (reader.BaseStream.Position < reader.BaseStream.Length)
-                bundle.SettlementsJson = ReadBytes(reader);
+                bundle.Settlements = ReadBytes(reader);
+            var extensionPosition = reader.BaseStream.Position;
             if (reader.BaseStream.Position + ExtensionMagic.Length <= reader.BaseStream.Length &&
                 reader.ReadBytes(ExtensionMagic.Length).SequenceEqual(ExtensionMagic))
             {
@@ -142,11 +143,21 @@ internal sealed class UnifiedWorldBundleFileService
                     var payload = ReadBytes(reader);
                     switch (name)
                     {
-                        case "SectorId": bundle.SectorIdDat = payload; break;
+                        case "Sector": bundle.Sector = payload; break;
                         case "UnderworldPool": bundle.UnderworldPool = payload; break;
                         case "PhoenixPool": bundle.PhoenixPool = payload; break;
+                        case "Events": bundle.Events = payload; break;
+                        case "Treasures": bundle.Treasures = payload; break;
+                        case "Quests": bundle.Quests = payload; break;
+                        case "Npcs": bundle.Npcs = payload; break;
+                        case "Objects": bundle.Objects = payload; break;
+                        case "Castles": bundle.Castles = payload; break;
                     }
                 }
+            }
+            else
+            {
+                reader.BaseStream.Position = extensionPosition;
             }
         }
         foreach (var z in floorZs)

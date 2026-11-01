@@ -104,10 +104,16 @@ internal sealed class UnifiedWorldBundle
     public List<UnifiedWorldSectorMetadata> SectorMetadata { get; } = [];
     public List<UnifiedWorldSectorSource> SectorSources { get; } = [];
     /// <summary>Validated world settlements manifest embedded in the bundle.</summary>
-    public byte[] SettlementsJson { get; set; } = [];
-    public byte[] SectorIdDat { get; set; } = [];
+    public byte[] Settlements { get; set; } = [];
+    public byte[] Sector { get; set; } = [];
     public byte[] UnderworldPool { get; set; } = [];
     public byte[] PhoenixPool { get; set; } = [];
+    public byte[] Events { get; set; } = [];
+    public byte[] Treasures { get; set; } = [];
+    public byte[] Quests { get; set; } = [];
+    public byte[] Npcs { get; set; } = [];
+    public byte[] Objects { get; set; } = [];
+    public byte[] Castles { get; set; } = [];
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

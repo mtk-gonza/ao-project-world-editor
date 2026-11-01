@@ -4,6 +4,45 @@ Estado: aceptado 2026-10-28
 Alcance: feature "mapa mundial" de `ao-project-world-editor`.
 Complementa `docs/CONTEXT.md`, `docs/WORLD-MAP-AUDIT.md` y `docs/PLAN.md`.
 
+## ADR-WM-019: bundle global como autoridad runtime
+
+**Estado:** aceptado 2026-11-01.
+
+**Decision:** servidor y cliente consumen `world/bundle.aog`, los `floor-*.gmap` y
+los sidecars validados de `world/runtime-data/` generados por este editor. Los
+sectores CSM y los archivos DAT/INF originales solo sirven como provenance o
+entrada de compilación; ningún servicio runtime vuelve a resolver mapas vecinos
+ni abre esos archivos fuente.
+
+Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects` y
+`Castles` se generan como sidecars en `world/runtime-data/`, junto con un
+`manifest.json` de hashes SHA-256. Esto evita inflar `bundle.aog` y evita que el
+servidor reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas
+antiguas quedan solo como fallback de compatibilidad.
+
+**Contrato espacial:** toda entidad y mutación usa `GlobalPosition(FloorZ, GlobalX,
+GlobalY)`. `SectorId/X/Y` se permiten únicamente en importadores, migraciones de
+persistencia, provenance y adaptadores de protocolo legacy.
+
+**Consecuencias:**
+
+- placements y `StitchX/StitchY` son la única conversión legacy → global;
+- exits, colisión, objetos, triggers, bloqueos, pathfinding, movimiento y render
+  trabajan con claves globales;
+- una instalación sin bundle válido debe fallar antes de aceptar conexiones;
+- los archivos fuente legacy no pueden ser modificados por el runtime.
+
+## ADR-WM-020: FloorZ=-3 permanece virtual
+
+**Estado:** pendiente de decisión de producto/datos, documentado 2026-11-01.
+
+`FloorZ=-3` agrupa CSM válidos sin placement oficial y destinos especiales que el
+compilador puede materializar de forma determinista. Se carga y valida como floor
+real en el bundle, pero no se declara todavía como piso oficial del layout. No se
+deben crear nuevos placements manuales ni usar divisiones fijas para resolverlo;
+la decisión definitiva requiere una fuente de layout oficial y una auditoría de
+seams/cross-floor independiente.
+
 ## Contexto
 
 El WorldEditor VB6 de referencia no tiene una vista de mundo completo. La feature es

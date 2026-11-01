@@ -192,8 +192,21 @@ completos por tile: gráficos, luces, colores, bloqueo, trigger, entidades, ambi
 techos, agua, lava y salidas. El manifiesto conserva por `MapId` todos los campos de
 `SectorInfo`, `MapEnvironment`, `CsmSectorSize`, piso, placement y offsets de stitching.
 Cliente y servidor cargan el runtime desde `world` sin reabrir los sectores para jugar.
-El bundle v5 también contiene los payloads fuente de todos los sectores para
-preservación y auditoría.
+El bundle v5 contiene los payloads fuente de los sectores para preservación y
+auditoría. Los catálogos grandes de gameplay se generan aparte en
+`world/runtime-data/`: `events.dat`, `treasures.dat`, `quests.dat`, `npcs.dat`,
+`objects.dat`, `castles.json` y `manifest.json` con hashes SHA-256.
+
+### Estado de integración runtime (2026-11-01)
+
+- `GlobalPosition` es el contrato espacial común: `FloorZ`, `GlobalX`, `GlobalY`.
+- `SectorId/X/Y` quedan confinados a importadores, provenance, migraciones y
+  adaptadores de protocolo legacy.
+- El bundle conserva extensiones de gameplay antiguas solo para compatibilidad;
+  el runtime nuevo consume `world/runtime-data/`. `reference/Recursos` y `Dat` son
+  entradas de importación/compilación.
+- `FloorZ=-3` continúa siendo un piso virtual de importación pendiente de decisión
+  definitiva de layout.
 
 Las salidas legacy que solo conectan sectores fisicamente adyacentes se eliminan al
 compilar el mundo unico, incluyendo el wrap horizontal. Los portales no adyacentes,

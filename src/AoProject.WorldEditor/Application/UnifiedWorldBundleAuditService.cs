@@ -1,4 +1,5 @@
 using AoProject.WorldEditor.Domain;
+using System.Text.Json;
 
 namespace AoProject.WorldEditor.Application;
 
@@ -44,6 +45,45 @@ internal sealed class UnifiedWorldBundleAuditService
                 if (!bundle.Floors.ContainsKey(exit.TargetZ))
                     issues.Add(new("CROSS-FLOOR-TARGET", $"La salida apunta a Z={exit.TargetZ}, que no existe.", z));
         }
+        AuditGlobalSettlements(bundle, issues);
         return new UnifiedWorldBundleAuditResult(issues);
+    }
+
+    private static void AuditGlobalSettlements(UnifiedWorldBundle bundle,
+        List<UnifiedWorldBundleAuditIssue> issues)
+    {
+        if (bundle.Settlements.Length == 0) return;
+        try
+        {
+            using var document = JsonDocument.Parse(bundle.Settlements);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                issues.Add(new("SETTLEMENTS-FORMAT", "Settlements no contiene un array global."));
+                return;
+            }
+            foreach (var settlement in document.RootElement.EnumerateArray())
+            foreach (var name in new[] { "arrival", "travel", "resurrection" })
+            {
+                if (!settlement.TryGetProperty(name, out var position)) continue;
+                if (!position.TryGetProperty("floorZ", out var z) ||
+                    !position.TryGetProperty("globalX", out var x) ||
+                    !position.TryGetProperty("globalY", out var y))
+                {
+                    issues.Add(new("SETTLEMENTS-LEGACY-POSITION", $"Settlement {name} no usa coordenadas globales."));
+                    continue;
+                }
+                if (!bundle.Floors.TryGetValue(z.GetInt32(), out var floor) ||
+                    x.GetInt32() < 0 || y.GetInt32() < 0 ||
+                    x.GetInt32() >= floor.Width || y.GetInt32() >= floor.Height)
+                    issues.Add(new("SETTLEMENTS-TILE", $"Settlement {name} referencia un tile/floor inexistente."));
+                if (position.TryGetProperty("sectorId", out _) || position.TryGetProperty("x", out _) ||
+                    position.TryGetProperty("y", out _))
+                    issues.Add(new("SETTLEMENTS-LEGACY-FIELDS", $"Settlement {name} conserva campos legacy."));
+            }
+        }
+        catch (JsonException)
+        {
+            issues.Add(new("SETTLEMENTS-FORMAT", "Settlements no contiene JSON válido."));
+        }
     }
 }

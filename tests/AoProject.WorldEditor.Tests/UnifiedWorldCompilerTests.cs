@@ -4,11 +4,31 @@ using AoProject.WorldEditor.Infrastructure;
 using System.Drawing;
 using System.Text;
 using Xunit;
+using System.Text.Json;
 
 namespace AoProject.WorldEditor.Tests;
 
 public sealed class UnifiedWorldCompilerTests
 {
+    [Fact]
+    public void Settlement_manifest_is_converted_to_global_floor_coordinates()
+    {
+        var bundle = new UnifiedWorldBundle();
+        var floor = new UnifiedWorldMap(75, 81, -1);
+        bundle.Add(floor);
+        bundle.SetPlacements([new GlobalSectorPlacement(7, new GlobalChunkCoordinate(4, 2), "world", 3, 5)]);
+        bundle.SetSectorFloors([new KeyValuePair<short, int>(7, -1)]);
+
+        var source = "[{\"homeId\":1,\"arrival\":{\"sectorId\":7,\"x\":14,\"y\":16},\"travel\":{\"sectorId\":7,\"x\":14,\"y\":16},\"resurrection\":{\"sectorId\":7,\"x\":14,\"y\":16}}]"u8.ToArray();
+        var result = new GlobalSettlementManifestService().Transform(source, bundle);
+        using var json = JsonDocument.Parse(result);
+        var position = json.RootElement[0].GetProperty("arrival");
+
+        Assert.Equal(-1, position.GetProperty("floorZ").GetInt32());
+        Assert.Equal(10, position.GetProperty("globalX").GetInt32());
+        Assert.Equal(10, position.GetProperty("globalY").GetInt32());
+        Assert.False(position.TryGetProperty("sectorId", out _));
+    }
     [Fact]
     public void Compiles_one_rectangular_map_and_preserves_entities()
     {
@@ -417,8 +437,8 @@ public sealed class UnifiedWorldCompilerTests
     {
         var bundle = new UnifiedWorldBundle();
         bundle.Add(new UnifiedWorldMap(2, 2, 0));
-        bundle.SettlementsJson = "[{\"homeId\":1}]"u8.ToArray();
-        bundle.SectorIdDat = "[ForceUpdateAi]\n1=1"u8.ToArray();
+        bundle.Settlements = "[{\"homeId\":1}]"u8.ToArray();
+        bundle.Sector = "[ForceUpdateAi]\n1=1"u8.ToArray();
         bundle.UnderworldPool = "[INIT]\nUnderworldMapPool=1"u8.ToArray();
         bundle.PhoenixPool = "[INIT]\nMaxPhoenixMaps=1"u8.ToArray();
         var directory = Path.Combine(Path.GetTempPath(), "aogbundle-settlements-" + Guid.NewGuid().ToString("N"));
@@ -427,8 +447,8 @@ public sealed class UnifiedWorldCompilerTests
             var service = new UnifiedWorldBundleFileService();
             service.Save(bundle, directory);
             var loaded = service.Load(directory);
-            Assert.Equal("[{\"homeId\":1}]", Encoding.UTF8.GetString(loaded.SettlementsJson));
-            Assert.Equal(bundle.SectorIdDat, loaded.SectorIdDat);
+            Assert.Equal("[{\"homeId\":1}]", Encoding.UTF8.GetString(loaded.Settlements));
+            Assert.Equal(bundle.Sector, loaded.Sector);
             Assert.Equal(bundle.UnderworldPool, loaded.UnderworldPool);
             Assert.Equal(bundle.PhoenixPool, loaded.PhoenixPool);
         }
