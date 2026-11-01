@@ -411,28 +411,6 @@ public sealed class UnifiedWorldCompilerTests
     }
 
     [Fact]
-    public void Unified_world_bundle_roundtrips_embedded_sector_source()
-    {
-        var bundle = new UnifiedWorldBundle();
-        bundle.Add(new UnifiedWorldMap(2, 2, 0));
-        bundle.SectorSources.Add(new UnifiedWorldSectorSource(17, "sector.csm",
-            [1, 2, 3], [4, 5], [6]));
-        var directory = Path.Combine(Path.GetTempPath(), "aogbundle-source-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            var service = new UnifiedWorldBundleFileService();
-            service.Save(bundle, directory);
-            var source = Assert.Single(service.Load(directory).SectorSources);
-            Assert.Equal((short)17, source.SectorId);
-            Assert.Equal("sector.csm", source.SourceName);
-            Assert.Equal(new byte[] { 1, 2, 3 }, source.Csm);
-            Assert.Equal(new byte[] { 4, 5 }, source.Inf);
-            Assert.Equal(new byte[] { 6 }, source.Dat);
-        }
-        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
-    }
-
-    [Fact]
     public void Unified_world_bundle_roundtrips_embedded_settlements()
     {
         var bundle = new UnifiedWorldBundle();

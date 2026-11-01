@@ -7,7 +7,9 @@ namespace AoProject.WorldEditor.Infrastructure;
 internal sealed class UnifiedWorldBundleFileService
 {
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("AOGBND01");
-    private const int Version = 5;
+    // v6 deja de embeber los CSM/INF/DAT crudos por sector (SectorSources): el
+    // runtime no los consume y son duplicacion de reference/Recursos + sectors/.
+    private const int Version = 6;
     private static readonly byte[] ExtensionMagic = Encoding.ASCII.GetBytes("AOGEXT01");
     private readonly UnifiedWorldFileService _floorFiles = new();
 
@@ -56,15 +58,6 @@ internal sealed class UnifiedWorldBundleFileService
             writer.Write(bundle.SectorMetadata.Count);
             foreach (var metadata in bundle.SectorMetadata.OrderBy(item => item.SectorId))
                 WriteMetadata(writer, metadata);
-            writer.Write(bundle.SectorSources.Count);
-            foreach (var source in bundle.SectorSources.OrderBy(item => item.SectorId))
-            {
-                writer.Write(source.SectorId);
-                writer.Write(source.SourceName);
-                WriteBytes(writer, source.Csm);
-                WriteBytes(writer, source.Inf);
-                WriteBytes(writer, source.Dat);
-            }
             WriteBytes(writer, bundle.Settlements);
             writer.Write(ExtensionMagic);
             writer.Write(3);
@@ -84,7 +77,7 @@ internal sealed class UnifiedWorldBundleFileService
             throw new InvalidDataException("Firma o versión de bundle inválida.");
         var version = reader.ReadInt32();
         if (version != Version)
-            throw new InvalidDataException("Se requiere AOGBND01 v5.");
+            throw new InvalidDataException($"Se requiere AOGBND01 v{Version}.");
         var active = reader.ReadInt32();
         var count = reader.ReadInt32();
         if (count is <= 0 or > 256) throw new InvalidDataException("Cantidad de pisos inválida.");
@@ -119,46 +112,28 @@ internal sealed class UnifiedWorldBundleFileService
             if (metadataCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de metadatos inválida.");
             for (var i = 0; i < metadataCount; i++) bundle.SectorMetadata.Add(ReadMetadata(reader));
         }
-        if (version >= 5 && reader.BaseStream.Position < reader.BaseStream.Length)
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            bundle.Settlements = ReadBytes(reader);
+        var extensionPosition = reader.BaseStream.Position;
+        if (reader.BaseStream.Position + ExtensionMagic.Length <= reader.BaseStream.Length &&
+            reader.ReadBytes(ExtensionMagic.Length).SequenceEqual(ExtensionMagic))
         {
-            var sourceCount = reader.ReadInt32();
-            if (sourceCount is < 0 or > 100000) throw new InvalidDataException("Cantidad de fuentes de sector inválida.");
-            for (var i = 0; i < sourceCount; i++)
+            var extensionCount = reader.ReadInt32();
+            for (var i = 0; i < extensionCount; i++)
             {
-                var sectorId = reader.ReadInt16();
-                var sourceName = reader.ReadString();
-                bundle.SectorSources.Add(new UnifiedWorldSectorSource(
-                    sectorId, sourceName, ReadBytes(reader), ReadBytes(reader), ReadBytes(reader)));
-            }
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-                bundle.Settlements = ReadBytes(reader);
-            var extensionPosition = reader.BaseStream.Position;
-            if (reader.BaseStream.Position + ExtensionMagic.Length <= reader.BaseStream.Length &&
-                reader.ReadBytes(ExtensionMagic.Length).SequenceEqual(ExtensionMagic))
-            {
-                var extensionCount = reader.ReadInt32();
-                for (var i = 0; i < extensionCount; i++)
+                var name = reader.ReadString();
+                var payload = ReadBytes(reader);
+                switch (name)
                 {
-                    var name = reader.ReadString();
-                    var payload = ReadBytes(reader);
-                    switch (name)
-                    {
-                        case "Sector": bundle.Sector = payload; break;
-                        case "UnderworldPool": bundle.UnderworldPool = payload; break;
-                        case "PhoenixPool": bundle.PhoenixPool = payload; break;
-                        case "Events": bundle.Events = payload; break;
-                        case "Treasures": bundle.Treasures = payload; break;
-                        case "Quests": bundle.Quests = payload; break;
-                        case "Npcs": bundle.Npcs = payload; break;
-                        case "Objects": bundle.Objects = payload; break;
-                        case "Castles": bundle.Castles = payload; break;
-                    }
+                    case "Sector": bundle.Sector = payload; break;
+                    case "UnderworldPool": bundle.UnderworldPool = payload; break;
+                    case "PhoenixPool": bundle.PhoenixPool = payload; break;
                 }
             }
-            else
-            {
-                reader.BaseStream.Position = extensionPosition;
-            }
+        }
+        else
+        {
+            reader.BaseStream.Position = extensionPosition;
         }
         foreach (var z in floorZs)
         {
@@ -193,9 +168,9 @@ internal sealed class UnifiedWorldBundleFileService
     private static byte[] ReadBytes(BinaryReader reader)
     {
         var length = reader.ReadInt32();
-        if (length is < 0 or > 500_000_000) throw new InvalidDataException("Payload de sector inválido.");
+        if (length is < 0 or > 500_000_000) throw new InvalidDataException("Payload del bundle inválido.");
         var bytes = reader.ReadBytes(length);
-        if (bytes.Length != length) throw new EndOfStreamException("Payload de sector incompleto.");
+        if (bytes.Length != length) throw new EndOfStreamException("Payload del bundle incompleto.");
         return bytes;
     }
 

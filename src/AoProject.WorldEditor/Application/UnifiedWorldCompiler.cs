@@ -126,17 +126,6 @@ internal sealed class UnifiedWorldCompiler
             metadata.Environment.Fog = source.Environment.Fog;
             bundle.SectorMetadata.Add(metadata);
         }
-        foreach (var source in world.SourcePaths.OrderBy(item => item.Key))
-        {
-            var infPath = Path.ChangeExtension(source.Value, ".inf");
-            var datPath = Path.ChangeExtension(source.Value, ".dat");
-            bundle.SectorSources.Add(new UnifiedWorldSectorSource(
-                source.Key,
-                Path.GetFileName(source.Value),
-                File.Exists(source.Value) ? File.ReadAllBytes(source.Value) : [],
-                File.Exists(infPath) ? File.ReadAllBytes(infPath) : [],
-                File.Exists(datPath) ? File.ReadAllBytes(datPath) : []));
-        }
         bundle.Settlements = settlements is { Length: > 0 }
             ? new GlobalSettlementManifestService().Transform(settlements, bundle)
             : [];

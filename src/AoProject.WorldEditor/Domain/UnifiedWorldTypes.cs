@@ -102,12 +102,14 @@ internal sealed class UnifiedWorldBundle
     public IReadOnlyDictionary<short, int> SectorFloors { get; private set; } =
         new Dictionary<short, int>();
     public List<UnifiedWorldSectorMetadata> SectorMetadata { get; } = [];
-    public List<UnifiedWorldSectorSource> SectorSources { get; } = [];
     /// <summary>Validated world settlements manifest embedded in the bundle.</summary>
     public byte[] Settlements { get; set; } = [];
     public byte[] Sector { get; set; } = [];
     public byte[] UnderworldPool { get; set; } = [];
     public byte[] PhoenixPool { get; set; } = [];
+    // Raw legacy DAT payloads. They are import-only inputs used to build the
+    // canonical runtime-data/*.json catalogs and are never serialized into
+    // bundle.aog (v6).
     public byte[] Events { get; set; } = [];
     public byte[] Treasures { get; set; } = [];
     public byte[] Quests { get; set; } = [];
@@ -141,14 +143,6 @@ internal sealed class UnifiedWorldBundle
         return floor;
     }
 }
-
-/// <summary>Original sector payloads embedded in the generated world bundle.</summary>
-internal sealed record UnifiedWorldSectorSource(
-    short SectorId,
-    string SourceName,
-    byte[] Csm,
-    byte[] Inf,
-    byte[] Dat);
 
 /// <summary>Complete source-map metadata retained alongside the compact floors.</summary>
 internal sealed class UnifiedWorldSectorMetadata

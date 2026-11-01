@@ -741,3 +741,28 @@ Los catálogos ganan `TreasureAreas`/`GiftAreas`/`NpcAreas` (áreas globales),
 ciudad en NPCs, y `PosFloorZ` en quests. El servidor sigue consumiendo en la
 frontera sector (`TreasureStore.CreateTreasureSearch` recibe un adaptador
 WORLD→sector y sortea el tile en coordenadas globales cuando hay áreas).
+
+## ADR-WM-034: bundle v6 sin fuentes de sector embebidas
+
+**Decisión:** `bundle.aog` sube a `AOGBND01 v6` y deja de embeber las fuentes
+crudas por sector (CSM/INF/DAT) que la v5 guardaba en la sección
+`SectorSources`. Ningún runtime las consumía: el servidor y el cliente ya las
+ignoraban al cargar, y sólo el editor las escribía/leía, duplicando
+`reference/Recursos` y `ao-project-resources/sectors`.
+
+- El layout v6 es: cabecera, placements, `SectorFloors`, metadatos, settlements
+  y extensiones `AOGEXT01` (`Sector`, `UnderworldPool`, `PhoenixPool`). La
+  sección de fuentes desaparece y los settlements pasan a escribirse justo tras
+  los metadatos.
+- El editor, el servidor y el cliente exigen v6; no hay rama de compatibilidad
+  con v5. Un bundle v5 se rechaza explícitamente.
+- Los catálogos de gameplay no se embeben en el bundle: se publican como
+  `runtime-data/*.json` canónicos (ADR-WM-033). Se eliminan del manifiesto del
+  servidor los campos y los fallbacks que leían
+  `Events`/`Treasures`/`Quests`/`Npcs`/`Objects`/`Castles` desde las
+  extensiones, ya que el writer no las emitía y nunca podían poblarse.
+- Efecto medido en el WORLD regenerado: `bundle.aog` pasa de ~99.9 MB a ~108 KB.
+
+**Consecuencia:** el cambio de v5 a v6 obliga a regenerar el WORLD.
+`manifest.json` declara `"BundleFormat": "AOGBND01/v6"` y los tres repos validan
+ese valor.

@@ -21,7 +21,7 @@ internal sealed class WorldArtifactManifestService
             .Select(path => CreateArtifact(worldDirectory, path))
             .ToArray();
         if (floors.Length == 0) throw new InvalidDataException("El WORLD no contiene floors .gmap.");
-        var manifest = new Manifest(1, "AOGBND01/v5", "AOGMAP01/v4",
+        var manifest = new Manifest(1, "AOGBND01/v6", "AOGMAP01/v4",
             CreateArtifact(worldDirectory, bundlePath), floors, CreateArtifact(worldDirectory, runtimeManifestPath));
         File.WriteAllText(Path.Combine(worldDirectory, "manifest.json"),
             JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
