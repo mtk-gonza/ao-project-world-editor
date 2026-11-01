@@ -56,6 +56,81 @@ public sealed class RuntimeCatalogTests
     }
 
     [Fact]
+    public void Runtime_data_converts_legacy_npc_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-npcs-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumNPCs=1
+
+                    [NPC1]
+                    Name=Guardia
+                    NpcType=3
+                    Body=12
+                    Head=5
+                    Attackable=1
+                    Comercia=1
+                    MinHP=100
+                    MaxHP=200
+                    MinMana=1
+                    MaxMana=4
+                    ReSpawn=1
+                    InvReSpawn=0
+                    DropCount=1
+                    Drop1=200-500-1-3
+                    NROITEMS=1
+                    Obj1=100-1
+                    LanzaSpells=2
+                    Sp1=9
+                    Sp2=12
+                    Cd1=3
+                    Cd2=4
+                    CaminataLen=1
+                    Caminata1=1:0:5
+                    NumQuest=2
+                    QuestNumber1=5
+                    QuestNumber2=6
+                    CityCount=1
+                    City1=Ciudad-35-50-50-100
+                    """),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "npcs.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal("npcs", rootElement.GetProperty("Catalog").GetString());
+            var npc = rootElement.GetProperty("Items")[0];
+            Assert.Equal(1, npc.GetProperty("Number").GetInt32());
+            Assert.Equal("Guardia", npc.GetProperty("Name").GetString());
+            Assert.Equal(3, npc.GetProperty("Heading").GetInt32());
+            Assert.True(npc.GetProperty("Attackable").GetBoolean());
+            // ReSpawn=1 significa "no reaparece" en el formato legacy.
+            Assert.False(npc.GetProperty("Respawns").GetBoolean());
+            Assert.True(npc.GetProperty("InventoryRespawns").GetBoolean());
+            Assert.Equal(500, npc.GetProperty("Drops")[0].GetProperty("Chance").GetInt32());
+            Assert.Equal(9, npc.GetProperty("Spells")[0].GetInt32());
+            Assert.Equal(3, npc.GetProperty("SpellCooldowns")[0].GetInt32());
+            Assert.Equal(35, npc.GetProperty("TransportCities")[0].GetProperty("SectorId").GetInt32());
+            Assert.Equal(2, npc.GetProperty("QuestNumbers").GetArrayLength());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void Runtime_data_converts_legacy_event_dat_to_versioned_json()
     {
         var root = Directory.CreateTempSubdirectory("ao-runtime-events-");
