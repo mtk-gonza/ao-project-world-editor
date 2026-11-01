@@ -128,6 +128,11 @@ internal sealed class UnifiedWorldBundle
     public byte[] InitialEquipment { get; set; } = [];
     /// <summary>Fishing DAT sources (pesca.dat, RecursosEspeciales.dat), keyed by file name.</summary>
     public IReadOnlyDictionary<string, byte[]> Fishing { get; set; } = new Dictionary<string, byte[]>();
+    /// <summary>
+    /// Non-spatial legacy DAT/INI/TXT sources still consumed by the server,
+    /// keyed by file name. Published 1:1 as runtime-data/legacycatalogs.json.
+    /// </summary>
+    public IReadOnlyDictionary<string, byte[]> LegacyCatalogs { get; set; } = new Dictionary<string, byte[]>();
 
     public void SetPlacements(IEnumerable<GlobalSectorPlacement> placements)
     {

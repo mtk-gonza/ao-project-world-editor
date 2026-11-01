@@ -49,7 +49,8 @@ internal sealed class UnifiedWorldCompiler
         byte[]? factionRewards = null,
         IReadOnlyDictionary<string, byte[]>? craftingLists = null,
         byte[]? initialEquipment = null,
-        IReadOnlyDictionary<string, byte[]>? fishing = null)
+        IReadOnlyDictionary<string, byte[]>? fishing = null,
+        IReadOnlyDictionary<string, byte[]>? legacyCatalogs = null)
     {
         ArgumentNullException.ThrowIfNull(world);
         var bundle = new UnifiedWorldBundle();
@@ -158,6 +159,7 @@ internal sealed class UnifiedWorldCompiler
         bundle.CraftingLists = craftingLists ?? new Dictionary<string, byte[]>();
         bundle.InitialEquipment = initialEquipment ?? [];
         bundle.Fishing = fishing ?? new Dictionary<string, byte[]>();
+        bundle.LegacyCatalogs = legacyCatalogs ?? new Dictionary<string, byte[]>();
         return bundle;
     }
 

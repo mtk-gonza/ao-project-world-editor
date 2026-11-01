@@ -58,7 +58,8 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["factionrewards.json"] = NormalizeFactionRewards(bundle.FactionRewards),
             ["craftinglists.json"] = NormalizeCraftingLists(bundle.CraftingLists),
             ["initialequipment.json"] = NormalizeInitialEquipment(bundle.InitialEquipment),
-            ["fishing.json"] = NormalizeFishing(bundle.Fishing)
+            ["fishing.json"] = NormalizeFishing(bundle.Fishing),
+            ["legacycatalogs.json"] = NormalizeLegacyCatalogs(bundle.LegacyCatalogs)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var payload in payloads)
@@ -643,6 +644,77 @@ internal sealed class UnifiedWorldRuntimeDataService
                 UniqueMapFish = uniqueFish, SpecialRewards = rewards
             },
             new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Publica los .dat/.ini/.txt no espaciales 1:1: cada archivo conserva sus
+    /// secciones y claves (incluida la seccion raiz) y ademas sus lineas crudas.
+    /// </summary>
+    private static byte[] NormalizeLegacyCatalogs(IReadOnlyDictionary<string, byte[]> catalogs)
+    {
+        var sections = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
+        var lines = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in catalogs.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (pair.Value.Length == 0) continue;
+            lines[pair.Key] = ReadRawLines(pair.Value);
+            if (!pair.Key.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                sections[pair.Key] = ParseIniWithRoot(pair.Value);
+        }
+
+        if (sections.Count == 0 && lines.Count == 0)
+            return "{\"Schema\":1,\"Catalog\":\"legacycatalogs\",\"Sections\":{},\"Lines\":{}}"u8.ToArray();
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "legacycatalogs", Sections = sections, Lines = lines },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>Lineas equivalentes a <c>File.ReadAllLines</c>, sin normalizar contenido.</summary>
+    private static string[] ReadRawLines(byte[] payload)
+    {
+        var text = DecodeLegacyText(payload).Replace("\r\n", "\n").Replace('\r', '\n');
+        var result = text.Split('\n').ToList();
+        if (result.Count > 0 && result[^1].Length == 0)
+            result.RemoveAt(result.Count - 1);
+        if (result.Count > 0 && result[0].StartsWith('\uFEFF'))
+            result[0] = result[0][1..];
+        return result.ToArray();
+    }
+
+    /// <summary>
+    /// Igual que <see cref="ParseIni"/> pero conserva las claves previas a la
+    /// primera seccion bajo la seccion raiz <c>""</c>, como <c>IniFile.Read</c>.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>> ParseIniWithRoot(byte[] payload)
+    {
+        var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var root = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var current = root;
+        result[""] = current;
+        foreach (var raw in DecodeLegacyText(payload).Split('\n'))
+        {
+            var line = raw.Trim().TrimEnd('\r');
+            if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
+            if (line.StartsWith('['))
+            {
+                var end = line.IndexOf(']');
+                if (end <= 1) continue;
+                var name = line[1..end].Trim();
+                if (!result.TryGetValue(name, out current))
+                {
+                    current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    result[name] = current;
+                }
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator > 0)
+                current[line[..separator].Trim()] = line[(separator + 1)..].Trim();
+        }
+        if (root.Count == 0 && result.Count > 1)
+            result.Remove("");
+        return result;
     }
 
     private static object? ParseFish(string raw, int maxRodLevel)

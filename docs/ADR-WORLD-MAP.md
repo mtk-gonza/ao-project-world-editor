@@ -16,11 +16,12 @@ ni abre esos archivos fuente.
 
 Los catálogos grandes de `Events`, `Treasures`, `Quests`, `Npcs`, `Objects`,
 `Castles`, `Spells`, `EffectsOverTime`, `GlobalQuests`, `Scenarios`,
-`FactionRanks`, `FactionRewards`, `CraftingLists`, `InitialEquipment` y `Fishing`
-se generan como sidecars en `world/runtime-data/`, junto con un `manifest.json` de
-hashes SHA-256 (15 entradas obligatorias). Esto evita inflar `bundle.aog` y evita
-que el servidor reconstruya gameplay desde `DatDirectory`. Las extensiones
-embebidas antiguas quedan solo como fallback de compatibilidad.
+`FactionRanks`, `FactionRewards`, `CraftingLists`, `InitialEquipment`, `Fishing`
+y `LegacyCatalogs` (los `.dat/.ini/.txt` no espaciales, ADR-WM-039) se generan como
+sidecars en `world/runtime-data/`, junto con un `manifest.json` de hashes SHA-256
+(16 entradas obligatorias). Esto evita inflar `bundle.aog` y evita que el servidor
+reconstruya gameplay desde `DatDirectory`. Las extensiones embebidas antiguas
+quedan solo como fallback de compatibilidad.
 
 **Formato de catálogo:** cada sidecar es un documento JSON versionado
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` con propiedades en PascalCase. El
@@ -899,3 +900,52 @@ lee `Dat/Balance.dat`, `Meditaciones.dat`, `pesca.dat`, `Tesoros.dat`,
 `RecursosEspeciales.dat`, `Collectiblecards.dat`, `Eventos.dat`, `GlobalQuests.dat`,
 `rangos_faccion.dat` y `recompensas_faccion.dat` para sus `Settings`; se migran en
 el lote de configuración antes de borrar `ao-project-resources/Dat`.
+
+## ADR-WM-039: catálogos legacy no espaciales 1:1 y estado mutable separado
+
+**Estado:** aceptado 2026-11-01. Lote 4 ("configuración + resto de consumidores").
+
+**Decisión:** los `.dat/.ini/.txt` no espaciales que el servidor todavía leía de
+`Dat/` se publican en un único sidecar `runtime-data/legacycatalogs.json` con una
+representación de secciones 1:1, en vez de un DTO tipado por dominio:
+
+- `Sections`: mapa `nombreDeArchivo -> sección -> clave/valor`, idéntico a
+  `IniFile.Read`, incluida la **sección raíz `""`** donde `IniFile.Read` deja las
+  claves previas a la primera sección (caso real: `GlobalQuests.dat`).
+- `Lines`: las líneas crudas de cada archivo, equivalentes a `File.ReadAllLines`,
+  para los consumidores que envían texto sin interpretarlo (`Help.dat`,
+  `BlockedWordsDescription.txt`, `NombresInvalidos.txt`).
+- Los `.txt` solo publican `Lines`; el resto publica `Sections` y `Lines`.
+
+El servidor reconstruye cada `IniFile` con `IniFile.FromSections` mediante
+`LegacyDatCatalog`, que también expone `Lines` y `Contains`. El fallback a un
+directorio `Dat/` solo se activa cuando el payload viene vacío (fixtures sin
+bundle); en producción el sidecar siempre existe.
+
+- **Configuración:** `Configuracion.ini` no es un `.dat`, se copia canónica a
+  `ao-project-server/config/Configuracion.ini`. `ServerConfigValues` y `PartyRules`
+  pasan a leer `ServerOptions.ConfigDirectory` (corrige el bug latente de leerlo
+  desde `Dat/`). `ReferenceConfig`, `GuildConfig` y `PacketRatePolicy` reciben el
+  `LegacyDatCatalog`.
+- **Estado mutable:** `Motd.ini`, `consultas.dat` y `baneos.dat` se siembran desde
+  el catálogo a `data/state/` la primera vez y después manda el archivo del
+  operador. `RECORDS.DAT` pasa a `data/state/records.dat`.
+- **Llaves de casa:** la venta reescribía `NPCs.dat`; con el catálogo inmutable la
+  venta se persiste en `data/state/npc-sold-keys.json` (`SoldHouseKeyStore`) y se
+  aplica como overlay en memoria (`NpcStore.ApplySoldShopItems`, misma forma
+  `Obj{slot}=obj-0`).
+- **`TipoRuna`:** ya se emitía en `objects.json`; ahora `ObjectDefinition` lo modela
+  y `LegacyItemUse` lo consume, sin reabrir `obj.dat`.
+- **Código muerto:** se elimina `DonorDirectory` y el `ListBox` de nombres legacy en
+  `AdminForm` (reemplazado por una etiqueta informativa).
+
+**Efecto medido:** `bundle.aog` no cambia (byte-idéntico, SHA-256 `1F1DBD70...`); se
+añade `legacycatalogs.json` (~75 KB) al manifiesto (16 entradas). Smoke real:
+`WorldRuntimeLoader` + `ReferenceConfig`/`GuildConfig`/`ServerConfigValues`/
+`PartyRules`/`PacketRatePolicy` consumen el sidecar real y `objects.json` conserva
+`TipoRuna > 0`.
+
+**Consecuencia:** ningún consumidor del servidor abre `Dat/` en producción; los usos
+restantes de `options.DatDirectory` son backfills de fixtures sin bundle. Queda el
+lote 5 (catálogos del cliente: `zonas.dat`, `colores.dat`, `Meditaciones.dat` local,
+índice local de NPCs/obj) y el lote 6 (borrar `ao-project-resources/Dat`).

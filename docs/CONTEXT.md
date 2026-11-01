@@ -197,8 +197,8 @@ catálogos grandes de gameplay se generan aparte en `world/runtime-data/`:
 `events.json`, `treasures.json`, `quests.json`, `npcs.json`, `objects.json`,
 `castles.json`, `spells.json`, `effectsovertime.json`, `globalquests.json`,
 `scenarios.json`, `factionranks.json`, `factionrewards.json`, `craftinglists.json`,
-`initialequipment.json`, `fishing.json` y `manifest.json` con hashes SHA-256
-(15 entradas obligatorias).
+`initialequipment.json`, `fishing.json`, `legacycatalogs.json` y `manifest.json`
+con hashes SHA-256 (16 entradas obligatorias).
 
 Cada catálogo es un documento JSON versionado con la forma
 `{ "Schema": 1, "Catalog": "<nombre>", ... }` y propiedades en PascalCase. El
@@ -216,12 +216,12 @@ catálogo runtime.
 - El bundle conserva extensiones de gameplay antiguas solo para compatibilidad;
   el runtime nuevo consume `world/runtime-data/`. `reference/Recursos` y `Dat` son
   entradas de importación/compilación.
-- `ReferenceConfig` sigue leyendo `Dat/Balance.dat`, `Meditaciones.dat`,
-  `pesca.dat`, `Tesoros.dat`, `RecursosEspeciales.dat`, `Collectiblecards.dat`,
-  `Eventos.dat`, `GlobalQuests.dat`, `rangos_faccion.dat` y
-  `recompensas_faccion.dat`; se migra completo en el lote de configuración. El
-  resto de los catálogos de gameplay (spells, effects, quests globales, escenarios,
-  facción, crafteo, equipamiento inicial y pesca) ya se leen de `runtime-data/`.
+- `ReferenceConfig`, `GuildConfig`, `ServerConfigValues`, `PartyRules` y
+  `PacketRatePolicy` ya no abren `Dat/`: leen `Configuracion.ini` de
+  `ao-project-server/config/` y el resto del catálogo canónico
+  `runtime-data/legacycatalogs.json` (ADR-WM-039). El estado mutable
+  (`Motd.ini`, `consultas.dat`, `baneos.dat`, `records.dat`, llaves de casa
+  vendidas) vive en `data/state/`.
 - `FloorZ=-3` continúa siendo un piso virtual de importación pendiente de decisión
   definitiva de layout.
 

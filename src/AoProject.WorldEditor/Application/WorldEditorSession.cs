@@ -92,8 +92,39 @@ internal sealed class WorldEditorSession
             ReadNamedData(dat, ["ArmasHerrero.dat", "ArmadurasHerrero.dat",
                 "BlackSmithElementalRunes.dat", "ObjCarpintero.dat", "ObjAlquimista.dat", "ObjSastre.dat"]),
             ReadData(dat, "EquipamientoInicial.dat"),
-            ReadNamedData(dat, ["pesca.dat", "RecursosEspeciales.dat"]));
+            ReadNamedData(dat, ["pesca.dat", "RecursosEspeciales.dat"]),
+            ReadNamedData(dat, LegacyCatalogFiles));
     }
+
+    /// <summary>
+    /// .dat/.ini/.txt no espaciales que el servidor sigue consumiendo. Se
+    /// publican 1:1 en runtime-data/legacycatalogs.json; los ausentes se omiten.
+    /// </summary>
+    private static readonly string[] LegacyCatalogFiles =
+    [
+        "Balance.dat",
+        "Meditaciones.dat",
+        "pesca.dat",
+        "Tesoros.dat",
+        "RecursosEspeciales.dat",
+        "Collectiblecards.dat",
+        "Eventos.dat",
+        "GlobalQuests.dat",
+        "rangos_faccion.dat",
+        "recompensas_faccion.dat",
+        "Clanes.dat",
+        "Help.dat",
+        "Retos.dat",
+        "Motd.ini",
+        "consultas.dat",
+        "baneos.dat",
+        "PacketRatePolicy.ini",
+        "Eliminarllaves.dat",
+        "ArmadurasFaccionarias.dat",
+        "ObjArtesano.dat",
+        "NombresInvalidos.txt",
+        "BlockedWordsDescription.txt"
+    ];
 
     private static byte[] ReadData(string directory, string fileName) =>
         File.Exists(Path.Combine(directory, fileName)) ? File.ReadAllBytes(Path.Combine(directory, fileName)) : [];
