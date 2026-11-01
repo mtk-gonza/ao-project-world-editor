@@ -16,7 +16,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         Directory.CreateDirectory(directory);
         var payloads = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["events.dat"] = bundle.Events,
+            ["events.json"] = NormalizeEvents(bundle.Events),
             ["treasures.json"] = NormalizeTreasures(bundle.Treasures),
             ["quests.json"] = NormalizeQuests(bundle.Quests),
             ["npcs.dat"] = bundle.Npcs,
@@ -82,6 +82,102 @@ internal sealed class UnifiedWorldRuntimeDataService
             NpcNumbers = npcNumbers, NpcSectors = npcSectors
         }, new JsonSerializerOptions { WriteIndented = true });
     }
+
+    private static byte[] NormalizeEvents(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "events", Invasions = Array.Empty<object>(), Schedule = Array.Empty<object>() });
+        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var invasions = GetSection(sections, "Invasiones");
+        var count = Math.Max(0, ParseInt(Get(invasions, "Cantidad")));
+        var items = Enumerable.Range(1, count).Select(index =>
+        {
+            var name = Get(invasions, "Invasion" + index).Trim();
+            if (name.Length == 0) return null;
+            var section = GetSection(sections, name);
+            var maxNpcs = (short)ParseInt(Get(section, "MaxNPCs"));
+            var boxCount = Math.Max(0, ParseInt(Get(section, "SpawnBoxes")));
+            var boxes = Enumerable.Range(1, boxCount).Select(boxIndex =>
+                {
+                    var fields = Get(section, "SpawnBox" + boxIndex).Split('-');
+                    if (fields.Length != 7) return null;
+                    var heading = HeadingName(fields[5]);
+                    if (heading is null) return null;
+                    var sectorId = (short)ParseInt(fields[0]);
+                    if (sectorId <= 0) return null;
+                    return new
+                    {
+                        SectorId = sectorId,
+                        TopLeftX = (short)ParseInt(fields[1]),
+                        TopLeftY = (short)ParseInt(fields[2]),
+                        BottomRightX = (short)ParseInt(fields[3]),
+                        BottomRightY = (short)ParseInt(fields[4]),
+                        Heading = heading,
+                        WallCoordinate = (short)ParseInt(fields[6])
+                    };
+                }).Where(box => box is not null).Select(box => box!).ToArray();
+            if (maxNpcs <= 0 || boxes.Length == 0) return null;
+
+            var npcNumbers = Get(section, "NPCs")
+                .Split('-', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => (short)ParseInt(value))
+                .Where(number => number > 0).ToArray();
+
+            return new
+            {
+                Index = index,
+                Name = name,
+                MaxWallHp = ParseInt(Get(section, "MaxVidaMuralla")),
+                MaxNpcs = maxNpcs,
+                Warning = Get(section, "Aviso"),
+                WarningMinutes = (short)ParseInt(Get(section, "AvisarTiempo")),
+                RepeatWarning = (short)ParseInt(Get(section, "RepetirAviso")),
+                Description = Get(section, "Desc"),
+                RepeatDescription = (short)ParseInt(Get(section, "RepetirDesc")),
+                SpawnIntervalSeconds = (short)ParseInt(Get(section, "IntervaloSpawn")),
+                DurationMinutes = (short)ParseInt(Get(section, "Duracion")),
+                IntervalMinutes = (short)ParseInt(Get(section, "Intervalo")),
+                OffsetMinutes = (short)ParseInt(Get(section, "Offset")),
+                WonMessage = Get(section, "MensajeGanaron"),
+                LostMessage = Get(section, "MensajePerdieron"),
+                NpcNumbers = npcNumbers,
+                SpawnBoxes = boxes
+            };
+        }).Where(invasion => invasion is not null).Select(invasion => invasion!).ToArray();
+
+        var scheduleSection = GetSection(sections, "EVENTOS");
+        var schedule = Enumerable.Range(0, 24).Select(hour =>
+        {
+            var raw = Get(scheduleSection, hour.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (raw.Length == 0) return null;
+            var fields = raw.Split('-');
+            int Field(int position) => position < fields.Length ? ParseInt(fields[position]) : 0;
+            return new
+            {
+                Hour = (byte)hour,
+                Type = (byte)Math.Clamp(Field(0), 0, byte.MaxValue),
+                Duration = (byte)Math.Clamp(Field(1), 0, byte.MaxValue),
+                Multiplier = (byte)Math.Clamp(Field(2), 0, byte.MaxValue)
+            };
+        }).Where(entry => entry is not null).Select(entry => entry!).ToArray();
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "events", Invasions = items, Schedule = schedule },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static string? HeadingName(string value) => value.Trim().ToLowerInvariant() switch
+    {
+        "norte" => "NORTH",
+        "sur" => "SOUTH",
+        "este" => "EAST",
+        "oeste" => "WEST",
+        _ => null
+    };
 
     private static byte[] NormalizeQuests(byte[] payload)
     {

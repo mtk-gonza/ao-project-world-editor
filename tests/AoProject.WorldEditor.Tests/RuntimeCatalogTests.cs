@@ -56,6 +56,69 @@ public sealed class RuntimeCatalogTests
     }
 
     [Fact]
+    public void Runtime_data_converts_legacy_event_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-events-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = Encoding.UTF8.GetBytes("""
+                    [Invasiones]
+                    Cantidad=1
+                    Invasion1=Bander
+
+                    [Bander]
+                    MaxVidaMuralla=200000
+                    MaxNPCs=2
+                    Aviso=Las hordas se acercan
+                    AvisarTiempo=2
+                    RepetirAviso=1
+                    Desc=Las hordas atacan
+                    RepetirDesc=5
+                    IntervaloSpawn=5
+                    Duracion=3
+                    Intervalo=5
+                    Offset=1
+                    MensajeGanaron=Banderbill resistio
+                    MensajePerdieron=La legion entro
+                    NPCs=1049-1050
+                    SpawnBoxes=1
+                    SpawnBox1=58-53-21-81-24-Norte-20
+
+                    [EVENTOS]
+                    20=1-60-2
+                    """),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = "# objects"u8.ToArray(),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "events.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal("events", rootElement.GetProperty("Catalog").GetString());
+            var invasion = rootElement.GetProperty("Invasions")[0];
+            Assert.Equal("Bander", invasion.GetProperty("Name").GetString());
+            Assert.Equal(2, invasion.GetProperty("MaxNpcs").GetInt32());
+            Assert.Equal(1049, invasion.GetProperty("NpcNumbers")[0].GetInt32());
+            Assert.Equal("NORTH", invasion.GetProperty("SpawnBoxes")[0].GetProperty("Heading").GetString());
+            var schedule = rootElement.GetProperty("Schedule")[0];
+            Assert.Equal(20, schedule.GetProperty("Hour").GetInt32());
+            Assert.Equal(60, schedule.GetProperty("Duration").GetInt32());
+            Assert.Equal(2, schedule.GetProperty("Multiplier").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void Runtime_data_converts_legacy_quest_dat_to_versioned_json()
     {
         var root = Directory.CreateTempSubdirectory("ao-runtime-quests-");
