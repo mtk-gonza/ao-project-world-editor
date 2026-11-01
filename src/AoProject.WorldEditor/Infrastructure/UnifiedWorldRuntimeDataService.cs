@@ -18,7 +18,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         {
             ["events.dat"] = bundle.Events,
             ["treasures.json"] = NormalizeTreasures(bundle.Treasures),
-            ["quests.dat"] = bundle.Quests,
+            ["quests.json"] = NormalizeQuests(bundle.Quests),
             ["npcs.dat"] = bundle.Npcs,
             ["objects.dat"] = bundle.Objects,
             ["castles.json"] = NormalizeCastles(bundle.Castles)
@@ -83,8 +83,79 @@ internal sealed class UnifiedWorldRuntimeDataService
         }, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static Dictionary<string, Dictionary<string, string>> ParseIni(byte[] payload)
+    private static byte[] NormalizeQuests(byte[] payload)
     {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "quests", Items = Array.Empty<object>() });
+        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Max(0, ParseInt(Get(init, "NumQuests")));
+        var items = Enumerable.Range(1, count).Select(index =>
+        {
+            var section = GetSection(sections, "QUEST" + index);
+            return new
+            {
+                Index = index,
+                Name = Get(section, "Nombre").Trim(),
+                Description = Get(section, "Desc"),
+                RequiredLevel = ClampByte(ParseInt(Get(section, "RequiredLevel"))),
+                RequiredNpcs = ReadRequirements(section, "RequiredNPCs", "RequiredNPC"),
+                RequiredObjects = ReadRequirements(section, "RequiredOBJs", "RequiredOBJ"),
+                RewardGold = ParseInt(Get(section, "RewardGLD")),
+                RewardExperience = ParseInt(Get(section, "RewardEXP")),
+                RewardObjects = ReadRequirements(section, "RewardOBJs", "RewardOBJ"),
+                RequiredQuest = (short)ParseInt(Get(section, "RequiredQuest")),
+                LimitLevel = ClampByte(ParseInt(Get(section, "LimitLevel"))),
+                FinalDescription = Get(section, "DescFinal"),
+                NextQuest = Get(section, "NextQuest"),
+                RequiredClasses = ReadShorts(section, "RequiredClassesCount", "RequiredClass", byte.MaxValue)
+                    .Where(value => value > 0).Select(value => (int)value).ToArray(),
+                RequiredSpells = ReadShorts(section, "RequiredSpellCount", "RequiredSpell", 100)
+                    .Where(value => value > 0).ToArray(),
+                RequiredSkill = ClampByte(ParseInt(Get(section, "RequiredSkill"))),
+                RequiredSkillValue = ClampByte(ParseInt(Get(section, "RequiredValue"))),
+                RewardSpells = ReadShorts(section, "RewardSkills", "RewardSkill", 100)
+                    .Where(value => value > 0).ToArray(),
+                WorkerOnly = ParseInt(Get(section, "Trabajador")) == 1,
+                TalkTo = (short)ParseInt(Get(section, "TalkTo")),
+                Repeatable = ParseInt(Get(section, "Repetible")) != 0,
+                PermittedFactions = ParseInt(Get(section, "PermittedFactions")),
+                RequiredTargetNpcs = ReadShorts(section, "RequiredTargetNPCs", "RequiredTargetNPC", 100)
+                    .Where(value => value > 0)
+                    .Select(value => new { Index = value, Amount = (short)1 }).ToArray(),
+                GlobalQuestIndex = ParseInt(Get(section, "GlobalQuestIndex")),
+                GlobalQuestThresholdNeeded = ParseInt(Get(section, "GlobalQuestThresholdNeeded"))
+            };
+        }).Where(quest => quest.Name.Length > 0).ToArray();
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "quests", Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static object[] ReadRequirements(Dictionary<string, string> section, string countKey, string prefix)
+    {
+        var count = Math.Max(0, ParseInt(Get(section, countKey)));
+        return Enumerable.Range(1, count)
+            .Select(index => Get(section, prefix + index).Split('-', 2))
+            .Where(parts => parts.Length == 2)
+            .Select(parts => new { Index = (short)ParseInt(parts[0]), Amount = (short)ParseInt(parts[1]) })
+            .Where(requirement => requirement.Index > 0).ToArray();
+    }
+
+    private static long[] ReadShorts(Dictionary<string, string> section, string countKey, string prefix, int max)
+    {
+        var count = Math.Clamp(ParseInt(Get(section, countKey)), 0, max);
+        return Enumerable.Range(1, count).Select(index => (long)ParseInt(Get(section, prefix + index))).ToArray();
+    }
+
+    private static byte ClampByte(int value) => (byte)Math.Clamp(value, 0, byte.MaxValue);
+
+    private static Dictionary<string, Dictionary<string, string>> ParseIni(byte[] payload)    {
         var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string>? current = null;
         foreach (var raw in Encoding.UTF8.GetString(payload).Split('\n'))
