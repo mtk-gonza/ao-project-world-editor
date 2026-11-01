@@ -56,6 +56,126 @@ public sealed class RuntimeCatalogTests
     }
 
     [Fact]
+    public void Runtime_data_converts_legacy_obj_dat_to_versioned_json()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-objects-");
+        try
+        {
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = Encoding.UTF8.GetBytes("""
+                    [INIT]
+                    NumOBJs=3
+
+                    [OBJ1]
+                    Name=Espada
+                    ObjType=1
+                    GrhIndex=100
+                    Valor=5
+                    Newbie=1
+                    Agarrable=1
+                    CP1=Guerrero
+                    RP1=Elfo
+                    SkillRequerido=Combate+con+armas-30
+                    ItemCrafteo1=10-2
+
+                    [OBJ2]
+                    Name=Cofre
+                    ObjType=48
+                    CantItem=1
+                    Item1=500
+                    Cantidad1=2
+                    Drop1=3
+
+                    [OBJ3]
+                    Name=Pasaje
+                    ObjType=36
+                    SectorId=399
+                    X=50
+                    Y=60
+                    HastaMap=1
+                    HastaX=1
+                    HastaY=1
+                    """),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "objects.json")));
+            var rootElement = document.RootElement;
+            Assert.Equal("objects", rootElement.GetProperty("Catalog").GetString());
+            var items = rootElement.GetProperty("Items");
+            Assert.Equal(3, items.GetArrayLength());
+
+            var sword = items[0];
+            Assert.Equal("Espada", sword.GetProperty("Name").GetString());
+            Assert.Equal(100, sword.GetProperty("Graphic").GetInt32());
+            Assert.True(sword.GetProperty("Newbie").GetBoolean());
+            Assert.Equal(3, sword.GetProperty("ProhibitedClasses")[0].GetInt32());
+            Assert.Equal(2, sword.GetProperty("ProhibitedRaces")[0].GetInt32());
+            Assert.Equal(4, sword.GetProperty("RequiredSkill").GetInt32());
+            Assert.Equal(30, sword.GetProperty("RequiredSkillAmount").GetInt32());
+            Assert.Equal(10, sword.GetProperty("CraftingMaterials")[0].GetProperty("ObjectIndex").GetInt32());
+            Assert.Equal(2, sword.GetProperty("CraftingMaterials")[0].GetProperty("Amount").GetInt32());
+
+            var chest = items[1];
+            Assert.Equal(48, chest.GetProperty("Type").GetInt32());
+            Assert.Equal(500, chest.GetProperty("ChestItems")[0].GetProperty("ObjectIndex").GetInt32());
+            Assert.Equal(2, chest.GetProperty("ChestItems")[0].GetProperty("Amount").GetInt32());
+            Assert.Equal(3, chest.GetProperty("ChestItems")[0].GetProperty("DropChance").GetInt32());
+
+            // Los pasajes guardan el destino en SectorId/X/Y, no en HastaMap.
+            var ticket = items[2];
+            Assert.Equal(399, ticket.GetProperty("HastaMap").GetInt32());
+            Assert.Equal(50, ticket.GetProperty("HastaX").GetInt32());
+            Assert.Equal(60, ticket.GetProperty("HastaY").GetInt32());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Runtime_data_decodes_legacy_obj_dat_as_cp1252()
+    {
+        var root = Directory.CreateTempSubdirectory("ao-runtime-objects-ansi-");
+        try
+        {
+            var payload = new List<byte>();
+            payload.AddRange(Encoding.ASCII.GetBytes("[INIT]\nNumOBJs=1\n\n[OBJ1]\nName="));
+            payload.Add(0xC1); // 'Á' en CP1252/ANSI, inválido como UTF-8 aislado.
+            payload.AddRange(Encoding.ASCII.GetBytes("rbol\nObjType=1\nGrhIndex=4\n"));
+
+            var bundle = new UnifiedWorldBundle
+            {
+                Events = "# events"u8.ToArray(),
+                Treasures = "# treasures"u8.ToArray(),
+                Quests = "# quests"u8.ToArray(),
+                Npcs = "# npcs"u8.ToArray(),
+                Objects = payload.ToArray(),
+                Castles = "[]"u8.ToArray()
+            };
+
+            new UnifiedWorldRuntimeDataService().Save(bundle, root.FullName);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllBytes(Path.Combine(root.FullName, "runtime-data", "objects.json")));
+            Assert.Equal("Árbol", document.RootElement.GetProperty("Items")[0].GetProperty("Name").GetString());
+        }
+        finally
+        {
+            try { Directory.Delete(root.FullName, true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
     public void Runtime_data_converts_legacy_npc_dat_to_versioned_json()
     {
         var root = Directory.CreateTempSubdirectory("ao-runtime-npcs-");

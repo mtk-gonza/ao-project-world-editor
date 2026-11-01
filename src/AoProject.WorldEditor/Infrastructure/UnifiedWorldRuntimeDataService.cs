@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +9,29 @@ namespace AoProject.WorldEditor.Infrastructure;
 /// <summary>Writes large gameplay catalogs beside the spatial bundle.</summary>
 internal sealed class UnifiedWorldRuntimeDataService
 {
+    static UnifiedWorldRuntimeDataService()
+    {
+        // .dat legacy usa ANSI/CP1252; .NET Core no registra codepages por defecto.
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
+    /// <summary>
+    /// Igual que <c>IniFile.DetectEncoding</c> del servidor: UTF-8 estricto y,
+    /// si el archivo no es UTF-8 valido, CP1252 (ANSI de VB6).
+    /// </summary>
+    private static string DecodeLegacyText(byte[] payload)
+    {
+        try
+        {
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                .GetString(payload);
+        }
+        catch (DecoderFallbackException)
+        {
+            return Encoding.GetEncoding(1252).GetString(payload);
+        }
+    }
+
     private sealed record Manifest(int Schema, Dictionary<string, string> Files);
 
     public void Save(UnifiedWorldBundle bundle, string worldDirectory)
@@ -20,7 +44,7 @@ internal sealed class UnifiedWorldRuntimeDataService
             ["treasures.json"] = NormalizeTreasures(bundle.Treasures),
             ["quests.json"] = NormalizeQuests(bundle.Quests),
             ["npcs.json"] = NormalizeNpcs(bundle.Npcs),
-            ["objects.dat"] = bundle.Objects,
+            ["objects.json"] = NormalizeObjects(bundle.Objects),
             ["castles.json"] = NormalizeCastles(bundle.Castles)
         };
         var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -62,7 +86,7 @@ internal sealed class UnifiedWorldRuntimeDataService
     {
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(new { Schema = 1, Catalog = "treasures", TreasureSectors = Array.Empty<int>(), Treasures = Array.Empty<object>(), GiftSectors = Array.Empty<int>(), Gifts = Array.Empty<object>(), NpcNumbers = Array.Empty<short>(), NpcSectors = Array.Empty<int>() });
-        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
             return payload;
 
         var sections = ParseIni(payload);
@@ -88,7 +112,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
                 new { Schema = 1, Catalog = "events", Invasions = Array.Empty<object>(), Schedule = Array.Empty<object>() });
-        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
             return payload;
 
         var sections = ParseIni(payload);
@@ -184,7 +208,7 @@ internal sealed class UnifiedWorldRuntimeDataService
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
                 new { Schema = 1, Catalog = "npcs", Items = Array.Empty<object>() });
-        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
             return payload;
 
         var sections = ParseIni(payload);
@@ -455,12 +479,487 @@ internal sealed class UnifiedWorldRuntimeDataService
 
     private static int NormalizeInterval(int value, int fallback) => value > 0 ? value : fallback;
 
+    private static byte[] NormalizeObjects(byte[] payload)
+    {
+        if (payload.Length == 0)
+            return JsonSerializer.SerializeToUtf8Bytes(
+                new { Schema = 1, Catalog = "objects", Items = Array.Empty<object>() });
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
+            return payload;
+
+        var sections = ParseIni(payload);
+        var init = GetSection(sections, "INIT");
+        var count = Math.Max(0, LegacyInt(Get(init, "NumOBJs")));
+        var items = new List<Dictionary<string, object?>>(count);
+        for (var index = 1; index <= count; index++)
+        {
+            var section = GetSection(sections, "OBJ" + index);
+            var name = Get(section, "Name");
+            if (name.Length == 0) continue;
+            items.Add(ReadObject(section, (short)index, name));
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(
+            new { Schema = 1, Catalog = "objects", Items = items },
+            new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static Dictionary<string, object?> ReadObject(
+        Dictionary<string, string> section, short index, string name)
+    {
+        var objectType = ObjInt(section, "ObjType");
+        // FileIO.bas:1448-1455: pasajes, donador y quest guardan el destino en
+        // SectorId/X/Y; el resto de objetos de transporte usa HastaMap/HastaX/HastaY.
+        var destinationInMap = objectType is 36 or 50 or 51; // otPassageTicket, otDonator, OtQuest
+        var skill = ParseSkillRequirement(Get(section, "SkillRequerido"));
+        var minLevel = ObjInt(section, "MinELV");
+        if (minLevel <= 0) minLevel = ObjInt(section, "MinLevel");
+        var cooldown = ObjInt(section, "Cooldown");
+        if (cooldown <= 0) cooldown = ObjInt(section, "CD");
+        var spellIndex = ObjShort(section, "HechizoIndex");
+        if (spellIndex == 0) spellIndex = ObjShort(section, "Hechizo");
+        var skSastreria = ObjShort(section, "SKSastreria");
+        if (skSastreria == 0) skSastreria = ObjShort(section, "SkSastreria");
+        var map = (short)Math.Clamp(FirstNonZero(section, "Map", "SectorId"), short.MinValue, short.MaxValue);
+
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Index"] = index,
+            ["Name"] = name,
+            ["Graphic"] = ObjInt(section, "GrhIndex"),
+            ["Type"] = (byte)objectType,
+            ["MaxHit"] = ObjShort(section, "MaxHIT"),
+            ["MinHit"] = ObjShort(section, "MinHIT"),
+            ["MaxDefense"] = ObjShort(section, "MaxDef"),
+            ["MinDefense"] = ObjShort(section, "MinDef"),
+            ["Value"] = (float)LegacyDouble(Get(section, "Valor")),
+            ["OpenIndex"] = ObjShort(section, "IndexAbierta"),
+            ["ClosedIndex"] = ObjShort(section, "IndexCerrada"),
+            ["MineralIndex"] = ObjShort(section, "MineralIndex"),
+            ["LingoteIndex"] = ObjShort(section, "Lingoteindex"),
+            ["Madera"] = ObjShort(section, "Madera"),
+            ["MaderaElfica"] = ObjShort(section, "MaderaElfica"),
+            ["SkHerreria"] = ObjShort(section, "SkHerreria"),
+            ["SkCarpinteria"] = ObjShort(section, "SkCarpinteria"),
+            ["LingH"] = ObjShort(section, "LingH"),
+            ["LingP"] = ObjShort(section, "LingP"),
+            ["LingO"] = ObjShort(section, "LingO"),
+            ["Upgrade"] = ObjShort(section, "Upgrade"),
+
+            ["ForumId"] = Get(section, "ID").Trim(),
+            ["SignalText"] = Get(section, "Texto"),
+            ["SecondaryGraphic"] = ObjInt(section, "GrhSecundario"),
+            ["Ropaje"] = ObjShort(section, "NumRopaje"),
+            ["MinSkill"] = ObjByte(section, "MinSkill"),
+            ["MinHunger"] = ObjByte(section, "MinHam"),
+            ["MinThirst"] = ObjByte(section, "MinSed"),
+            ["KeyCode"] = ObjShort(section, "Clave"),
+            ["KeyRequired"] = ObjInt(section, "Llave") != 0,
+            ["SpellIndex"] = spellIndex,
+            ["CraftingMaterials"] = ReadCraftingMaterials(section),
+            ["Newbie"] = ObjInt(section, "Newbie") != 0,
+            ["Invernal"] = ObjInt(section, "Invernal") != 0,
+            ["Subastable"] = ObjInt(section, "Subastable") != 0,
+            ["Agarrable"] = ObjInt(section, "Agarrable") != 0,
+            ["NoSeCae"] = ObjInt(section, "NoSeCae") != 0,
+            ["Proyectil"] = ObjInt(section, "Proyectil") != 0,
+            ["UsesAmmo"] = ObjInt(section, "Municiones") != 0,
+            ["AmmoType"] = ObjInt(section, "Municiones"),
+            ["MinLevel"] = (byte)Math.Clamp(minLevel, 0, byte.MaxValue),
+            ["PotionType"] = (byte)Math.Clamp(ObjInt(section, "TipoPocion"), 0, byte.MaxValue),
+            ["MinModifier"] = ObjShort(section, "MinModificador"),
+            ["MaxModifier"] = ObjShort(section, "MaxModificador"),
+            ["RealFaction"] = ObjInt(section, "Real") != 0,
+            ["ChaosFaction"] = ObjInt(section, "Caos") != 0,
+            ["Crucial"] = ObjInt(section, "Crucial") != 0,
+            ["Log"] = ObjInt(section, "Log") != 0,
+            ["NoLog"] = ObjInt(section, "NoLog") != 0,
+            ["ProhibitedClasses"] = Enumerable.Range(1, 12)
+                .Select(position => ClassId(Get(section, "CP" + position)))
+                .Where(id => id > 0).Select(id => (int)id).ToArray(),
+            ["ProhibitedRaces"] = Enumerable.Range(1, 6)
+                .Select(position => RaceId(Get(section, "RP" + position)))
+                .Where(id => id > 0).Select(id => (int)id).ToArray(),
+            ["RequiredSkill"] = skill.Skill,
+            ["RequiredSkillAmount"] = skill.Amount,
+            ["FemaleOnly"] = ObjInt(section, "Mujer") != 0,
+            ["MaleOnly"] = ObjInt(section, "Hombre") != 0,
+            ["DwarfClothing"] = ObjInt(section, "RazaEnana") != 0,
+            ["DrowClothing"] = ObjInt(section, "RazaDrow") != 0,
+            ["StaffPower"] = ObjInt(section, "StaffPower"),
+            ["Stabs"] = ObjInt(section, "Apunala") != 0,
+            ["Slashes"] = ObjInt(section, "Acuchilla") != 0,
+            ["Guante"] = ObjInt(section, "Guante") != 0,
+            ["TeleportRadius"] = ObjShort(section, "Radio"),
+            ["MochilaType"] = (byte)Math.Clamp(ObjInt(section, "MochilaType"), 0, 2),
+            ["Anim"] = ObjShort(section, "Anim"),
+            ["TwoHands"] = ObjInt(section, "DosManos") != 0,
+            ["SndAura"] = ObjShort(section, "SndAura"),
+            ["CreaGrh"] = Get(section, "CreaGRH"),
+            ["SubType"] = (byte)Math.Clamp(ObjInt(section, "Subtipo"), 0, byte.MaxValue),
+            ["WeaponType"] = (byte)Math.Clamp(ObjInt(section, "WeaponType"), 0, byte.MaxValue),
+            ["RopajeHumano"] = ObjShort(section, "RopajeHumano"),
+            ["RopajeHumana"] = ObjShort(section, "RopajeHumana"),
+            ["RopajeElfo"] = ObjShort(section, "RopajeElfo"),
+            ["RopajeElfa"] = ObjShort(section, "RopajeElfa"),
+            ["RopajeElfoOscuro"] = ObjShort(section, "RopajeElfoOscuro"),
+            ["RopajeElfaOscura"] = ObjShort(section, "RopajeElfaOscura"),
+            ["RopajeEnano"] = ObjShort(section, "RopajeEnano"),
+            ["RopajeEnana"] = ObjShort(section, "RopajeEnana"),
+            ["RopajeGnomo"] = ObjShort(section, "RopajeGnomo"),
+            ["RopajeGnoma"] = ObjShort(section, "RopajeGnoma"),
+            ["RopajeOrco"] = ObjShort(section, "RopajeOrco"),
+            ["RopajeOrca"] = ObjShort(section, "RopajeOrca"),
+            ["MaxLevel"] = (byte)Math.Clamp(ObjInt(section, "MaxLev"), 0, byte.MaxValue),
+            ["Cooldown"] = cooldown,
+            ["CooldownType"] = (byte)Math.Clamp(ObjInt(section, "CDType"), 0, byte.MaxValue),
+            ["PotionPercent"] = (byte)Math.Clamp(ObjInt(section, "Porcentaje"), 0, byte.MaxValue),
+            ["EffectDuration"] = ObjInt(section, "DuracionEfecto"),
+            ["Sound1"] = ObjShort(section, "SND1"),
+            ["Sound2"] = ObjShort(section, "SND2"),
+            ["Sound3"] = ObjShort(section, "SND3"),
+            ["UseOnSafeAreaOnly"] = ObjInt(section, "UseOnSafeAreaOnly") != 0,
+            ["VidaUtil"] = ObjShort(section, "VidaUtil"),
+            ["TimeToRegenerate"] = ObjInt(section, "TiempoRegenerar"),
+            ["ClosedKeyIndex"] = ObjShort(section, "IndexCerradaLlave"),
+            ["Closed"] = ObjInt(section, "Cerrada") != 0,
+            ["MinHitToNpc"] = ObjShort(section, "MinHitToNPC"),
+            ["MaxHitToNpc"] = ObjShort(section, "MaxHitToNPC"),
+            ["ShieldPercent"] = (byte)Math.Clamp(ObjInt(section, "Porcentaje"), 0, 100),
+            ["Craftable"] = ObjInt(section, "Crafteable") == 1,
+            ["CraftMaterials"] = Get(section, "Materiales")
+                .Split('-', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => short.TryParse(value, NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var material) ? material : (short)0)
+                .Where(material => material > 0).ToArray(),
+            ["CraftType"] = (byte)Math.Clamp(ObjInt(section, "TipoCrafteo"), 0, byte.MaxValue),
+            ["CraftProbability"] = (byte)Math.Clamp(ObjInt(section, "ProbCrafteo"), 0, 100),
+            ["CraftCost"] = Math.Max(0, ObjInt(section, "CostoCrafteo")),
+            ["CatalystType"] = (byte)Math.Clamp(ObjInt(section, "CatalizadorTipo"), 0, byte.MaxValue),
+            ["CatalystBoost"] = (float)LegacyDouble(Get(section, "CatalizadorAumento")),
+            ["MaderaPino"] = ObjShort(section, "Maderapino"),
+            ["Coal"] = ObjShort(section, "Coal"),
+            ["Blodium"] = ObjShort(section, "Blodium"),
+            ["FireEssence"] = ObjShort(section, "FireEssence"),
+            ["WaterEssence"] = ObjShort(section, "WaterEssence"),
+            ["EarthEssence"] = ObjShort(section, "EarthEssence"),
+            ["WindEssence"] = ObjShort(section, "WindEssence"),
+            ["ElementalTags"] = ObjInt(section, "ElementalTags"),
+            ["SkPociones"] = ObjShort(section, "SkPociones"),
+            ["SkSastreria"] = skSastreria,
+            ["Mortero"] = ObjShort(section, "Mortero"),
+            ["FrascoAlq"] = ObjShort(section, "FrascoAlq"),
+            ["HongoDeLuz"] = ObjShort(section, "HongoDeLuz"),
+            ["Esporas"] = ObjShort(section, "Esporas"),
+            ["Tuna"] = ObjShort(section, "Tuna"),
+            ["Cala"] = ObjShort(section, "Cala"),
+            ["ColaDeZorro"] = ObjShort(section, "ColaDeZorro"),
+            ["FlorOceano"] = ObjShort(section, "FlorOceano"),
+            ["FlorRoja"] = ObjShort(section, "FlorRoja"),
+            ["SemillasProsperas"] = ObjShort(section, "SemillasProsperas"),
+            ["PielLobo"] = ObjShort(section, "PielLobo"),
+            ["PielOsoPardo"] = ObjShort(section, "PielOsoPardo"),
+            ["PielOsoPolar"] = ObjShort(section, "PielOsoPolaR"),
+            ["PielLoboNegro"] = ObjShort(section, "PielLoboNegro"),
+            ["PielTigre"] = ObjShort(section, "PielTigre"),
+            ["PielTigreBengala"] = ObjShort(section, "PielTigreBengala"),
+            ["Envenena"] = ObjInt(section, "Envenena") != 0,
+            ["Incinera"] = ObjInt(section, "Incinera") != 0,
+            ["Paraliza"] = ObjInt(section, "Paraliza") != 0,
+            ["Estupidiza"] = ObjInt(section, "Estupidiza") != 0,
+            ["Revive"] = ObjInt(section, "Revive") != 0,
+            ["Camouflage"] = ObjInt(section, "Camouflage") != 0,
+            ["EfectoMagico"] = ObjInt(section, "EfectoMagico"),
+            ["ApplyEffectId"] = ObjInt(section, "ApplyEffectId"),
+            ["CreaFx"] = ObjInt(section, "CreaFX"),
+            ["CreaLuz"] = Get(section, "CreaLuz"),
+            ["CreaParticula"] = Get(section, "CreaParticula"),
+            ["CreaWav"] = ObjInt(section, "CreaWav"),
+            ["ParticulaGolpe"] = ObjInt(section, "ParticulaGolpe"),
+            ["ParticulaGolpeTime"] = ObjInt(section, "ParticulaGolpeTime"),
+            ["ParticulaViaje"] = ObjInt(section, "ParticulaViaje"),
+            ["MagicPower"] = ObjInt(section, "MagicPower"),
+            ["MagicDamageBonus"] = ObjInt(section, "MagicDamageBonus"),
+            ["MagicAbsoluteBonus"] = ObjInt(section, "MagicAbsoluteBonus"),
+            ["MagicPenetration"] = ObjInt(section, "MagicPenetration"),
+            ["ResistenciaMagica"] = ObjInt(section, "ResistenciaMagica"),
+            ["MinArmorPenetrationFlat"] = ObjInt(section, "MinArmorPenetrationFlat"),
+            ["MaxArmorPenetrationFlat"] = ObjInt(section, "MaxArmorPenetrationFlat"),
+            ["ArmorPenetrationPercent"] = ObjInt(section, "ArmorPenetrationPercent"),
+            ["ExtraCritAndStabChance"] = ObjInt(section, "ExtraCritAndStabChance"),
+            ["ImprovedMHit"] = ObjInt(section, "ImprovedMHit"),
+            ["ImprovedRHit"] = ObjInt(section, "ImprovedRHit"),
+            ["JineteLevel"] = ObjInt(section, "JineteLevel"),
+            ["ProjectileType"] = ObjShort(section, "ProjectileType"),
+            ["ArrowCategory"] = ObjShort(section, "ArrowCategory"),
+            ["BowCategory"] = ObjShort(section, "BowCategory"),
+            // FileIO.bas:1366/1385/1526: para baculos .Power = MagicPower;
+            // para cañas de pescar la clave es "Power".
+            ["Power"] = FirstNonZero(section, "Power", "MagicPower"),
+            ["Velocidad"] = (float)LegacyDouble(Get(section, "Velocidad")),
+            ["Rp"] = ObjInt(section, "RP"),
+            ["ClaseTipo"] = ObjInt(section, "ClaseTipo"),
+            ["MinHp"] = ObjShort(section, "MinHP"),
+            ["MaxHp"] = ObjShort(section, "MaxHP"),
+            ["MinSt"] = ObjShort(section, "MinST"),
+            ["MinAgu"] = ObjShort(section, "MinAgu"),
+            ["DesdeMap"] = ObjShort(section, "DesdeMap"),
+            ["Map"] = map,
+            ["HastaMap"] = (short)Math.Clamp(
+                destinationInMap ? FirstNonZero(section, "Map", "SectorId") : ObjInt(section, "HastaMap"),
+                short.MinValue, short.MaxValue),
+            ["HastaX"] = (byte)Math.Clamp(
+                destinationInMap ? FirstNonZero(section, "X") : ObjInt(section, "HastaX"),
+                0, byte.MaxValue),
+            ["HastaY"] = (byte)Math.Clamp(
+                destinationInMap ? FirstNonZero(section, "Y") : ObjInt(section, "HastaY"),
+                0, byte.MaxValue),
+            ["SectorId"] = ObjShort(section, "SectorId"),
+            ["X"] = (byte)Math.Clamp(ObjInt(section, "X"), 0, byte.MaxValue),
+            ["Y"] = (byte)Math.Clamp(ObjInt(section, "Y"), 0, byte.MaxValue),
+            ["NecesitaNave"] = ObjInt(section, "NecesitaNave") != 0,
+            ["RecursoObj"] = ObjShort(section, "RecursoObj"),
+            ["Cantidad"] = ObjShort(section, "Cantidad"),
+            ["CantItem"] = ObjShort(section, "CantItem"),
+            ["Item"] = ObjShort(section, "Item"),
+            ["Drop"] = ObjShort(section, "Drop"),
+            ["ChestItems"] = ReadObjectChestItems(section, objectType),
+            ["Destruye"] = ObjInt(section, "Destruye") != 0,
+            ["RepairTo"] = ObjShort(section, "RepairTo"),
+            ["RequiereObjeto"] = ObjShort(section, "RequiereObjeto"),
+            ["QuestId"] = ObjInt(section, "QuestID"),
+            ["FactionScore"] = ObjInt(section, "FactionScore"),
+            ["CollectibleCardIndex"] = ObjInt(section, "CollectibleCardIndex"),
+            ["CollectibleCardRarity"] = ObjInt(section, "CollectibleCardRarity"),
+            ["JailObject"] = ObjInt(section, "JailObject") != 0,
+            ["LeadersOnly"] = ObjInt(section, "LeadersOnly") != 0,
+            ["AssignedCastleIndex"] = ObjInt(section, "AssignedCastleIndex"),
+            ["Gema"] = ObjShort(section, "Gema"),
+            ["Gemas"] = ObjShort(section, "Gemas"),
+            ["Peces"] = ObjShort(section, "Peces"),
+            ["Pino"] = ObjShort(section, "Pino"),
+            ["PuntosPesca"] = ObjShort(section, "PuntosPesca"),
+            ["Runetype"] = ObjInt(section, "Runetype"),
+            ["CantidadSkill"] = ObjInt(section, "CantidadSkill"),
+            ["CuantoAumento"] = ObjInt(section, "cuantoaumento"),
+            ["QueAtributo"] = ObjInt(section, "queatributo"),
+            ["QueSkill"] = ObjInt(section, "QueSkill"),
+            ["CantEntrega"] = ObjInt(section, "CantEntrega"),
+            ["Jerarquia"] = ObjInt(section, "Jerarquia"),
+            ["Abierta"] = ObjInt(section, "abierta") != 0,
+            ["RazaAltos"] = ObjShort(section, "RazaAltos"),
+            ["RazaBajos"] = ObjShort(section, "RazaBajos"),
+            ["RazaElfa"] = ObjInt(section, "RazaElfa") != 0,
+            ["RazaGnoma"] = ObjInt(section, "RazaGnoma") != 0,
+            ["RazaHumana"] = ObjInt(section, "RazaHumana") != 0,
+            ["RazaOrca"] = ObjInt(section, "RazaOrca") != 0,
+            ["NoTradeableToNpc"] = ObjInt(section, "NoTradeableToNPC") != 0,
+            ["Bindable"] = ObjInt(section, "Bindable") != 0,
+            ["Instransferible"] = ObjInt(section, "Instransferible") != 0,
+            ["Intirable"] = ObjInt(section, "Intirable") != 0,
+            ["NoSeLimpia"] = ObjInt(section, "NoSeLimpia") != 0,
+            ["NumRopaje"] = ObjShort(section, "NumRopaje"),
+            ["VGrande"] = ObjInt(section, "VGrande") != 0,
+            ["Elfico"] = ObjInt(section, "Elfico") != 0,
+            ["Dorada"] = ObjInt(section, "Dorada") != 0,
+            ["Nft"] = ObjInt(section, "NFT") != 0
+        };
+    }
+
+    private static object[] ReadObjectChestItems(Dictionary<string, string> section, int objectType)
+    {
+        if (objectType == 22) // otOreDeposit: GemaN = "ObjIndex-Probabilidad".
+        {
+            var count = Math.Clamp((int)ObjShort(section, "Gemas"), 0, 64);
+            if (count <= 0) return [];
+            var gems = new List<object>(count);
+            for (var index = 1; index <= count; index++)
+            {
+                var parts = Get(section, "Gema" + index).Split('-', 2);
+                var objectIndex = LegacyShort(parts[0]);
+                var chance = parts.Length > 1 ? LegacyShort(parts[1]) : (short)1;
+                if (objectIndex > 0)
+                    gems.Add(new
+                    {
+                        ObjectIndex = objectIndex,
+                        Amount = (short)1,
+                        DropChance = Math.Max((short)1, chance)
+                    });
+            }
+            return gems.ToArray();
+        }
+
+        var chestCount = Math.Clamp((int)ObjShort(section, "CantItem"), 0, 64);
+        if (objectType != 48 || chestCount <= 0) return []; // otChest
+        var items = new List<object>(chestCount);
+        for (var index = 1; index <= chestCount; index++)
+        {
+            var objectIndex = ObjShort(section, "Item" + index);
+            if (objectIndex <= 0) continue;
+            var amount = Math.Max((short)1, ObjShort(section, "Cantidad" + index));
+            // Subtipo 3: DropN es 1-en-X; se guarda como probabilidad.
+            var drop = Math.Max((short)1, ObjShort(section, "Drop" + index));
+            items.Add(new { ObjectIndex = objectIndex, Amount = amount, DropChance = drop });
+        }
+        return items.ToArray();
+    }
+
+    private static object[] ReadCraftingMaterials(Dictionary<string, string> section) =>
+        Enumerable.Range(1, 4)
+            .Select(position => Get(section, "ItemCrafteo" + position).Split('-', 2))
+            .Select(values => new
+            {
+                ObjectIndex = ParseField(values, 0),
+                Amount = ParseField(values, 1)
+            })
+            .Where(material => material.ObjectIndex > 0 && material.Amount > 0)
+            .ToArray();
+
+    private static readonly Dictionary<string, byte> ObjectClassNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Declares.bas:325-337 e_Class / General.bas:430-441 ListaClases.
+        ["Mago"] = 1,
+        ["Clerigo"] = 2,
+        ["Guerrero"] = 3,
+        ["Asesino"] = 4,
+        ["Bardo"] = 5,
+        ["Druida"] = 6,
+        ["Paladin"] = 7,
+        ["Cazador"] = 8,
+        ["Trabajador"] = 9,
+        ["Pirata"] = 10,
+        ["Ladron"] = 11,
+        ["Bandido"] = 12
+    };
+
+    private static readonly Dictionary<string, byte> ObjectSkillNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Magia"] = 1,
+        ["Robar"] = 2,
+        ["Evasion en combate"] = 3,
+        ["Combate con armas"] = 4,
+        ["Meditar"] = 5,
+        ["Apunalar"] = 6,
+        ["Ocultarse"] = 7,
+        ["Supervivencia"] = 8,
+        ["Talar"] = 9,
+        ["Comercio"] = 10,
+        ["Defensa con escudos"] = 11,
+        ["Pesca"] = 12,
+        ["Mineria"] = 13,
+        ["Carpinteria"] = 14,
+        ["Herreria"] = 15,
+        ["Liderazgo"] = 16,
+        ["Domar animales"] = 17,
+        ["Combate a distancia"] = 18,
+        ["Combate sin armas"] = 19,
+        ["Navegacion"] = 20
+    };
+
+    private static readonly Dictionary<string, byte> ObjectRaceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Humano"] = 1,
+        ["Elfo"] = 2,
+        ["Drow"] = 3,
+        ["Gnomo"] = 4,
+        ["Enano"] = 5,
+        ["Orco"] = 6
+    };
+
+    private static byte ClassId(string name) =>
+        name.Length > 0 && ObjectClassNames.TryGetValue(name.Trim(), out var id) ? id : (byte)0;
+
+    private static byte RaceId(string name) =>
+        name.Length > 0 && ObjectRaceNames.TryGetValue(name.Trim(), out var id) ? id : (byte)0;
+
+    private static (byte Skill, byte Amount) ParseSkillRequirement(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return (0, 0);
+        var parts = value.Split('-', 2);
+        var name = parts[0].Replace("+", " ").Trim();
+        var amount = parts.Length > 1 && byte.TryParse(parts[1], NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : (byte)0;
+        return ObjectSkillNames.TryGetValue(name, out var skill) ? (skill, amount) : ((byte)0, (byte)0);
+    }
+
+    private static short ParseField(string[] values, int index) =>
+        index < values.Length && short.TryParse(values[index], out var value) ? value : (short)0;
+
+    private static int ObjInt(Dictionary<string, string> section, string key) =>
+        LegacyInt(Get(section, key));
+
+    private static short ObjShort(Dictionary<string, string> section, string key) =>
+        LegacyShort(Get(section, key));
+
+    private static byte ObjByte(Dictionary<string, string> section, string key) =>
+        (byte)Math.Clamp(LegacyInt(Get(section, key)), 0, byte.MaxValue);
+
+    private static int FirstNonZero(Dictionary<string, string> section, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = ObjInt(section, key);
+            if (value != 0) return value;
+        }
+        return 0;
+    }
+
+    private static int LegacyInt(string value) => (int)LegacyDouble(value);
+
+    private static short LegacyShort(string value) =>
+        (short)Math.Clamp(LegacyDouble(value), short.MinValue, short.MaxValue);
+
+    /// <summary>Equivalente a <c>Val()</c> de VB6, igual que LegacyValue del servidor.</summary>
+    private static double LegacyDouble(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        var text = value.Trim();
+        var index = 0;
+        var negative = false;
+        if (text[index] is '+' or '-')
+        {
+            negative = text[index] == '-';
+            index++;
+        }
+
+        if (index + 1 < text.Length && text[index] == '&' && text[index + 1] is 'H' or 'h')
+        {
+            index += 2;
+            var startHex = index;
+            while (index < text.Length && Uri.IsHexDigit(text[index])) index++;
+            if (index == startHex) return 0;
+            var hex = int.Parse(text[startHex..index], NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture);
+            return negative ? -hex : hex;
+        }
+
+        var start = index;
+        var seenSeparator = false;
+        while (index < text.Length)
+        {
+            var character = text[index];
+            if (char.IsDigit(character)) { index++; continue; }
+            if (!seenSeparator && character is '.' or ',') { seenSeparator = true; index++; continue; }
+            break;
+        }
+
+        if (index == start) return 0;
+        var number = text[start..index].Replace(',', '.');
+        return double.TryParse(number, NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? (negative ? -parsed : parsed)
+            : 0;
+    }
+
     private static byte[] NormalizeQuests(byte[] payload)
     {
         if (payload.Length == 0)
             return JsonSerializer.SerializeToUtf8Bytes(
                 new { Schema = 1, Catalog = "quests", Items = Array.Empty<object>() });
-        if (Encoding.UTF8.GetString(payload).TrimStart().StartsWith('{'))
+        if (DecodeLegacyText(payload).TrimStart().StartsWith('{'))
             return payload;
 
         var sections = ParseIni(payload);
@@ -530,7 +1029,7 @@ internal sealed class UnifiedWorldRuntimeDataService
     private static Dictionary<string, Dictionary<string, string>> ParseIni(byte[] payload)    {
         var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, string>? current = null;
-        foreach (var raw in Encoding.UTF8.GetString(payload).Split('\n'))
+        foreach (var raw in DecodeLegacyText(payload).Split('\n'))
         {
             var line = raw.Trim().TrimEnd('\r');
             if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
