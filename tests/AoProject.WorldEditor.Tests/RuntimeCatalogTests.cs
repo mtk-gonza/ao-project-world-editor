@@ -18,13 +18,13 @@ public sealed class RuntimeCatalogTests
             {
                 Events = "# events"u8.ToArray(),
                 Treasures = Encoding.UTF8.GetBytes("""
-                    [Tesoros]
+                    [Tesoros] 'Campo
                     CantidadMapas=1
                     Mapa1=16
                     TiposDeTesoros=1
                     Tesoro1=3140-2
 
-                    [Regalos]
+                    [Regalos] 'Dubgeon
                     CantidadMapas=1
                     Mapa1=293
                     TiposDeRegalos=1

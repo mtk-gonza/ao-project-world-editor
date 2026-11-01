@@ -1033,10 +1033,16 @@ internal sealed class UnifiedWorldRuntimeDataService
         {
             var line = raw.Trim().TrimEnd('\r');
             if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#')) continue;
-            if (line.StartsWith('[') && line.EndsWith(']'))
+            // Igual que IniFile.ReadBytes: la seccion cierra en el primer ']' y
+            // admite comentarios despues (por ejemplo "[Tesoros] 'Campo").
+            if (line.StartsWith('['))
             {
+                var end = line.IndexOf(']');
+                if (end <= 1) continue;
+                var name = line[1..end].Trim();
                 current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                result[line[1..^1].Trim()] = current;
+                if (!result.TryAdd(name, current))
+                    current = result[name];
                 continue;
             }
             var separator = line.IndexOf('=');
