@@ -49,14 +49,14 @@ internal sealed class WorldEditorResourceCatalog
     public DirectionalAnimation[] Shields { get; }
     public IReadOnlyList<ParticleData> Particles { get; }
 
-    public static WorldEditorResourceCatalog Load(string resourceRoot)
+    public static WorldEditorResourceCatalog Load(string resourceRoot, string? indexRoot = null)
     {
         var root = Path.GetFullPath(resourceRoot);
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"No existe el directorio de recursos: {root}");
 
         var graphics = new GraphicIndexLoader().Load(root).ToList();
-        var indices = new ReferenceIndexLoader();
+        var indices = new ReferenceIndexLoader(indexRoot is null ? null : Path.GetFullPath(indexRoot));
         var characters = new CharacterIndexLoader();
         var particlePath = Path.Combine(root, "init", "particles.ind");
         var particles = File.Exists(particlePath)

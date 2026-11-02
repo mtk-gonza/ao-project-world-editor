@@ -992,4 +992,58 @@ los 1954 nombres de NPC coinciden 1:1. Cliente 1002/1002 y editor 395/395.
 **Consecuencia:** ningún consumidor del cliente abre `Dat/` en producción; los
 únicos usos restantes son los fallbacks de `LegacyDatCatalog`/`ReadObjects` para
 fixtures sin bundle. Queda el lote 6: borrar `ao-project-resources/Dat` y retirar los
-fallbacks que ya no tengan fixture asociado.
+fallbacks que ya no tengan fixture asociado (cerrado en ADR-WM-041).
+
+## ADR-WM-041: `ao-project-resources/Dat` eliminado y arranque del servidor lineal
+
+**Estado:** aceptado 2026-11-01. Lote 6 ("cierre de `Dat/`").
+
+**Decisión:** se borran los 79 archivos trackeados de `ao-project-resources/Dat/`
+(~704 MB incluyendo `world.inf`). El árbol generado queda con `Graficos/`, `init/`,
+`interface/`, `maps/`, `sectors/` y `world/`; `reference/Recursos` sigue siendo la
+fuente del importador y no se toca.
+
+- **Editor:** los índices legacy (`indices.ini`, `obj.dat`, `npcs.dat`,
+  `triggers.ini`) se resuelven en `reference/Recursos` cuando no están en la raíz
+  generada (`ReferenceIndexLoader` acepta una raíz de respaldo y
+  `WorldEditorSession` pasa `ReferenceResourceRoot`). Sin esto
+  `WorldEditorResourceCatalog.Load` fallaba y el editor no abría.
+- **Servidor:** se eliminan los cuatro `ProtocolTests` que apuntaban a
+  `ao-project-server/Dat` y afirmaban catálogos distintos del canónico
+  (`NPC 1 = "Aldeano"`, quest 1 = "Bichos molestos"); ya existen
+  `NpcCatalogTests`, `ObjectCatalogTests` y `QuestStoreTests` contra los JSON.
+  `FishingConfigTests`/`FishingTableTests` leen `runtime-data/fishing.json` y se
+  retira `FindRepositoryDatDirectory`.
+
+**Hallazgo de rendimiento (arranque):** con el bundle real y MySQL remoto el
+servidor tardaba ~56 s hasta escuchar. Medido por fases: JSON ~1,8 s, `new
+SectorWorld` ~11 s y el resto dentro de `new GameServer`. Ninguna causa era el
+catálogo JSON:
+
+1. `SectorCoordinateService.TryToSector` ordenaba y recorría los 842 sectores en
+   **cada** consulta (~1 ms). El arranque hace ~24 000 consultas (objetos globales
+   persistidos + siembra de pesca): ~40 s. Ahora los rangos core/fallback se
+   precalculan una vez por piso y la consulta es una comparación de enteros.
+2. `AddFishingPoolsToLoadedSectors` sembraba `MaxZonas` piletones nuevos por mapa
+   **en cada arranque**: 402 objetos por inicio, cada uno con su propio
+   `Set` (conexión + transacción) a ~9 ms por viaje contra el MySQL remoto. La base
+   de desarrollo acumuló 15 646 piletones en 39 arranques. Ahora cuenta los
+   piletones existentes en el campo en memoria y solo completa lo que falta por
+   sector, conservando el contrato legacy "hasta `MaxZonas` por mapa".
+
+**Persistencia en lote:** se añade `IGlobalObjectRepository.SetMany`, implementado
+en `SqlStoreBase` con sentencias multi-VALUES en lotes de 100 dentro de una única
+transacción. MySQL sobrescribe la cláusula con `ON DUPLICATE KEY UPDATE`;
+SQLite/PostgreSQL usan `ON CONFLICT ... DO UPDATE`. 402 filas: 13 ms aisladas
+(antes 402 × ~6 ms con SQLite y ~7,2 s contra el MySQL remoto).
+
+**Efecto medido:** arranque real de `AoProject.Server.exe` de **56 s a 11,3 s**
+(11,32 s y 11,22 s en dos corridas); `new GameServer` de hasta 64 s a 11,0 s con la
+misma base; consulta global→sector de ~1 ms a microsegundos. Suites: servidor
+665/665 (663 + `SetMany` en lote y round-trip global↔sector por piso), cliente
+1002/1002, editor 395/395, smoke E2E real OK.
+
+**Consecuencia:** ningún repo lee `ao-project-resources/Dat` (ya no existe); el
+fallback `Dat/` queda solo para fixtures sin bundle. La siembra de pesca deja de
+duplicar objetos entre arranques, pero la base de desarrollo conserva los 15 646
+piletones históricos: limpiarlos es una decisión de datos del operador.

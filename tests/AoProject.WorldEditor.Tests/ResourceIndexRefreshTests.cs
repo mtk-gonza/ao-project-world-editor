@@ -10,7 +10,10 @@ public sealed class ResourceIndexRefreshTests
     {
         var root = Environment.GetEnvironmentVariable("AO_RESOURCES") ??
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "ao-project-resources"));
-        var result = new ResourceIndexRefreshService().Reload(root).Result;
+        // El arbol generado ya no incluye Dat/: los indices legacy se resuelven en
+        // reference/Recursos, igual que en el arranque real del editor.
+        var result = new ResourceIndexRefreshService()
+            .Reload(root, ResourceRootResolver.ReferenceRoot()).Result;
         Assert.True(result.Graphics > 0);
         Assert.True(result.Surfaces > 0);
         Assert.True(result.Objects > 0);

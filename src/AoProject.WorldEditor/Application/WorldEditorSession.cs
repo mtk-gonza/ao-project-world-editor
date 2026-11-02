@@ -353,14 +353,14 @@ internal sealed class WorldEditorSession
         get
         {
             lock (_resourceSync)
-                return _resources ??= WorldEditorResourceCatalog.Load(ResourceRoot);
+                return _resources ??= WorldEditorResourceCatalog.Load(ResourceRoot, ReferenceResourceRoot);
         }
     }
     public ResourceIndexRefreshResult RefreshResourceIndices()
     {
         lock (_resourceSync)
         {
-            (_resources, var result) = _indexRefresh.Reload(ResourceRoot);
+            (_resources, var result) = _indexRefresh.Reload(ResourceRoot, ReferenceResourceRoot);
             return result;
         }
     }

@@ -75,7 +75,7 @@ ao-project-world-editor/
    Presentation/
       Forms/          MainForm
       Features/World/ WorldRenderControl, WorldMiniMapControl
-   tests/AoProject.WorldEditor.Tests/   xUnit (370 tests al 2026-10-30)
+   tests/AoProject.WorldEditor.Tests/   xUnit (395 tests al 2026-11-01)
 ```
 
 Rutas de runtime (centralizadas en `Infrastructure/Runtime/EditorPaths.cs`):
@@ -117,7 +117,7 @@ Flujo de arranque:
 | `reference/Recursos/Mapas/mapaN.csm` | Fuente legacy plana para migrar a `/sectors`. |
 | `ao-project-resources/sectors/sector-N/sector.csm` | Fuente de trabajo del editor. |
 | `init/mapsworlddata.dat` | Grilla oficial del mundo (`TOTALWORLDS`, `WORLDMAPn`, `ANCHO`, `ALTO`, celdas 1..ancho*alto). |
-| `init/*.dat`, `Dat/*.dat`, `Graficos/*.ind` | Catalogos de graficos, objetos, NPCs, cuerpos, cabezas, cascos, armas, escudos, particulas. |
+| `init/*.dat`, `Graficos/*.ind` | Catalogos de graficos, objetos, NPCs, cuerpos, cabezas, cascos, armas, escudos, particulas. Los `.dat` legacy (`obj.dat`, `npcs.dat`, `triggers.ini`) se leen de `reference/Recursos` cuando no existen en la raiz generada. |
 | `world/bundle.aog` | Manifiesto, metadata, fuentes preservadas y extensiones runtime. |
 | `world/floor-*.gmap` | Geometría jugable por `FloorZ`. |
 
@@ -224,8 +224,13 @@ catálogo runtime.
   vendidas) vive en `data/state/`.
 - El cliente lee del mismo sidecar `zonas.dat`, `Meditaciones.dat` y los nombres de
   `npcs.dat` mediante `LegacyDatCatalog`; `colores.dat`, el índice localizado de
-  objetos, `FXs.ini` y `ProjectileDef.dat` ya viven en `init/` (ADR-WM-040). `Dat/`
-  queda solo como fallback de fixtures sin bundle.
+  objetos, `FXs.ini` y `ProjectileDef.dat` ya viven en `init/` (ADR-WM-040). El árbol
+  generado `ao-project-resources` ya no tiene `Dat/` (ADR-WM-041): el fallback solo
+  aplica a fixtures sin bundle.
+- Los índices legacy que el editor necesita para editar (`indices.ini`, `obj.dat`,
+  `npcs.dat`, `triggers.ini`) se resuelven primero en la raíz generada y, si no
+  están, en `reference/Recursos` (`ReferenceIndexLoader` con raíz de respaldo,
+  ADR-WM-041).
 - `FloorZ=-3` continúa siendo un piso virtual de importación pendiente de decisión
   definitiva de layout.
 
@@ -311,3 +316,10 @@ Estado WORLD (2026-10-30):
   > Cargar /Sectors...` carga esa estructura.
 - La auditoría completa está en `WORLD-RESOURCE-AUDIT.md` y
   `WORLD-STITCH-AND-TELEPORT-AUDIT.md`.
+
+Estado `Dat/` (2026-11-01):
+
+- `ao-project-resources/Dat` ya no existe: el árbol generado solo conserva recursos
+  consumibles (`Graficos`, `init`, `interface`, `maps`, `sectors`, `world`, audio).
+- El editor importa desde `reference/Recursos` y resuelve allí los índices legacy que
+  falten en el árbol generado (ADR-WM-041).

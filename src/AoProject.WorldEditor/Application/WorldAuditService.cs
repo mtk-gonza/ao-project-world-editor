@@ -34,11 +34,12 @@ internal sealed class WorldAuditService
         string resourceRoot,
         WorldEditorResourceCatalog? catalog = null,
         IProgress<AuditProgress>? progress = null,
-        bool roundTrip = true)
+        bool roundTrip = true,
+        string? referenceRoot = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mapsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceRoot);
-        catalog ??= WorldEditorResourceCatalog.Load(resourceRoot);
+        catalog ??= WorldEditorResourceCatalog.Load(resourceRoot, referenceRoot);
         var files = Directory.EnumerateFiles(mapsDirectory, "*.csm", SearchOption.TopDirectoryOnly)
             .Select(path => (Path: path, Id: ParseSectorId(path)))
             .Where(item => item.Id > 0)

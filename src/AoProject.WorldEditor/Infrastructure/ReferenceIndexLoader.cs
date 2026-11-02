@@ -5,6 +5,15 @@ namespace AoProject.WorldEditor.Infrastructure;
 /// <summary>Read-only port of the non-graphical loaders in modIndices.bas.</summary>
 internal sealed class ReferenceIndexLoader
 {
+    /// <summary>
+    /// Raiz secundaria para los indices legacy. El arbol generado ya no lleva
+    /// <c>Dat/</c>: los <c>.dat</c> canonicos viven en <c>reference/Recursos</c>,
+    /// que es la fuente del importador.
+    /// </summary>
+    private readonly string? fallbackRoot;
+
+    public ReferenceIndexLoader(string? fallbackRoot = null) => this.fallbackRoot = fallbackRoot;
+
     public IReadOnlyList<SurfaceData> LoadSurfaces(string resourceRoot)
     {
         var document = IniDocument.Load(Find(resourceRoot, "indices.ini"));
@@ -84,11 +93,18 @@ internal sealed class ReferenceIndexLoader
         return result;
     }
 
-    private static string Find(string root, string fileName)
+    private string Find(string root, string fileName)
     {
-        var path = Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories)
-            .FirstOrDefault(path => string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase));
+        var path = FindIn(root, fileName) ?? (fallbackRoot is null ? null : FindIn(fallbackRoot, fileName));
         return path ?? throw new FileNotFoundException($"No existe el indice {fileName}.");
+    }
+
+    private static string? FindIn(string root, string fileName)
+    {
+        if (!Directory.Exists(root))
+            return null;
+        return Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories)
+            .FirstOrDefault(path => string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static byte Byte(int value) => value is >= byte.MinValue and <= byte.MaxValue ? (byte)value : throw new InvalidDataException("Valor byte fuera de rango.");
