@@ -1045,5 +1045,16 @@ misma base; consulta global→sector de ~1 ms a microsegundos. Suites: servidor
 
 **Consecuencia:** ningún repo lee `ao-project-resources/Dat` (ya no existe); el
 fallback `Dat/` queda solo para fixtures sin bundle. La siembra de pesca deja de
-duplicar objetos entre arranques, pero la base de desarrollo conserva los 15 646
-piletones históricos: limpiarlos es una decisión de datos del operador.
+duplicar objetos entre arranques.
+
+**Cierre (2026-11-01):** se borraron los 15 646 piletones históricos y se corrigió
+la siembra. `TryCreateFishingPool` ahora descarta los tiles cuyo alias local no
+vuelve al mismo sector por la posición global: la compatibilidad 100×100 solapa la
+banda del borde y un piletón en `x`/`y` 86-88 se guardaba en el vecino (objeto
+fantasma: el cliente lo veía y el servidor no). Con el filtro la siembra en frío crea
+402 piletones (134 sectores con agua > 95 % × 3) y los arranques siguientes no crean
+ninguno, sin sectores con 4 ni con 1. Arranque 12,3 s; suites 665/665 y smoke OK.
+
+También se retiraron de `ao-project-resources` `world.floors/` e
+`init/mapsworlddata.dat` (salida anterior del importador) y se ignoran las salidas
+regenerables `world/`, `sectors/` y `maps/`.
